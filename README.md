@@ -62,3 +62,15 @@ and on [https://www.kubegres.io](https://www.kubegres.io). More details in the [
 * A webinar about Kubegres was hosted by PostgresConf on 25 May 2021. [Watch the recorded video.](https://postgresconf.org/conferences/2021_Postgres_Conference_Webinars/program/proposals/creating-a-resilient-postgresql-cluster-with-kubegres)
 * The availability of Kubegres was published on [PostgreSql's official website](https://www.postgresql.org/about/news/kubegres-is-available-as-open-source-2197/).
 * Google talked about Kubegres in their [Kubernetes Podcast #146](https://kubernetespodcast.com/episode/146-kubernetes-1.21/).
+
+
+**CVE builds**
+While waiting for PRs to be accepted in the upstream repository and a new version is released, follow the next instructions to publish our own builds:
+- Create the new image built by:
+  - exporting the image name `export IMG=$HUB/kubegres:<new-version>`. Use custom HUB while testing. `new-version` should follow the pattern `<current-version>-tetrate-v<patch-number>`, for example `v1.16-tetrate-v0` is the first CVEs fixing patch for v1.16 kubegres.
+  - run `make docker-build-push`. This will build the binarys and the docker images for different platforms (defaults are linux/amd64,linux/arm64). Example run: `IMG=$HUB/kubegres:v.16-tetrate-v0 make docker-bulid-push`.
+- Check CVEs are fixed. Currently you'll need to ask the CVE master.
+- Once checks are passed and the PR approved and merged, publish the image by running:
+  - `docker login` as `tetratebot`
+  - `crane copy $HUB/kubegres:<new-version> tetrate/kubegres:<new-version> --platform all`
+  - `docker logout`

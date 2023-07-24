@@ -1,9 +1,11 @@
 
 # Image URL to use all building/pushing image targets
-LATEST = controller:latest
+LATEST = kubegres:latest
 IMG ?= $(LATEST)
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.24.2
+
+PLATFORMS ?= linux/amd64,linux/arm64
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -58,7 +60,7 @@ vet: ## Run go vet against code.
 .PHONY: test
 test: build envtest ## Run tests.
 	go test $(shell pwd)/test -run $(shell pwd)/test/suite_test.go -v -test.timeout 10000s
-    #KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test $(shell pwd)/test -run $(shell pwd)/test/suite_test.go -v -coverprofile cover.out -test.timeout 10000s
+	#KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test $(shell pwd)/test -run $(shell pwd)/test/suite_test.go -v -coverprofile cover.out -test.timeout 10000s
 	#KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test test/suite_test.go -coverprofile cover.out -v -test.timeout 10000s
 
 ##@ Build
@@ -72,14 +74,20 @@ build: manifests generate fmt vet ## Build manager binary.
 run: install ## Run a controller from your host.
 	go run ./main.go
 
+DOCKER_BUILDER_NAME=kubegres
+.PHONY: run
+docker-buildx:
+	docker buildx inspect $(DOCKER_BUILDER_NAME) || \
+	docker buildx create --name $(DOCKER_BUILDER_NAME) --driver docker-container --driver-opt network=host --buildkitd-flags '--allow-insecure-entitlement network.host'
+
 #docker-build: test ## Build docker image with the manager.
 .PHONY: docker-build-push
-docker-build-push: build ## Build docker image with the manager.
-	docker buildx build --platform linux/amd64,linux/arm64 -t ${IMG} --push .
+docker-build-push: build docker-buildx ## Build docker image with the manager.
+	docker buildx build --builder $(DOCKER_BUILDER_NAME) --platform ${PLATFORMS} -t ${IMG} --push .
 
-#.PHONY: docker-build
-#docker-build: test ## Build docker image with the manager.
-#	docker build -t ${IMG} .
+# .PHONY: docker-build
+# docker-build: build ## Build docker image with the manager.
+# 	docker build -t ${IMG} .
 
 #.PHONY: docker-push
 #docker-push: ## Push docker image with the manager.
