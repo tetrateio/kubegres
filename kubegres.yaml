@@ -1631,6 +1631,8 @@ spec:
                         type: string
                     type: object
                 type: object
+              serviceAccountName:
+                type: string
               volume:
                 properties:
                   volumeClaimTemplates:
@@ -3951,7 +3953,7 @@ spec:
         - --leader-elect
         command:
         - /manager
-        image: reactivetechio/kubegres:1.17
+        image: tetreate/kubegres:v1.16.0-tetrate-v5
         livenessProbe:
           httpGet:
             path: /healthz
