@@ -12,5 +12,5 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 images:
 - name: controller
-  newName: reactivetechio/kubegres
-  newTag: "1.16"
+  newName: tetrate/kubegres
+  newTag: v1.16.0-tetrate-v5
