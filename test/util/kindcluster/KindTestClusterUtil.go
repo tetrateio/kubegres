@@ -31,6 +31,8 @@ import (
 
 const clusterName = "kubegres"
 
+var kindExecPath = os.Getenv("KIND_EXEC_PATH")
+
 type KindTestClusterUtil struct {
 	kindExecPath string
 }
@@ -39,15 +41,20 @@ func (r *KindTestClusterUtil) StartCluster() {
 
 	log.Println("STARTING KIND CLUSTER '" + clusterName + "'")
 
-	// start kind cluster
-	var err error
-	r.kindExecPath, err = exec.LookPath("kind")
-	if err != nil {
-		log.Fatal("We cannot find the executable 'kind'. " +
-			"Make sure 'kind' is installed and the executable 'kind' " +
-			"is in the classpath before running the tests.")
+	// define kind executable path or find it
+	if kindExecPath != "" {
+		r.kindExecPath = kindExecPath
+	} else {
+		var err error
+		r.kindExecPath, err = exec.LookPath("kind")
+		if err != nil {
+			log.Fatal("We cannot find the executable 'kind'. " +
+				"Make sure 'kind' is installed and the executable 'kind' " +
+				"is in the classpath before running the tests.")
+		}
 	}
 
+	// start kind cluster
 	if r.isClusterRunning() {
 		log.Println("Cluster is already running. No need to restart it.")
 		r.installOperator()
@@ -66,7 +73,7 @@ func (r *KindTestClusterUtil) StartCluster() {
 		Stderr: os.Stdout,
 	}
 
-	err = cmdStartCluster.Run()
+	err := cmdStartCluster.Run()
 	if err != nil {
 		log.Fatal("Unable to execute the command 'kind create cluster --name "+clusterName+" --config "+clusterConfigFilePath+"'", err)
 	} else {

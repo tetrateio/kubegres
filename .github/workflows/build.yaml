@@ -1,0 +1,28 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+      - release-**
+  pull_request:
+    branches:
+      - main
+      - release-**
+
+env:
+  GOPROXY: https://proxy.golang.org
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      IMG: local/kubegres:test
+      PLATFORMS: linux/amd64
+    steps:
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: amd64
+      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@v4
+      - run: make kind test
