@@ -19,6 +19,9 @@ endif
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
+comma  := ,
+space  := $(empty) $(empty)
+
 .PHONY: all
 all: build
 
@@ -85,13 +88,15 @@ docker-buildx:
 docker-build-push: build docker-buildx ## Build docker image with the manager.
 	docker buildx build --builder $(DOCKER_BUILDER_NAME) --platform ${PLATFORMS} -t ${IMG} --push .
 
-# .PHONY: docker-build
-# docker-build: build ## Build docker image with the manager.
-# 	docker build -t ${IMG} .
+.PHONY: docker-build
+docker-build: $(addprefix docker-build/,$(subst $(comma),$(space),$(PLATFORMS))) ## Build docker images for all platforms.
 
-#.PHONY: docker-push
-#docker-push: ## Push docker image with the manager.
-#	docker push ${IMG}
+# Intentionally build the image for a specific platform, using arch as the image tag suffix so we avoid overwriting the multi-arch images.
+.PHONY: docker-build/%
+docker-build/%: PLATFORM=$(*)
+docker-build/%: DOCKER_ARCH=$(notdir $(PLATFORM))
+docker-build/%: docker-buildx ## Build docker image with ARCH as image tag suffix.
+	docker buildx build --builder $(DOCKER_BUILDER_NAME) --platform ${PLATFORM} -t ${IMG}-${DOCKER_ARCH} --load .
 
 ##@ Deployment
 
