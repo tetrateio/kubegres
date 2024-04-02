@@ -61,7 +61,7 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: build envtest ## Run tests.
+test: build envtest kind ## Run tests.
 	KIND_EXEC_PATH=$(KIND) go test $(shell pwd)/test -run $(shell pwd)/test/suite_test.go -v -test.timeout 10000s
 	#KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test $(shell pwd)/test -run $(shell pwd)/test/suite_test.go -v -coverprofile cover.out -test.timeout 10000s
 	#KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test test/suite_test.go -coverprofile cover.out -v -test.timeout 10000s
@@ -150,7 +150,19 @@ KIND ?= $(LOCALBIN)/kind
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v3.8.7
 CONTROLLER_TOOLS_VERSION ?= v0.9.2
-KIND_VERSION ?= v0.22.0
+KIND_VERSION ?= v0.19.0
+KUBEBUILDER_TOOLS_VERSION := 1.24.2
+
+## Kubebuilder Tools (etcd, kube-apiserver)
+# using tar instead of go install to be able to pin the version
+KUBEBUILDER_TOOLS_OS ?= $(shell go env GOOS)
+KUBEBUILDER_TOOLS_ARCH ?= $(shell go env GOARCH)
+KUBEBUILDER_TOOLS_TGZ := $(LOCALBIN)/kubebuilder-tools-$(KUBEBUILDER_TOOLS_VERSION)-$(KUBEBUILDER_TOOLS_OS)-$(KUBEBUILDER_TOOLS_ARCH).tar.gz
+KUBEBUILDER_TOOLS_DIR := $(LOCALBIN)/kubebuilder-tools-$(KUBEBUILDER_TOOLS_VERSION)-$(KUBEBUILDER_TOOLS_OS)-$(KUBEBUILDER_TOOLS_ARCH)
+KUBEBUILDER_TOOLS_BINARIES := bin/etcd bin/kube-apiserver
+KUBEBUILDER_TOOLS := $(foreach binary,$(KUBEBUILDER_TOOLS_BINARIES),$(KUBEBUILDER_TOOLS_DIR)/$(binary))
+# KUBEBUILDER_ASSETS environment variable will be recognized by the `controller-runtime` test framework
+export KUBEBUILDER_ASSETS=$(KUBEBUILDER_TOOLS_DIR)/bin
 
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
@@ -163,12 +175,17 @@ controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessar
 $(CONTROLLER_GEN): $(LOCALBIN)
 	test -s $(LOCALBIN)/controller-gen || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_TOOLS_VERSION)
 
-.PHONY: envtest
-envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
-$(ENVTEST): $(LOCALBIN)
-	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
-
 .PHONY: kind
 kind: $(KIND) ## Download kind locally if necessary.
 $(KIND): $(LOCALBIN)
 	test -s $(LOCALBIN)/kind || GOBIN=$(LOCALBIN) go install sigs.k8s.io/kind@$(KIND_VERSION)
+
+.PHONY: envtest
+envtest: $(KUBEBUILDER_TOOLS) ## Download envtest-setup locally if necessary.
+$(KUBEBUILDER_TOOLS):
+	@echo "(re)installing kubebuilder-tools-$(KUBEBUILDER_TOOLS_VERSION)"
+	@mkdir -p $(dir $(KUBEBUILDER_TOOLS_TGZ))
+	@curl -Lo $(KUBEBUILDER_TOOLS_TGZ) \
+	  "https://storage.googleapis.com/kubebuilder-tools/kubebuilder-tools-$(KUBEBUILDER_TOOLS_VERSION)-$(KUBEBUILDER_TOOLS_OS)-$(KUBEBUILDER_TOOLS_ARCH).tar.gz"
+	@mkdir -p $(KUBEBUILDER_TOOLS_DIR)
+	@tar -xvf $(KUBEBUILDER_TOOLS_TGZ) -C $(KUBEBUILDER_TOOLS_DIR) --strip-components 1

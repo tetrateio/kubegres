@@ -25,4 +25,4 @@ jobs:
           platforms: amd64
       - uses: docker/setup-buildx-action@v3
       - uses: actions/checkout@v4
-      - run: make kind test
+      - run: make test
