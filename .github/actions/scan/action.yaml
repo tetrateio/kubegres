@@ -24,10 +24,10 @@ runs:
         exit-code: 1
         ignore-unfixed: false
         severity: 'CRITICAL,HIGH,MEDIUM'
-        format: '{{ inputs.format }}'
-        output: '{{ inputs.output }}'
+        format: '${{ inputs.format }}'
+        output: '${{ inputs.output }}'
     - name: Upload Trivy scan results to GitHub Security tab
       uses: github/codeql-action/upload-sarif@v3
       if: ${{ inputs.format == 'sarif' }}
       with:
-        sarif_file: '{{ inputs.output }}'
+        sarif_file: '${{ inputs.output }}'
