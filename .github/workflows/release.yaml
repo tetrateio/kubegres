@@ -9,7 +9,7 @@ env:
   GOPROXY: https://proxy.golang.org
 
 jobs:
-  scan:
+  docker-hub:
     runs-on: ubuntu-latest
     env:
       IMG: tetrate/kubegres:${{  github.ref_name }}
