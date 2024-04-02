@@ -14,15 +14,10 @@ env:
   GOPROXY: https://proxy.golang.org
 
 jobs:
-  test:
+  test: ## This jobs takes around 2h to complete. Let's not make this a requirement for PRs until we can make it faster.
     runs-on: ubuntu-latest
     env:
-      IMG: local/kubegres:test
       PLATFORMS: linux/amd64
     steps:
-      - uses: docker/setup-qemu-action@v3
-        with:
-          platforms: amd64
-      - uses: docker/setup-buildx-action@v3
       - uses: actions/checkout@v4
       - run: make test

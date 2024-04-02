@@ -150,7 +150,7 @@ KIND_VERSION ?= v0.19.0
 KUBEBUILDER_TOOLS_VERSION := 1.24.2
 
 ## Kubebuilder Tools (etcd, kube-apiserver)
-# using tar instead of go install to be able to pin the version
+# using tar instead of go install to be able to pin the version, since latest versions are not always compatible with 1.20 go version
 KUBEBUILDER_TOOLS_OS ?= $(shell go env GOOS)
 KUBEBUILDER_TOOLS_ARCH ?= $(shell go env GOARCH)
 KUBEBUILDER_TOOLS_TGZ := $(LOCALBIN)/kubebuilder-tools-$(KUBEBUILDER_TOOLS_VERSION)-$(KUBEBUILDER_TOOLS_OS)-$(KUBEBUILDER_TOOLS_ARCH).tar.gz
