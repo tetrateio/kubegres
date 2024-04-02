@@ -1,0 +1,32 @@
+name: scan
+description: |
+  This builds the Docker image and scans it with Trivy.
+inputs:
+  format:
+    description: "The format of the output file. Can be 'table' or 'sarif'."
+    required: true
+    default: "table"
+  output:
+    description: "The output file when using 'sarif' format."
+    default: "trivy-results.sarif"
+runs:
+  steps:
+    - uses: docker/setup-qemu-action@v3
+      with:
+        platforms: amd64
+    - uses: docker/setup-buildx-action@v3
+    - uses: actions/checkout@v4
+    - run: make docker-build
+    - uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: local/kubegres:scan-amd64
+        exit-code: 1
+        ignore-unfixed: false
+        severity: 'CRITICAL,HIGH,MEDIUM'
+        format: {{ inputs.format }}
+        output: {{ inputs.output }}
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v3
+      if: ${{ inputs.format == 'sarif' }}
+      with:
+        sarif_file: {{ inputs.output }}

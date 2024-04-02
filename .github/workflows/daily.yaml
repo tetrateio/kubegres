@@ -1,0 +1,17 @@
+name: Scan
+
+on:
+  schedule:
+    - cron: '16 30 * * *'
+
+env:
+  GOPROXY: https://proxy.golang.org
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./.github/actions/scan
+        with:
+            format: 'sarif'
+            output: 'trivy-results.sarif'

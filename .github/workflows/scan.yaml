@@ -18,26 +18,7 @@ env:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    env:
-      IMG: local/kubegres:scan
-      PLATFORMS: linux/amd64
     steps:
-      - uses: docker/setup-qemu-action@v3
+      - uses: ./.github/actions/scan
         with:
-          platforms: amd64
-      - uses: docker/setup-buildx-action@v3
-      - uses: actions/checkout@v4
-      - run: make docker-build
-      - uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: local/kubegres:scan-amd64
-          exit-code: 1
-          ignore-unfixed: true
-          severity: 'CRITICAL,HIGH,MEDIUM'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-      - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v2
-        if: always()
-        with:
-          sarif_file: 'trivy-results.sarif'
+          format: 'table'
