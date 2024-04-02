@@ -64,13 +64,12 @@ and on [https://www.kubegres.io](https://www.kubegres.io). More details in the [
 * Google talked about Kubegres in their [Kubernetes Podcast #146](https://kubernetespodcast.com/episode/146-kubernetes-1.21/).
 
 
-**CVE builds**
-While waiting for PRs to be accepted in the upstream repository and a new version is released, follow the next instructions to publish our own builds:
-- Create the new image built by:
-  - exporting the image name `export IMG=$HUB/kubegres:<new-version>`. Use custom HUB while testing. `new-version` should follow the pattern `<current-version>-tetrate-v<patch-number>`, for example `v1.16-tetrate-v0` is the first CVEs fixing patch for v1.16 kubegres.
-  - run `make docker-build-push`. This will build the binarys and the docker images for different platforms (defaults are linux/amd64,linux/arm64). Example run: `IMG=$HUB/kubegres:v.16-tetrate-v0 make docker-bulid-push`.
-- Check CVEs are fixed. Currently you'll need to ask the CVE master.
-- Once checks are passed and the PR approved and merged, publish the image by running:
-  - `docker login` as `tetratebot`
-  - `crane copy $HUB/kubegres:<new-version> tetrate/kubegres:<new-version> --platform all`
-  - `docker logout`
+**Tetrate CVE builds**
+While waiting for PRs to be accepted in the upstream repository and a new version to be released, follow the next instructions to publish our own builds:
+- Define the new version name by following the pattern `<current-version>-tetrate-v<patch-number>`, for example `v1.16-tetrate-v0` is the first CVEs fixing patch for v1.16 kubegres.
+- Run `IMG=$HUB/kubegres:<new-version> make deploy` with the new version tag to update `kubegres.yaml` file and open a PR with the changes.
+- Once the PR is approved and merged create a tag with the new version and push it to the repository. Check that this triggers the release action that will:
+  - Scan for CVEs in the new version.
+  - Build the binaries for the new version.
+  - Build the docker images and push them to the tetrate docker hub repository.
+  - Run acceptance tests.
