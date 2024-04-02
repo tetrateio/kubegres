@@ -2,7 +2,7 @@ name: Daily
 
 on:
   schedule:
-    - cron: '55 16 * * *'
+    - cron: '05 17 * * *'
   pull_request: {} ## hack it
 
 env:
