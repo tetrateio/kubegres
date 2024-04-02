@@ -1,8 +1,8 @@
-name: Scan
+name: Daily
 
 on:
   schedule:
-    - cron: '16 30 * * *'
+    - cron: '50 16 * * *'
 
 env:
   GOPROXY: https://proxy.golang.org
@@ -10,9 +10,12 @@ env:
 jobs:
   scan:
     runs-on: ubuntu-latest
+    env:
+      IMG: local/kubegres:scan
+      PLATFORMS: linux/amd64
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/scan
         with:
-            format: 'sarif'
-            output: 'trivy-results.sarif'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
