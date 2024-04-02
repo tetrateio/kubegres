@@ -2,8 +2,6 @@
 # Image URL to use all building/pushing image targets
 LATEST = kubegres:latest
 IMG ?= $(LATEST)
-# ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.24.2
 
 PLATFORMS ?= linux/amd64,linux/arm64
 
@@ -63,8 +61,6 @@ vet: ## Run go vet against code.
 .PHONY: test
 test: build envtest kind ## Run tests.
 	KIND_EXEC_PATH=$(KIND) go test $(shell pwd)/test -run $(shell pwd)/test/suite_test.go -v -test.timeout 10000s
-	#KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test $(shell pwd)/test -run $(shell pwd)/test/suite_test.go -v -coverprofile cover.out -test.timeout 10000s
-	#KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test test/suite_test.go -coverprofile cover.out -v -test.timeout 10000s
 
 ##@ Build
 
