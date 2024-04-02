@@ -26,3 +26,4 @@ jobs:
       - uses: ./.github/actions/scan
         with:
           format: 'table'
+          output: ''
