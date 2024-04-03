@@ -21,15 +21,18 @@ limitations under the License.
 package test
 
 import (
-	"k8s.io/client-go/tools/record"
+	"context"
 	"log"
 	"path/filepath"
+	"testing"
+	"time"
+
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/record"
 	"reactive-tech.io/kubegres/controllers"
 	"reactive-tech.io/kubegres/test/util"
 	"reactive-tech.io/kubegres/test/util/kindcluster"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"testing"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -116,10 +119,15 @@ var _ = BeforeSuite(func(done Done) {
 	}()
 
 	log.Println("Waiting for Kubernetes to start")
-	log.Println("Kubernetes has started")
 
 	k8sClientTest = k8sManager.GetClient()
 	Expect(k8sClientTest).ToNot(BeNil())
+
+	// Wait for Kubernetes envtest to start
+	Eventually(func() error { return k8sClientTest.List(context.Background(), &v1.NamespaceList{}) },
+		time.Second*30, time.Second*1).Should(Succeed())
+
+	log.Println("Kubernetes has started")
 
 	log.Print("END OF: BeforeSuite")
 
