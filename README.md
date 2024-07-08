@@ -66,8 +66,8 @@ and on [https://www.kubegres.io](https://www.kubegres.io). More details in the [
 
 **Tetrate CVE builds**
 While waiting for PRs to be accepted in the upstream repository and a new version to be released, follow the next instructions to publish our own builds:
-- Define the new version name by following the pattern `<current-version>-tetrate-v<patch-number>`, for example `v1.16-tetrate-v0` is the first CVEs fixing patch for v1.16 kubegres.
-- Run `IMG=$HUB/kubegres:<new-version> make deploy` with the new version tag to update `kubegres.yaml` file and open a PR with the changes.
+- Define the new version name by following the pattern `<current-version>-tetrate-v<patch-number>`, for example `v1.16.0-tetrate-v0` is the first CVEs fixing patch for v1. 16.0 kubegres.
+- Run `IMG=tetrate/kubegres:<new-version> make deploy` with the new version tag to update `kubegres.yaml` file and open a PR with the changes.
 - Once the PR is approved and merged create a tag with the new version and push it to the repository. Check that this triggers the release action that will:
   - Scan for CVEs in the new version.
   - Build the binaries for the new version.
