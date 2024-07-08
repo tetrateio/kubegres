@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    tags: [ 'v[0-9]+.[0-9]+-tetrate-v[0-9]+' ]  # v1.16-tetrate-v7
+    tags: [ 'v[0-9]+.[0-9]+.[0-9]+-tetrate-v[0-9]+' ]  # v1.16.0-tetrate-v7
 
 env:
   GOPROXY: https://proxy.golang.org
