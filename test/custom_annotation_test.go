@@ -21,22 +21,27 @@ limitations under the License.
 package test
 
 import (
+	"log"
+	"time"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"log"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/spec/template"
 	"reactive-tech.io/kubegres/test/resourceConfigs"
 	"reactive-tech.io/kubegres/test/util"
 	"reactive-tech.io/kubegres/test/util/testcases"
-	"time"
 )
 
-const customAnnotation1Key = "linkerd.io/inject"
-const customAnnotation1Value = "enabled"
-const customAnnotation2Key = "toto.io/test"
-const customAnnotation2Value = "disabled"
+const (
+	customAnnotation1Key          = "linkerd.io/inject"
+	customAnnotation1Value        = "enabled"
+	customAnnotation2Key          = "toto.io/test"
+	customAnnotation2Value        = "disabled"
+	kubegresCustomAnnotationKey   = "kubegres.reactive-tech.io/custom-annotation"
+	kubegresCustomAnnotationValue = "custom-value"
+)
 
 var _ = Describe("Creating Kubegres with custom annotations", func() {
 
@@ -58,9 +63,8 @@ var _ = Describe("Creating Kubegres with custom annotations", func() {
 
 	Context("GIVEN new Kubegres is created with custom annotations and with spec 'replica' set to 3", func() {
 
-		// GIVEN new Kubegres is created with custom annotations and spec 'replica' set to 3 then
-
-		It("GIVEN new Kubegres is created with with custom annotations and with spec 'replica' set to 3 THEN it should be deployed with StatefulSets and Pods containing the custom annotations AND 1 primary and 2 replica should be created", func() {
+		It("GIVEN new Kubegres is created with with custom annotations and with spec 'replica' set to 3"+
+			" THEN it should be deployed with StatefulSets and Pods containing the custom annotations AND 1 primary and 2 replica should be created", func() {
 
 			log.Print("START OF: Test 'GIVEN new Kubegres is created with custom annotations and with spec 'replica' set to 3'")
 
@@ -82,6 +86,29 @@ var _ = Describe("Creating Kubegres with custom annotations", func() {
 			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
 
 			log.Print("END OF: Test 'GIVEN new Kubegres is created with custom annotations and with spec 'replica' set to 3'")
+		})
+
+		It("GIVEN Kubegres is already running with spec 'replica' set to 3 add a kubegres custom annotation"+
+			"THEN the StatefulSets should be updated with the custom annotation", func() {
+
+			log.Print("START OF: Test 'GIVEN Kubegres is already running with spec 'replica' set to 3 add a kubegres custom annotation'")
+
+			test.givenKubegresAnnotationIsSetTo(kubegresCustomAnnotationKey, kubegresCustomAnnotationValue)
+
+			test.whenKubegresIsUpdated()
+
+			test.thenPodsStatesShouldBe(1, 2)
+
+			test.thenDeployedKubegresSpecShouldBeSetTo(3)
+			test.thenPodsAndStatefulSetsShouldHaveAnnotation(customAnnotation1Key, customAnnotation1Value)
+			test.thenPodsAndStatefulSetsShouldHaveAnnotation(customAnnotation2Key, customAnnotation2Value)
+			test.thenPodsAndStatefulSetsShouldHaveAnnotation(kubegresCustomAnnotationKey, kubegresCustomAnnotationValue) // custom annotation added
+			test.thenPodsAndStatefulSetsShouldNOTHaveAnnotationKey(template.KubegresInternalAnnotationKey)
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
+
+			log.Print("END OF: Test 'GIVEN Kubegres is already running with spec 'replica' set to 3 add a kubegres custom annotation'")
 		})
 
 	})
@@ -106,6 +133,10 @@ func (r *CustomAnnotationTest) givenKubegresSpecIsSetTo(specNbreReplicas int32) 
 
 func (r *CustomAnnotationTest) whenKubegresIsCreated() {
 	r.resourceCreator.CreateKubegres(r.kubegresResource)
+}
+
+func (r *CustomAnnotationTest) whenKubegresIsUpdated() {
+	r.resourceCreator.UpdateResource(r.kubegresResource, resourceConfigs.KubegresResourceName)
 }
 
 func (r *CustomAnnotationTest) thenPodsAndStatefulSetsShouldHaveAnnotation(annotationKey, annotationValue string) bool {
