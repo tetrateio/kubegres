@@ -65,9 +65,14 @@ test: build envtest kind ## Run tests.
 ##@ Build
 
 .PHONY: build
-build: manifests generate fmt vet ## Build manager binary.
+build: manifests generate fmt vet $(addprefix build/,$(subst $(comma),$(space),$(PLATFORMS))) ## Build manager binary.
 	go generate
-	go build -o bin/manager main.go
+
+build/%: PLATFORM=$(*)
+build/%: GOARCH=$(notdir $(PLATFORM))
+build/%: GOOS=$(subst /,,$(dir $(PLATFORM)))
+build/%: ## Build manager binary for a specific platform.
+	GOOS=${GOOS} GOARCH=${GOARCH} go build -o build/bin/manager-$(GOOS)-$(GOARCH) main.go
 
 .PHONY: run
 run: install ## Run a controller from your host.
@@ -77,7 +82,8 @@ DOCKER_BUILDER_NAME=kubegres
 .PHONY: run
 docker-buildx:
 	docker buildx inspect $(DOCKER_BUILDER_NAME) || \
-	docker buildx create --name $(DOCKER_BUILDER_NAME) --driver docker-container --driver-opt network=host --buildkitd-flags '--allow-insecure-entitlement network.host'
+	docker buildx create --name $(DOCKER_BUILDER_NAME) --driver docker-container --driver-opt network=host \
+	--buildkitd-flags '--allow-insecure-entitlement network.host' --platform linux/amd64,linux/arm64
 
 #docker-build: test ## Build docker image with the manager.
 .PHONY: docker-build-push
@@ -90,9 +96,12 @@ docker-build: $(addprefix docker-build/,$(subst $(comma),$(space),$(PLATFORMS)))
 # Intentionally build the image for a specific platform, using arch as the image tag suffix so we avoid overwriting the multi-arch images.
 .PHONY: docker-build/%
 docker-build/%: PLATFORM=$(*)
+docker-build/%: DOCKER_OS=$(subst /,,$(dir $(PLATFORM)))
 docker-build/%: DOCKER_ARCH=$(notdir $(PLATFORM))
 docker-build/%: docker-buildx ## Build docker image with ARCH as image tag suffix.
-	docker buildx build --builder $(DOCKER_BUILDER_NAME) --platform ${PLATFORM} -t ${IMG}-${DOCKER_ARCH} --load .
+	docker buildx build --builder $(DOCKER_BUILDER_NAME) --platform ${PLATFORM} \
+	  --build-arg TARGETOS=$(DOCKER_OS) --build-arg TARGETARCH=$(DOCKER_ARCH) \
+	  -t ${IMG}-${DOCKER_ARCH} --load .
 
 ##@ Deployment
 
