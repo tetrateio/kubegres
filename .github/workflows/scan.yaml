@@ -22,15 +22,14 @@ jobs:
       IMG: local/kubegres:scan
       PLATFORMS: linux/amd64
     steps:
-      - name: Install Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
       - uses: docker/setup-qemu-action@v3
         with:
           platforms: amd64
       - uses: docker/setup-buildx-action@v3
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
       - run: make docker-build
       - uses: aquasecurity/trivy-action@master
         with:
