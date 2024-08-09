@@ -63,8 +63,8 @@ var _ = Describe("Creating Kubegres with custom annotations", func() {
 
 	Context("GIVEN new Kubegres is created with custom annotations and with spec 'replica' set to 3", func() {
 
-		It("GIVEN new Kubegres is created with with custom annotations and with spec 'replica' set to 3"+
-			" THEN it should be deployed with StatefulSets and Pods containing the custom annotations AND 1 primary and 2 replica should be created", func() {
+		It("GIVEN new Kubegres is created with with custom annotations and with spec 'replica' set to 3 "+
+			"THEN it should be deployed with StatefulSets and Pods containing the custom annotations AND 1 primary and 2 replica should be created", func() {
 
 			log.Print("START OF: Test 'GIVEN new Kubegres is created with custom annotations and with spec 'replica' set to 3'")
 
@@ -85,13 +85,7 @@ var _ = Describe("Creating Kubegres with custom annotations", func() {
 			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
 
-			log.Print("END OF: Test 'GIVEN new Kubegres is created with custom annotations and with spec 'replica' set to 3'")
-		})
-
-		It("GIVEN Kubegres is already running with spec 'replica' set to 3 add a kubegres custom annotation"+
-			"THEN the StatefulSets should be updated with the custom annotation", func() {
-
-			log.Print("START OF: Test 'GIVEN Kubegres is already running with spec 'replica' set to 3 add a kubegres custom annotation'")
+			log.Println("WHEN a new kubegres custom annotation is added THEN the StatefulSets should be updated with the custom annotation")
 
 			test.givenKubegresAnnotationIsSetTo(kubegresCustomAnnotationKey, kubegresCustomAnnotationValue)
 
@@ -108,7 +102,7 @@ var _ = Describe("Creating Kubegres with custom annotations", func() {
 			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
 
-			log.Print("END OF: Test 'GIVEN Kubegres is already running with spec 'replica' set to 3 add a kubegres custom annotation'")
+			log.Print("END OF: Test 'GIVEN new Kubegres is created with custom annotations and with spec 'replica' set to 3'")
 		})
 
 	})
