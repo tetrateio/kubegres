@@ -5,6 +5,17 @@ IMG ?= $(LATEST)
 
 PLATFORMS ?= linux/amd64,linux/arm64
 
+# Architecture, such as 'arm64'
+ARCH := $(shell uname -m)
+## LOCAL_ARCH is the architecture to be used for building components for local dev setups.
+ifeq ($(ARCH),x86_64)
+	LOCAL_ARCH ?= amd64
+else ifeq ($(ARCH),amd64)
+	LOCAL_ARCH ?= amd64
+else ifeq ($(ARCH),arm64)
+	LOCAL_ARCH ?= arm64
+endif
+
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -102,6 +113,13 @@ docker-build/%: docker-buildx ## Build docker image with ARCH as image tag suffi
 	docker buildx build --builder $(DOCKER_BUILDER_NAME) --platform ${PLATFORM} \
 	  --build-arg TARGETOS=$(DOCKER_OS) --build-arg TARGETARCH=$(DOCKER_ARCH) \
 	  -t ${IMG}-${DOCKER_ARCH} --load .
+
+.PHONY: scan-local
+scan-local: IMG=local/kubegres:scan-${LOCAL_ARCH}
+scan-local: build/linux/${LOCAL_ARCH} ## Scan the docker image for vulnerabilities locally.
+	docker context use default
+	docker build -t ${IMG} .
+	trivy image --severity "MEDIUM,HIGH,CRITICAL" ${IMG}
 
 ##@ Deployment
 
