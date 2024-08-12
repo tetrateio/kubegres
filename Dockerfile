@@ -4,11 +4,11 @@
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:nonroot
 
-ARG TARGETOS
-ARG TARGETARCH
+ARG BUILDPLATFORM
+ARG TARGETPLATFORM
 
 WORKDIR /
-COPY build/bin/manager-${TARGETOS}-${TARGETARCH} manager
+COPY build/bin/${TARGETPLATFORM}/manager manager
 USER 65532:65532
 
 ENTRYPOINT ["/manager"]

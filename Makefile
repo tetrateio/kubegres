@@ -53,6 +53,10 @@ help: ## Display this help.
 
 ##@ Development
 
+.PHONY: clean
+clean: ## Clean build files
+	rm -rf build
+
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
@@ -83,7 +87,7 @@ build/%: PLATFORM=$(*)
 build/%: GOARCH=$(notdir $(PLATFORM))
 build/%: GOOS=$(subst /,,$(dir $(PLATFORM)))
 build/%: ## Build manager binary for a specific platform.
-	GOOS=${GOOS} GOARCH=${GOARCH} go build -o build/bin/manager-$(GOOS)-$(GOARCH) main.go
+	GOOS=${GOOS} GOARCH=${GOARCH} go build -o build/bin/$(PLATFORM)/manager main.go
 
 .PHONY: run
 run: install ## Run a controller from your host.
