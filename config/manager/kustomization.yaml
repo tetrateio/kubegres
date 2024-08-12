@@ -13,4 +13,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: tetrate/kubegres
-  newTag: v1.16.0-tetrate-v7
+  newTag: v1.16.0-tetrate-v8
