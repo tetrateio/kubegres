@@ -22,6 +22,7 @@ package statefulset_spec
 
 import (
 	"errors"
+
 	apps "k8s.io/api/apps/v1"
 	postgresV1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
@@ -281,7 +282,7 @@ func (r *AllStatefulSetsSpecEnforcer) isStatefulSetSpecUpdated(operation postgre
 	statefulSetInstanceIndex := r.getUpdatingInstanceIndex(operation)
 	statefulSetWrapper, err := r.resourcesStates.StatefulSets.All.GetByInstanceIndex(statefulSetInstanceIndex)
 	if err != nil {
-		r.kubegresContext.Log.InfoEvent("A StatefulSet's instanceIndex does not exist. As a result we will "+
+		r.kubegresContext.Log.InfoEvent("Error", "A StatefulSet's instanceIndex does not exist. As a result we will "+
 			"return false inside a blocking operation completion checker 'isStatefulSetSpecUpdated()'",
 			"instanceIndex", statefulSetInstanceIndex)
 		return false
@@ -296,7 +297,7 @@ func (r *AllStatefulSetsSpecEnforcer) isStatefulSetPodSpecUpdated(operation post
 	statefulSetInstanceIndex := r.getUpdatingInstanceIndex(operation)
 	statefulSetWrapper, err := r.resourcesStates.StatefulSets.All.GetByInstanceIndex(statefulSetInstanceIndex)
 	if err != nil {
-		r.kubegresContext.Log.InfoEvent("A StatefulSet's instanceIndex does not exist. As a result we will "+
+		r.kubegresContext.Log.InfoEvent("Error", "A StatefulSet's instanceIndex does not exist. As a result we will "+
 			"return false inside a blocking operation completion checker 'isStatefulSetPodSpecUpdated()'",
 			"instanceIndex", statefulSetInstanceIndex)
 		return false
