@@ -1,6 +1,7 @@
 name: Scan
 
 on:
+  # Run scans on all commits and PRs to verify new codes does not introduce new vulnerabilities.
   push:
     branches:
       - main
@@ -10,7 +11,10 @@ on:
     branches:
       - main
       - release-**
-  workflow_dispatch: {}
+  # Run nightly scans to upload any new CVEs to the security advisories
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch: { }
 
 env:
   GOPROXY: https://proxy.golang.org
@@ -31,10 +35,18 @@ jobs:
         with:
           go-version-file: go.mod
       - run: make docker-build
-      - uses: aquasecurity/trivy-action@master
+      - uses: anchore/scan-action@v3
+        id: scan
         with:
-          image-ref: local/kubegres:scan-amd64
-          format: table
-          exit-code: 1
-          ignore-unfixed: true
-          severity: 'CRITICAL,HIGH,MEDIUM'
+          image: local/kubegres:scan-amd64
+          # Only fail the build on PRs. Do not fail the build on the scheduled run, to let the workflow
+          # continue and have the report uploaded.
+          fail-build: ${{ github.event_name != 'schedule' }}
+      - run: cat ${{ steps.scan.outputs.sarif }}
+        if: always()  # Always print the report to the stdout.
+      # Do not upload the security advisories on every commit or pull request.
+      # Upload the security advisories only for the nightly scans.
+      - uses: github/codeql-action/upload-sarif@v3
+        if: ${{ github.event_name == 'schedule' }}
+        with:
+          sarif_file: ${{ steps.scan.outputs.sarif }}
