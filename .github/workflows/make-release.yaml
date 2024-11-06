@@ -1,0 +1,30 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release in the format v0.0.0-tetrate-v0'
+        required: true
+      branch:
+        description: 'Branch to release from. Like release-v0.0.0'
+        required: true
+
+jobs:
+  update-kubegres-yaml:
+    runs-on: ubuntu-latest
+    env:
+      IMG: tetrate/kubegres:${{ github.event.inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
+      - name: Update kubegres.yaml
+        run: make deploy
+      - name: Create and push the new tag
+        run: |
+          git add kubegres.yaml config/manager/kustomization.yaml
+          git commit -m "pre-release-tag: Update kubegres.yaml to version ${{ github.event.inputs.version }}"
+          git push origin ${{ github.event.inputs.branch }}
+          git tag ${{ github.event.inputs.version }}
+          git push origin ${{ github.event.inputs.version }}

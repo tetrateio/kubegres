@@ -1,4 +1,4 @@
-name: Release
+name: Publish Release
 
 on:
   push:
@@ -8,7 +8,7 @@ env:
   GOPROXY: https://proxy.golang.org
 
 jobs:
-  docker-hub:
+  docker-hub-push:
     runs-on: ubuntu-latest
     env:
       IMG: tetrate/kubegres:${{ github.ref_name }}
