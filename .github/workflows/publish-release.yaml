@@ -1,17 +1,60 @@
 name: Publish Release
 
+permissions:
+  contents: write
+
 on:
-  push:
-    tags: [ 'v[0-9]+.[0-9]+.[0-9]+-tetrate-v[0-9]+' ]  # v1.16.0-tetrate-v7
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release in the format v0.0.0-tetrate-v0'
+        required: true
+      branch:
+        description: 'Branch to release from. Like release-v0.0.0'
+        required: true
 
 env:
   GOPROXY: https://proxy.golang.org
 
 jobs:
-  docker-hub-push:
+  # this job updates the kubegres.yaml with the new version is going to be released, and creates a commit and a tag with the changes
+  update-kubegres-yaml:
     runs-on: ubuntu-latest
     env:
-      IMG: tetrate/kubegres:${{ github.ref_name }}
+       IMG: tetrate/kubegres:${{ github.event.inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+           ref: ${{ github.event.inputs.branch }}
+      - name: Update kubegres.yaml
+        run: make deploy
+      - name: Commit and push changes
+        uses: actions-js/push@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          message: "pre-release-tag: Update kubegres.yaml to version ${{ github.event.inputs.version }}"
+          branch: ${{ github.event.inputs.branch }}
+          rebase: true
+      - name: recover new git commit sha
+        id: get-commit-sha
+        run: echo "NEW_SHA=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT" && echo "$GITHUB_OUTPUT"
+      - name: Create the tag
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: 'refs/tags/${{ github.event.inputs.version }}',
+              sha: '${{ steps.get-commit-sha.outputs.NEW_SHA }}'
+            })
+
+  # this job builds the docker image and pushes it to docker hub
+  docker-hub-push:
+    needs: update-kubegres-yaml
+    runs-on: ubuntu-latest
+    env:
+      IMG: tetrate/kubegres:${{ github.event.inputs.version }}
       PLATFORMS: linux/amd64,linux/arm64
     steps:
       - uses: docker/setup-qemu-action@v3
