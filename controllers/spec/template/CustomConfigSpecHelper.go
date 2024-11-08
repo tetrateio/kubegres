@@ -59,6 +59,21 @@ func (r *CustomConfigSpecHelper) ConfigureStatefulSet(statefulSet *v1.StatefulSe
 		hasStatefulSetChanged = true
 	}
 
+	if r.updateVolumeMountNameIfChanged(configMap.ConfigLocations.CopyPrimaryDataToReplica, states.ConfigMapDataKeyCopyPrimaryDataToReplica, statefulSet) {
+		differenceDetails += r.createDescriptionMsg(configMap.ConfigLocations.CopyPrimaryDataToReplica, states.ConfigMapDataKeyCopyPrimaryDataToReplica)
+		hasStatefulSetChanged = true
+	}
+
+	if r.updateVolumeMountNameIfChanged(configMap.ConfigLocations.PrimaryCreateReplicaRole, states.ConfigMapDataKeyPrimaryCreateReplicaRole, statefulSet) {
+		differenceDetails += r.createDescriptionMsg(configMap.ConfigLocations.PrimaryCreateReplicaRole, states.ConfigMapDataKeyPrimaryCreateReplicaRole)
+		hasStatefulSetChanged = true
+	}
+
+	if r.updateVolumeMountNameIfChanged(configMap.ConfigLocations.PromoteReplica, states.ConfigMapDataKeyPromoteReplica, statefulSet) {
+		differenceDetails += r.createDescriptionMsg(configMap.ConfigLocations.PromoteReplica, states.ConfigMapDataKeyPromoteReplica)
+		hasStatefulSetChanged = true
+	}
+
 	statefulSetTemplateSpec := &statefulSet.Spec.Template.Spec
 
 	customConfigMapVolume := r.getCustomConfigMapVolume(statefulSetTemplateSpec.Volumes)
@@ -89,15 +104,22 @@ func (r *CustomConfigSpecHelper) ConfigureStatefulSet(statefulSet *v1.StatefulSe
 
 func (r *CustomConfigSpecHelper) updateVolumeMountNameIfChanged(volumeName, configMapDataKey string, statefulSet *v1.StatefulSet) (updated bool) {
 
-	volumeMounts := statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts
-
-	for i := 0; i < len(volumeMounts); i++ {
-		volumeMount := volumeMounts[i]
+	for i, volumeMount := range statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts {
 		if volumeMount.SubPath == configMapDataKey && volumeMount.Name != volumeName {
 			statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts[i].Name = volumeName
 			updated = true
 		}
 	}
+
+	if len(statefulSet.Spec.Template.Spec.InitContainers) > 0 {
+		for i, volume := range statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts {
+			if volume.SubPath == configMapDataKey && volume.Name != volumeName {
+				statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts[i].Name = volumeName
+				updated = true
+			}
+		}
+	}
+
 	return updated
 }
 

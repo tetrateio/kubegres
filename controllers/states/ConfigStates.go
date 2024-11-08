@@ -28,10 +28,13 @@ import (
 )
 
 const (
-	ConfigMapDataKeyPostgresConf      = "postgres.conf"
-	ConfigMapDataKeyPrimaryInitScript = "primary_init_script.sh"
-	ConfigMapDataKeyPgHbaConf         = "pg_hba.conf"
-	ConfigMapDataKeyBackUpScript      = "backup_database.sh"
+	ConfigMapDataKeyPostgresConf             = "postgres.conf"
+	ConfigMapDataKeyPrimaryInitScript        = "primary_init_script.sh"
+	ConfigMapDataKeyPgHbaConf                = "pg_hba.conf"
+	ConfigMapDataKeyBackUpScript             = "backup_database.sh"
+	ConfigMapDataKeyCopyPrimaryDataToReplica = "copy_primary_data_to_replica.sh"
+	ConfigMapDataKeyPrimaryCreateReplicaRole = "primary_create_replication_role.sh"
+	ConfigMapDataKeyPromoteReplica           = "promote_replica_to_primary.sh"
 )
 
 type ConfigStates struct {
@@ -46,10 +49,13 @@ type ConfigStates struct {
 
 // Stores as string the volume-name for each config-type which can be either 'base-config' or 'custom-config'
 type ConfigLocations struct {
-	PostgreConf       string
-	PrimaryInitScript string
-	BackUpScript      string
-	PgHbaConf         string
+	PostgreConf              string
+	PrimaryInitScript        string
+	BackUpScript             string
+	PgHbaConf                string
+	CopyPrimaryDataToReplica string
+	PrimaryCreateReplicaRole string
+	PromoteReplica           string
 }
 
 func loadConfigStates(kubegresContext ctx.KubegresContext) (ConfigStates, error) {
@@ -69,6 +75,9 @@ func (r *ConfigStates) loadStates() (err error) {
 	r.ConfigLocations.PrimaryInitScript = ctx.BaseConfigMapVolumeName
 	r.ConfigLocations.BackUpScript = ctx.BaseConfigMapVolumeName
 	r.ConfigLocations.PgHbaConf = ctx.BaseConfigMapVolumeName
+	r.ConfigLocations.CopyPrimaryDataToReplica = ctx.BaseConfigMapVolumeName
+	r.ConfigLocations.PrimaryCreateReplicaRole = ctx.BaseConfigMapVolumeName
+	r.ConfigLocations.PromoteReplica = ctx.BaseConfigMapVolumeName
 
 	baseConfigMap, err := r.getBaseDeployedConfigMap()
 	if err != nil {
@@ -106,6 +115,18 @@ func (r *ConfigStates) loadStates() (err error) {
 
 		if customConfigMap.Data[ConfigMapDataKeyPgHbaConf] != "" {
 			r.ConfigLocations.PgHbaConf = ctx.CustomConfigMapVolumeName
+		}
+
+		if customConfigMap.Data[ConfigMapDataKeyCopyPrimaryDataToReplica] != "" {
+			r.ConfigLocations.CopyPrimaryDataToReplica = ctx.CustomConfigMapVolumeName
+		}
+
+		if customConfigMap.Data[ConfigMapDataKeyPrimaryCreateReplicaRole] != "" {
+			r.ConfigLocations.PrimaryCreateReplicaRole = ctx.CustomConfigMapVolumeName
+		}
+
+		if customConfigMap.Data[ConfigMapDataKeyPromoteReplica] != "" {
+			r.ConfigLocations.PromoteReplica = ctx.CustomConfigMapVolumeName
 		}
 	}
 
