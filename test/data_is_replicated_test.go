@@ -21,18 +21,19 @@ limitations under the License.
 package test
 
 import (
-	. "github.com/onsi/ginkgo"
+	"log"
+	"strconv"
+	"time"
+
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"log"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/test/resourceConfigs"
 	"reactive-tech.io/kubegres/test/util"
-	"strconv"
-	"time"
 )
 
-var _ = Describe("Checking changes in Primary DB is replicated in Replica DBs", func() {
+var _ = Describe("Checking changes in Primary DB is replicated in Replica DBs", Label("group:1"), func() {
 
 	var test = DataIsReplicatedTest{}
 

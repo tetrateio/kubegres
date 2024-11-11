@@ -12,10 +12,21 @@ env:
   GOPROXY: https://proxy.golang.org
 
 jobs:
-  test: ## This jobs takes around 2h to complete. Let's not make this a requirement for PRs until we can make it faster.
+  # All test running sequentially take around ~2h.
+  # Sppliting them in groups that take more or less the same time makes PR's readiness faster
+  test: 
+    strategy:
+      matrix:
+        label:
+          - "group:1"
+          - "group:2"
+          - "group:3"
+          - "group:4"
+          - "group:5"
     runs-on: ubuntu-latest
     env:
       PLATFORMS: linux/amd64
+      TEST_LABEL: ${{ matrix.label }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

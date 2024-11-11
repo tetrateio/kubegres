@@ -74,9 +74,15 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
+ifdef TEST_LABEL
+TEST_LABEL_ARGS=-args "-ginkgo.label-filter=${TEST_LABEL}"
+endif
+
+# Define a TEST_LABEL environment variable to run a specific group of tests.
+# Run something like `make test TEST_LABEL=group:1` to run only the tests in the group labeled "group:1".
 .PHONY: test
 test: build envtest kind ## Run tests.
-	KIND_EXEC_PATH=$(KIND) go test $(shell pwd)/test -run $(shell pwd)/test/suite_test.go -v -test.timeout 10000s
+	KIND_EXEC_PATH=$(KIND) go test $(shell pwd)/test -v -test.timeout 10000s $(TEST_LABEL_ARGS)
 
 ##@ Build
 
