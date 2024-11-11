@@ -24,11 +24,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLATFORMS: linux/amd64
+      TEST_LABEL: ${{ matrix.label }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - uses: ./.github/workflows/actions/test
-        with:
-          label: ${{ matrix.label }}
+      - run: make test
