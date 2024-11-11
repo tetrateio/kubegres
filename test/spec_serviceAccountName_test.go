@@ -20,7 +20,7 @@ import (
 	"log"
 	"time"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
@@ -30,7 +30,7 @@ import (
 	"reactive-tech.io/kubegres/test/util/testcases"
 )
 
-var _ = Describe("Setting Kubegres spec 'serviceAccountName'", func() {
+var _ = Describe("Setting Kubegres spec 'serviceAccountName'", Label("group:5"), func() {
 
 	var test = SpecServiceAccountNameTest{}
 

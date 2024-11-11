@@ -21,20 +21,21 @@ limitations under the License.
 package test
 
 import (
-	. "github.com/onsi/ginkgo"
+	"log"
+	"time"
+
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v12 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"log"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/test/resourceConfigs"
 	"reactive-tech.io/kubegres/test/util"
 	"reactive-tech.io/kubegres/test/util/testcases"
-	"time"
 )
 
-var _ = Describe("Setting Kubegres specs 'database.volumeMount'", func() {
+var _ = Describe("Setting Kubegres specs 'database.volumeMount'", Label("group:3"), func() {
 
 	var test = SpecDatabaseVolumeMountTest{}
 

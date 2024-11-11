@@ -24,7 +24,7 @@ import (
 	"log"
 	"time"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
@@ -43,7 +43,7 @@ const (
 	kubegresCustomAnnotationValue = "custom-value"
 )
 
-var _ = Describe("Creating Kubegres with custom annotations", func() {
+var _ = Describe("Creating Kubegres with custom annotations", Label("group:1"), func() {
 
 	var test = CustomAnnotationTest{}
 

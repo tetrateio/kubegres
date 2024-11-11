@@ -21,18 +21,19 @@ limitations under the License.
 package test
 
 import (
-	. "github.com/onsi/ginkgo"
+	"log"
+	"strconv"
+	"time"
+
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"log"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/test/resourceConfigs"
 	"reactive-tech.io/kubegres/test/util"
-	"strconv"
-	"time"
 )
 
-var _ = Describe("We set the wal-level to 'logical' and simulate when Primary instance is not available then recovery/failover works", func() {
+var _ = Describe("We set the wal-level to 'logical' and simulate when Primary instance is not available then recovery/failover works", Label("group:1"), func() {
 
 	var test = PostgresConfWalLevelLogicalTest{}
 

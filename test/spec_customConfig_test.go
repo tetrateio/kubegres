@@ -21,22 +21,23 @@ limitations under the License.
 package test
 
 import (
-	. "github.com/onsi/ginkgo"
+	"log"
+	"time"
+
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/apps/v1"
 	v12 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"log"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/controllers/states"
 	"reactive-tech.io/kubegres/test/resourceConfigs"
 	"reactive-tech.io/kubegres/test/util"
 	"reactive-tech.io/kubegres/test/util/testcases"
-	"time"
 )
 
-var _ = Describe("Setting Kubegres specs 'customConfig'", func() {
+var _ = Describe("Setting Kubegres specs 'customConfig'", Label("group:2"), func() {
 
 	var test = SpecCustomConfigTest{}
 
