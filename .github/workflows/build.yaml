@@ -31,3 +31,7 @@ jobs:
         with:
           go-version-file: go.mod
       - run: make test
+      - uses: mikepenz/action-junit-report@v5
+        if: success() || failure()
+        with:
+          report_paths: "test/report.xml"
