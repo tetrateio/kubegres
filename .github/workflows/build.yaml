@@ -13,6 +13,14 @@ env:
 
 jobs:
   test: ## This jobs takes around 2h to complete. Let's not make this a requirement for PRs until we can make it faster.
+    strategy:
+      matrix:
+        label:
+          - "group:1"
+          - "group:2"
+          - "group:3"
+          - "group:4"
+          - "group:5"
     runs-on: ubuntu-latest
     env:
       PLATFORMS: linux/amd64
@@ -21,4 +29,6 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - run: make test
+      - uses: ./.github/workflows/actions/test
+        with:
+          label: ${{ matrix.label }}
