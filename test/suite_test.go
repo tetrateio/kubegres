@@ -60,9 +60,6 @@ func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	RunSpecs(t, "Controller Suite")
-	//RunSpecsWithDefaultAndCustomReporters(t,
-	//	"Controller Suite",
-	//	[]Reporter{printer.NewlineReporter{}})
 }
 
 var _ = BeforeSuite(func() {
