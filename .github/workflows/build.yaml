@@ -1,5 +1,9 @@
 name: Build
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     tags: [ 'v[0-9]+.[0-9]+-tetrate-v[0-9]+' ]  # v1.16-tetrate-v7
@@ -14,7 +18,7 @@ env:
 jobs:
   # All test running sequentially take around ~2h.
   # Sppliting them in groups that take more or less the same time makes PR's readiness faster
-  test: 
+  test-group:
     strategy:
       matrix:
         label:
@@ -33,3 +37,20 @@ jobs:
         with:
           go-version-file: go.mod
       - run: make test
+
+  # Have a fixed test to run once matrix tests are completed so we can make this required
+  test:
+    runs-on: ubuntu-latest
+    # We need this to run always to force-fail (and not skip) if any needed
+    # job has failed. Otherwise, a skipped job will not fail the workflow.
+    if: always()
+    steps:
+      - run: |
+          echo "tests completed"
+          [ "${{
+              contains(needs.*.result, 'failure') ||
+              contains(needs.*.result, 'cancelled') ||
+              contains(needs.*.result, 'skipped')
+            }}" == "false" ] || exit 1
+    needs:
+      - test-group
