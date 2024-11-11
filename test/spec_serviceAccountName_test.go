@@ -30,7 +30,7 @@ import (
 	"reactive-tech.io/kubegres/test/util/testcases"
 )
 
-var _ = Describe("Setting Kubegres spec 'serviceAccountName'", Label("group:5"), func() {
+var _ = Describe("Setting Kubegres spec 'serviceAccountName'", Label("group:1"), func() {
 
 	var test = SpecServiceAccountNameTest{}
 

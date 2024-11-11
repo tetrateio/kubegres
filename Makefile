@@ -81,7 +81,7 @@ endif
 # Define a TEST_LABEL environment variable to run a specific group of tests.
 # Run something like `make test TEST_LABEL=group:1` to run only the tests in the group labeled "group:1".
 .PHONY: test
-test: #build envtest kind ## Run tests.
+test: build envtest kind ## Run tests.
 	KIND_EXEC_PATH=$(KIND) go test $(shell pwd)/test -v -test.timeout 10000s $(TEST_LABEL_ARGS)
 
 ##@ Build
