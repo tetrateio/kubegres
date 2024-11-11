@@ -75,7 +75,7 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 ifdef TEST_LABEL
-TEST_LABEL_ARGS=-args "-ginkgo.label-filter=${TEST_LABEL}" "--ginkgo.junit-report=report.xml" "--ginkgo.silence-skips=true"
+TEST_LABEL_ARGS=-args "-ginkgo.label-filter=${TEST_LABEL}"
 endif
 
 # Define a TEST_LABEL environment variable to run a specific group of tests.
