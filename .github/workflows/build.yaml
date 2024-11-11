@@ -40,7 +40,7 @@ jobs:
 
   # Have a fixed test to run once matrix tests are completed so we can make this required
   test:
-    runs-on: default-runner-set
+    runs-on: ubuntu-latest
     # We need this to run always to force-fail (and not skip) if any needed
     # job has failed. Otherwise, a skipped job will not fail the workflow.
     if: always()
