@@ -1,5 +1,8 @@
 name: Build
 
+permissions:
+  checks: write
+
 on:
   push:
     tags: [ 'v[0-9]+.[0-9]+-tetrate-v[0-9]+' ]  # v1.16-tetrate-v7
@@ -35,3 +38,4 @@ jobs:
         if: success() || failure()
         with:
           report_paths: "test/report.xml"
+          detailed_summary: true
