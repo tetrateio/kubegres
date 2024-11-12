@@ -21,10 +21,11 @@ limitations under the License.
 package statefulset_spec
 
 import (
+	"reflect"
+
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
-	"reflect"
 )
 
 type VolumeSpecEnforcer struct {
@@ -52,8 +53,17 @@ func (r *VolumeSpecEnforcer) CheckForSpecDifference(statefulSet *apps.StatefulSe
 		}
 	}
 
+	currentCustomVolumeMountsInit, hasInitContainer := r.getVolumeMountsFromInitContainer(statefulSet)
 	currentCustomVolumeMounts := r.getCurrentCustomVolumeMounts(statefulSet)
 	expectedCustomVolumeMounts := r.kubegresContext.Kubegres.Spec.Volume.VolumeMounts
+
+	if hasInitContainer && !r.compareVolumeMounts(currentCustomVolumeMountsInit, expectedCustomVolumeMounts) {
+		return StatefulSetSpecDifference{
+			SpecName: "Volume.VolumeMounts",
+			Current:  r.volumeMountsToString(currentCustomVolumeMountsInit),
+			Expected: r.volumeMountsToString(expectedCustomVolumeMounts),
+		}
+	}
 
 	if !r.compareVolumeMounts(currentCustomVolumeMounts, expectedCustomVolumeMounts) {
 		return StatefulSetSpecDifference{
@@ -70,6 +80,7 @@ func (r *VolumeSpecEnforcer) EnforceSpec(statefulSet *apps.StatefulSet) (wasSpec
 
 	r.removeCustomVolumes(statefulSet)
 	r.removeCustomVolumeMounts(statefulSet)
+	r.removeCustomVolumeMountsFromInitContainer(statefulSet)
 
 	if r.kubegresContext.Kubegres.Spec.Volume.Volumes != nil {
 		statefulSet.Spec.Template.Spec.Volumes = append(statefulSet.Spec.Template.Spec.Volumes, r.kubegresContext.Kubegres.Spec.Volume.Volumes...)
@@ -79,10 +90,14 @@ func (r *VolumeSpecEnforcer) EnforceSpec(statefulSet *apps.StatefulSet) (wasSpec
 		statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts = append(statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts, r.kubegresContext.Kubegres.Spec.Volume.VolumeMounts...)
 	}
 
+	if len(statefulSet.Spec.Template.Spec.InitContainers) > 0 && statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts != nil {
+		statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts = append(statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts, r.kubegresContext.Kubegres.Spec.Volume.VolumeMounts...)
+	}
+
 	return true, nil
 }
 
-func (r *VolumeSpecEnforcer) OnSpecEnforcedSuccessfully(statefulSet *apps.StatefulSet) error {
+func (r *VolumeSpecEnforcer) OnSpecEnforcedSuccessfully(*apps.StatefulSet) error {
 	return nil
 }
 
@@ -109,7 +124,7 @@ func (r *VolumeSpecEnforcer) doesExpectedVolumeExist(expectedCustomVolume v1.Vol
 	return false
 }
 
-func (r *VolumeSpecEnforcer) compareVolumeMounts(currentCustomVolumeMounts []v1.VolumeMount, expectedCustomVolumeMounts []v1.VolumeMount) bool {
+func (r *VolumeSpecEnforcer) compareVolumeMounts(currentCustomVolumeMounts, expectedCustomVolumeMounts []v1.VolumeMount) bool {
 
 	if len(expectedCustomVolumeMounts) != len(currentCustomVolumeMounts) {
 		return false
@@ -156,6 +171,23 @@ func (r *VolumeSpecEnforcer) getCurrentCustomVolumeMounts(statefulSet *apps.Stat
 		}
 	}
 	return customVolumeMounts
+}
+
+func (r *VolumeSpecEnforcer) getVolumeMountsFromInitContainer(statefulSet *apps.StatefulSet) ([]v1.VolumeMount, bool) {
+
+	if len(statefulSet.Spec.Template.Spec.InitContainers) == 0 {
+		return nil, false
+	}
+
+	initContainer := &statefulSet.Spec.Template.Spec.InitContainers[0]
+	var customVolumeMounts []v1.VolumeMount
+
+	for _, volumeMount := range initContainer.VolumeMounts {
+		if !r.kubegresContext.IsReservedVolumeName(volumeMount.Name) {
+			customVolumeMounts = append(customVolumeMounts, volumeMount)
+		}
+	}
+	return customVolumeMounts, true
 }
 
 func (r *VolumeSpecEnforcer) removeCustomVolumes(statefulSet *apps.StatefulSet) {
@@ -205,6 +237,26 @@ func (r *VolumeSpecEnforcer) removeCustomVolumeMounts(statefulSet *apps.Stateful
 		index := r.getIndexOfVolumeMount(customVolumeMount, container.VolumeMounts)
 		if index >= 0 {
 			container.VolumeMounts = append(container.VolumeMounts[:index], container.VolumeMounts[index+1:]...)
+		}
+	}
+}
+
+func (r *VolumeSpecEnforcer) removeCustomVolumeMountsFromInitContainer(statefulSet *apps.StatefulSet) {
+
+	currentCustomVolumeMounts, hasInit := r.getVolumeMountsFromInitContainer(statefulSet)
+	if !hasInit || len(currentCustomVolumeMounts) == 0 {
+		return
+	}
+
+	currentCustomVolumeMountsCopy := make([]v1.VolumeMount, len(currentCustomVolumeMounts))
+	copy(currentCustomVolumeMountsCopy, currentCustomVolumeMounts)
+
+	initContainer := &statefulSet.Spec.Template.Spec.InitContainers[0]
+
+	for _, customVolumeMount := range currentCustomVolumeMountsCopy {
+		index := r.getIndexOfVolumeMount(customVolumeMount, initContainer.VolumeMounts)
+		if index >= 0 {
+			initContainer.VolumeMounts = append(initContainer.VolumeMounts[:index], initContainer.VolumeMounts[index+1:]...)
 		}
 	}
 }

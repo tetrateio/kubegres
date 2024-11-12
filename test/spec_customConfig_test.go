@@ -75,11 +75,17 @@ var _ = Describe("Setting Kubegres specs 'customConfig'", Label("group:2"), func
 
 			test.thenPodsShouldNotContainsCustomConfig()
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, false)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, primary)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, replica)
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPrimaryInitScript, true)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPrimaryInitScript, primary)
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, false)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, primary)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, replica)
+
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyCopyPrimaryDataToReplica, replica)
+
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPrimaryCreateReplicaRole, primary)
 
 			test.thenDeployedKubegresSpecShouldBeSetTo(ctx.BaseConfigMapName)
 
@@ -117,11 +123,17 @@ var _ = Describe("Setting Kubegres specs 'customConfig'", Label("group:2"), func
 
 			test.thenPodsContainsCustomConfigWithResourceName(resourceConfigs.CustomConfigMapEmptyResourceName)
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, false)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, primary)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, replica)
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPrimaryInitScript, true)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPrimaryInitScript, primary)
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, false)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, primary)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, replica)
+
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyCopyPrimaryDataToReplica, replica)
+
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPrimaryCreateReplicaRole, primary)
 
 			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'customConfig' set to a ConfigMap which is empty'")
 		})
@@ -141,11 +153,17 @@ var _ = Describe("Setting Kubegres specs 'customConfig'", Label("group:2"), func
 
 			test.thenPodsContainsCustomConfigWithResourceName(resourceConfigs.CustomConfigMapWithPostgresConfResourceName)
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.CustomConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, false)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.CustomConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, primary)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.CustomConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, replica)
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPrimaryInitScript, true)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPrimaryInitScript, primary)
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, false)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, primary)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, replica)
+
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyCopyPrimaryDataToReplica, replica)
+
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPrimaryCreateReplicaRole, primary)
 
 			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'customConfig' set to a ConfigMap containing 'postgres.conf'")
 		})
@@ -165,11 +183,17 @@ var _ = Describe("Setting Kubegres specs 'customConfig'", Label("group:2"), func
 
 			test.thenPodsContainsCustomConfigWithResourceName(resourceConfigs.CustomConfigMapWithPrimaryInitScriptResourceName)
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.CustomConfigMapVolumeName, states.ConfigMapDataKeyPrimaryInitScript, true)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, primary)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, replica)
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, false)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.CustomConfigMapVolumeName, states.ConfigMapDataKeyPrimaryInitScript, primary)
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, false)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, primary)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, replica)
+
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyCopyPrimaryDataToReplica, replica)
+
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPrimaryCreateReplicaRole, primary)
 
 			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'customConfig' set to a ConfigMap containing 'primary_init_script.sh''")
 		})
@@ -189,11 +213,17 @@ var _ = Describe("Setting Kubegres specs 'customConfig'", Label("group:2"), func
 
 			test.thenPodsContainsCustomConfigWithResourceName(resourceConfigs.CustomConfigMapWithPgHbaConfResourceName)
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.CustomConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, false)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, primary)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, replica)
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPrimaryInitScript, true)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPrimaryInitScript, primary)
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, false)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.CustomConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, primary)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.CustomConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, replica)
+
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyCopyPrimaryDataToReplica, replica)
+
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPrimaryCreateReplicaRole, primary)
 
 			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'customConfig' set to a ConfigMap containing 'pg_hba.conf''")
 		})
@@ -220,11 +250,17 @@ var _ = Describe("Setting Kubegres specs 'customConfig'", Label("group:2"), func
 
 			test.thenPodsContainsCustomConfigWithResourceName(resourceConfigs.CustomConfigMapWithPostgresConfResourceName)
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.CustomConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, false)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.CustomConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, primary)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.CustomConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, replica)
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPrimaryInitScript, true)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPrimaryInitScript, primary)
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, false)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, primary)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, replica)
+
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyCopyPrimaryDataToReplica, replica)
+
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPrimaryCreateReplicaRole, primary)
 
 			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
@@ -249,11 +285,17 @@ var _ = Describe("Setting Kubegres specs 'customConfig'", Label("group:2"), func
 
 			test.thenPodsContainsCustomConfigWithResourceName(resourceConfigs.CustomConfigMapWithBackupDatabaseScriptResourceName)
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, false)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, primary)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, replica)
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPrimaryInitScript, true)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPrimaryInitScript, primary)
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, false)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, primary)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, replica)
+
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyCopyPrimaryDataToReplica, replica)
+
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPrimaryCreateReplicaRole, primary)
 
 			log.Print("END OF: Test 'GIVEN new Kubegres is created with backUp enabled and spec 'customConfig' set to a ConfigMap containing 'backup_database.sh''")
 		})
@@ -261,7 +303,7 @@ var _ = Describe("Setting Kubegres specs 'customConfig'", Label("group:2"), func
 
 	Context("GIVEN new Kubegres is created with backUp enabled and spec 'customConfig' set to base-config AND later it is updated to a configMap containing data-key 'backup_database.sh'", func() {
 
-		It("THEN the custom-config should be used for 'postgres.conf' AND the base-config should be used for 'postgres.conf', 'pg_hba.conf' and 'primary_init_script.sh'", func() {
+		It("THEN the custom-config should be used for 'backup_database.conf' AND the base-config should be used for 'postgres.conf', 'pg_hba.conf' and 'primary_init_script.sh'", func() {
 
 			log.Print("START OF: Test 'GIVEN new Kubegres is created with backUp enabled and spec 'customConfig' set to base-config AND later it is updated to a configMap containing data-key 'backup_database.sh''")
 
@@ -284,11 +326,17 @@ var _ = Describe("Setting Kubegres specs 'customConfig'", Label("group:2"), func
 
 			test.thenCronJobContainsConfigMap(resourceConfigs.CustomConfigMapWithBackupDatabaseScriptResourceName)
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, false)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, primary)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, replica)
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPrimaryInitScript, true)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPrimaryInitScript, primary)
 
-			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, false)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, primary)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, replica)
+
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyCopyPrimaryDataToReplica, replica)
+
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPrimaryCreateReplicaRole, primary)
 
 			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
@@ -439,7 +487,14 @@ func (r *SpecCustomConfigTest) hasCustomConfigWithResourceName(statefulSetSpec v
 	return false
 }
 
-func (r *SpecCustomConfigTest) thenPodsContainsConfigTypeAssociatedToFile(expectedVolumeNameForConfigType, expectedConfigFile string, isOnlyPrimaryStatefulSet bool) bool {
+type statefulSetType int
+
+const (
+	primary statefulSetType = iota
+	replica
+)
+
+func (r *SpecCustomConfigTest) thenPodsContainsConfigTypeAssociatedToFile(expectedVolumeNameForConfigType, expectedConfigFile string, statefulSetType statefulSetType) bool {
 	return Eventually(func() bool {
 
 		kubegresResources, err := r.resourceRetriever.GetKubegresResources()
@@ -450,7 +505,10 @@ func (r *SpecCustomConfigTest) thenPodsContainsConfigTypeAssociatedToFile(expect
 
 		for _, resource := range kubegresResources.Resources {
 
-			if isOnlyPrimaryStatefulSet && !resource.IsPrimary {
+			switch {
+			case statefulSetType == primary && !resource.IsPrimary:
+				continue
+			case statefulSetType == replica && resource.IsPrimary:
 				continue
 			}
 
@@ -497,6 +555,13 @@ func (r *SpecCustomConfigTest) hasConfigTypeAssociatedToFile(statefulSetSpec v1.
 	for _, volumeMount := range statefulSetSpec.Template.Spec.Containers[0].VolumeMounts {
 		if volumeMount.Name == expectedVolumeNameForConfigType && volumeMount.SubPath == expectedConfigFile {
 			return true
+		}
+	}
+	if len(statefulSetSpec.Template.Spec.InitContainers) > 0 {
+		for _, volumeMount := range statefulSetSpec.Template.Spec.InitContainers[0].VolumeMounts {
+			if volumeMount.Name == expectedVolumeNameForConfigType && volumeMount.SubPath == expectedConfigFile {
+				return true
+			}
 		}
 	}
 	return false
