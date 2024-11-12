@@ -17,9 +17,10 @@ env:
 
 jobs:
   # All test running sequentially take around ~2h.
-  # Sppliting them in groups that take more or less the same time makes PR's readiness faster
+  # Splitting them in groups that take more or less the same time makes PR's readiness faster
   test-group:
     strategy:
+      fail-fast: false
       matrix:
         label:
           - "group:1"
