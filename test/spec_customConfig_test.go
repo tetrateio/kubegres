@@ -55,6 +55,7 @@ var _ = Describe("Setting Kubegres specs 'customConfig'", Label("group:2"), func
 		test.resourceCreator.CreateConfigMapWithPgHbaConf()
 		test.resourceCreator.CreateConfigMapWithPostgresConf()
 		test.resourceCreator.CreateConfigMapWithPrimaryInitScript()
+		test.resourceCreator.CreateConfigMapWithPromoteReplicaScript()
 	})
 
 	AfterEach(func() {
@@ -344,7 +345,6 @@ var _ = Describe("Setting Kubegres specs 'customConfig'", Label("group:2"), func
 			log.Print("END OF: Test 'GIVEN new Kubegres is created with backUp enabled and spec 'customConfig' set to base-config AND later it is updated to a configMap containing data-key 'backup_database.sh''")
 		})
 	})
-
 })
 
 type SpecCustomConfigTest struct {

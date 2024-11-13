@@ -145,6 +145,13 @@ func (r *TestResourceCreator) CreateConfigMapWithPostgresConfAndWalLevelSetToLog
 	r.createResourceFromYaml("Custom ConfigMap with postgres conf and wal_level=logical", resourceConfigs2.CustomConfigMapWithPostgresConfAndWalLevelSetToLogicalResourceName, &existingResource, &resourceToCreate)
 }
 
+func (r *TestResourceCreator) CreateConfigMapWithPromoteReplicaScript() {
+	existingResource := v1.ConfigMap{}
+	resourceToCreate := resourceConfigs2.LoadCustomConfigMapYaml(resourceConfigs2.CustomConfigMapWithPromoteReplicaScriptYamlFile)
+	resourceToCreate.Namespace = r.namespace
+	r.createResourceFromYaml("Custom ConfigMap with promote replica script", resourceConfigs2.CustomConfigMapWithPromoteReplicaScriptResourceName, &existingResource, &resourceToCreate)
+}
+
 func (r *TestResourceCreator) CreateNamespace() {
 	if r.namespace == resourceConfigs2.DefaultNamespace {
 		return

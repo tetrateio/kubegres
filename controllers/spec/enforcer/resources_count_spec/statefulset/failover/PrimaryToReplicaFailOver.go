@@ -22,13 +22,14 @@ package failover
 
 import (
 	"errors"
+	"strconv"
+
 	core "k8s.io/api/core/v1"
 	v1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/controllers/operation"
 	"reactive-tech.io/kubegres/controllers/states"
 	"reactive-tech.io/kubegres/controllers/states/statefulset"
-	"strconv"
 )
 
 type PrimaryToReplicaFailOver struct {
@@ -244,9 +245,9 @@ func (r *PrimaryToReplicaFailOver) promoteReplicaToPrimary(newPrimary statefulse
 	newPrimary.StatefulSet.Labels["replicationRole"] = ctx.PrimaryRoleName
 	newPrimary.StatefulSet.Spec.Template.Labels["replicationRole"] = ctx.PrimaryRoleName
 	volumeMount := core.VolumeMount{
-		Name:      "base-config",
+		Name:      r.resourcesStates.Config.ConfigLocations.PromoteReplica,
 		MountPath: "/tmp/promote_replica_to_primary.sh",
-		SubPath:   "promote_replica_to_primary.sh",
+		SubPath:   states.ConfigMapDataKeyPromoteReplica,
 	}
 
 	initContainer := &newPrimary.StatefulSet.Spec.Template.Spec.InitContainers[0]

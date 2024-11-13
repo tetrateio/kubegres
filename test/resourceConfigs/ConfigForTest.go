@@ -75,4 +75,7 @@ const (
 
 	CustomConfigMapWithPostgresConfAndWalLevelSetToLogicalResourceName = "config-with-postgres-conf-wal-level-to-logical"
 	CustomConfigMapWithPostgresConfAndWalLevelSetToLogicalYamlFile     = "resourceConfigs/customConfig/configMap_with_postgres_conf_and_wal_level_to_logical.yaml"
+
+	CustomConfigMapWithPromoteReplicaScriptResourceName = "config-with-promote-replica-script"
+	CustomConfigMapWithPromoteReplicaScriptYamlFile     = "resourceConfigs/customConfig/configMap_with_promote_replica_script.yaml"
 )

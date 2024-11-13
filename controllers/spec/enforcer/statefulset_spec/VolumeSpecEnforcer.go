@@ -59,7 +59,7 @@ func (r *VolumeSpecEnforcer) CheckForSpecDifference(statefulSet *apps.StatefulSe
 
 	if hasInitContainer && !r.compareVolumeMounts(currentCustomVolumeMountsInit, expectedCustomVolumeMounts) {
 		return StatefulSetSpecDifference{
-			SpecName: "Volume.VolumeMounts",
+			SpecName: "Volume.VolumeMounts[initContainer]",
 			Current:  r.volumeMountsToString(currentCustomVolumeMountsInit),
 			Expected: r.volumeMountsToString(expectedCustomVolumeMounts),
 		}
@@ -67,7 +67,7 @@ func (r *VolumeSpecEnforcer) CheckForSpecDifference(statefulSet *apps.StatefulSe
 
 	if !r.compareVolumeMounts(currentCustomVolumeMounts, expectedCustomVolumeMounts) {
 		return StatefulSetSpecDifference{
-			SpecName: "Volume.VolumeMounts",
+			SpecName: "Volume.VolumeMounts[container]",
 			Current:  r.volumeMountsToString(currentCustomVolumeMounts),
 			Expected: r.volumeMountsToString(expectedCustomVolumeMounts),
 		}
