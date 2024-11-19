@@ -152,6 +152,13 @@ func (r *TestResourceCreator) CreateConfigMapWithPromoteReplicaScript() {
 	r.createResourceFromYaml("Custom ConfigMap with promote replica script", resourceConfigs2.CustomConfigMapWithPromoteReplicaScriptResourceName, &existingResource, &resourceToCreate)
 }
 
+func (r *TestResourceCreator) CreateConfigMapWithPrimaryCreateReplicationRoleScript() {
+	existingResource := v1.ConfigMap{}
+	resourceToCreate := resourceConfigs2.LoadCustomConfigMapYaml(resourceConfigs2.CustomConfigMapwithPrimaryCreateReplicationRoleYamlFile)
+	resourceToCreate.Namespace = r.namespace
+	r.createResourceFromYaml("Custom ConfigMap with primary create replication role script", resourceConfigs2.CustomConfigMapWithPrimaryCreateReplicationRoleResourceName, &existingResource, &resourceToCreate)
+}
+
 func (r *TestResourceCreator) CreateNamespace() {
 	if r.namespace == resourceConfigs2.DefaultNamespace {
 		return

@@ -55,7 +55,7 @@ var _ = Describe("Setting Kubegres specs 'customConfig'", Label("group:2"), func
 		test.resourceCreator.CreateConfigMapWithPgHbaConf()
 		test.resourceCreator.CreateConfigMapWithPostgresConf()
 		test.resourceCreator.CreateConfigMapWithPrimaryInitScript()
-		test.resourceCreator.CreateConfigMapWithPromoteReplicaScript()
+		test.resourceCreator.CreateConfigMapWithPrimaryCreateReplicationRoleScript()
 	})
 
 	AfterEach(func() {
@@ -343,6 +343,46 @@ var _ = Describe("Setting Kubegres specs 'customConfig'", Label("group:2"), func
 			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
 
 			log.Print("END OF: Test 'GIVEN new Kubegres is created with backUp enabled and spec 'customConfig' set to base-config AND later it is updated to a configMap containing data-key 'backup_database.sh''")
+		})
+	})
+
+	Context("GIVEN new Kubegres is created with spec 'customConfig' set to base-config AND later it is updated to a configMap containing data-key 'promote_replica_to_primary.sh'", func() {
+
+		It("THEN the value of 'promote_replica_to_primary.sh' is first set to 'ctx.BaseConfigMapVolumeName' and later it is set to 'ctx.CustomConfigMapVolumeName'", func() {
+
+			log.Print("START OF: Test 'GIVEN new Kubegres is created with spec 'customConfig' set to base-config AND later it is updated to a configMap containing data-key 'promote_replica_to_primary.sh''")
+
+			test.givenNewKubegresSpecIsSetTo(ctx.BaseConfigMapName, 3)
+
+			test.whenKubegresIsCreated()
+
+			test.thenPodsStatesShouldBe(1, 2)
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
+
+			test.givenExistingKubegresSpecIsSetTo(resourceConfigs.CustomConfigMapWithPrimaryCreateReplicationRoleResourceName)
+
+			test.whenKubernetesIsUpdated()
+
+			test.thenPodsContainsCustomConfigWithResourceName(resourceConfigs.CustomConfigMapWithPrimaryCreateReplicationRoleResourceName)
+
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.CustomConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, primary)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.CustomConfigMapVolumeName, states.ConfigMapDataKeyPostgresConf, replica)
+
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPrimaryInitScript, primary)
+
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, primary)
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyPgHbaConf, replica)
+
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.BaseConfigMapVolumeName, states.ConfigMapDataKeyCopyPrimaryDataToReplica, replica)
+
+			test.thenPodsContainsConfigTypeAssociatedToFile(ctx.CustomConfigMapVolumeName, states.ConfigMapDataKeyPrimaryCreateReplicaRole, primary)
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
+
+			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'customConfig' set to base-config AND later it is updated to a configMap containing data-key 'promote_replica_to_primary.sh''")
 		})
 	})
 })

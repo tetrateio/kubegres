@@ -39,8 +39,10 @@ func (r *CustomConfigSpecEnforcer) GetSpecName() string {
 
 func (r *CustomConfigSpecEnforcer) CheckForSpecDifference(statefulSet *apps.StatefulSet) StatefulSetSpecDifference {
 
-	statefulSetCopy := *statefulSet
-	hasStatefulSetChanged, changesDetails := r.customConfigSpecHelper.ConfigureStatefulSet(&statefulSetCopy)
+	// We need to create a deep copy of the statefulSet to avoid modifying the original object, as we are only checking for differences.
+	// Original statefulSet will be modified by the EnforceSpec method.
+	statefulSetCopy := statefulSet.DeepCopy()
+	hasStatefulSetChanged, changesDetails := r.customConfigSpecHelper.ConfigureStatefulSet(statefulSetCopy)
 
 	if hasStatefulSetChanged {
 		return StatefulSetSpecDifference{
@@ -58,6 +60,6 @@ func (r *CustomConfigSpecEnforcer) EnforceSpec(statefulSet *apps.StatefulSet) (w
 	return wasSpecUpdated, nil
 }
 
-func (r *CustomConfigSpecEnforcer) OnSpecEnforcedSuccessfully(statefulSet *apps.StatefulSet) error {
+func (r *CustomConfigSpecEnforcer) OnSpecEnforcedSuccessfully(*apps.StatefulSet) error {
 	return nil
 }

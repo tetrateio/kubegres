@@ -69,10 +69,7 @@ func (r *CustomConfigSpecHelper) ConfigureStatefulSet(statefulSet *v1.StatefulSe
 		hasStatefulSetChanged = true
 	}
 
-	if r.updateVolumeMountNameIfChanged(configMap.ConfigLocations.PromoteReplica, states.ConfigMapDataKeyPromoteReplica, statefulSet) {
-		differenceDetails += r.createDescriptionMsg(configMap.ConfigLocations.PromoteReplica, states.ConfigMapDataKeyPromoteReplica)
-		hasStatefulSetChanged = true
-	}
+	// No need to check for states.ConfigMapDataKeyPromoteReplica as this is only used by the failover enforcer
 
 	statefulSetTemplateSpec := &statefulSet.Spec.Template.Spec
 
@@ -125,16 +122,6 @@ func (r *CustomConfigSpecHelper) updateVolumeMountNameIfChanged(volumeName, conf
 
 func (r *CustomConfigSpecHelper) createDescriptionMsg(volumeMountName, configMapDataKey string) string {
 	return "VolumeMount with subPath: '" + configMapDataKey + "' was updated to name: '" + volumeMountName + "' - "
-}
-
-func (r *CustomConfigSpecHelper) getVolumeMountIndex(configMapDataKey string, statefulSet *v1.StatefulSet) int {
-	volumeMounts := statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts
-	for i := 0; i < len(volumeMounts); i++ {
-		if volumeMounts[i].SubPath == configMapDataKey {
-			return i
-		}
-	}
-	return -1
 }
 
 func (r *CustomConfigSpecHelper) getCustomConfigMapVolume(volumes []core.Volume) *core.Volume {
