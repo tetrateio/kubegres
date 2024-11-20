@@ -43,6 +43,7 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 		namespace := resourceConfigs.DefaultNamespace
 		test.resourceRetriever = util.CreateTestResourceRetriever(k8sClientTest, namespace)
 		test.resourceCreator = util.CreateTestResourceCreator(k8sClientTest, test.resourceRetriever, namespace)
+		test.resourceCreator.CreateConfigMapWithPromoteReplicaScript()
 		test.connectionPrimaryDb = util.InitDbConnectionDbUtil(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryPrimaryDbNodePort, true)
 		test.connectionReplicaDb = util.InitDbConnectionDbUtil(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort, false)
 	})
@@ -119,7 +120,7 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 
 	Context("GIVEN Kubegres with 1 primary and 2 replicas AND primary is deleted", func() {
 
-		It("THEN the failover should take place with a replica becoming primary AND a new replica created AND existing data available", func() {
+		It("THEN the failover should take place with a replica becoming primary AND a new replica created AND existing data available, twice", func() {
 
 			log.Print("START OF: Test 'GIVEN Kubegres with 1 primary and 2 replicas AND primary is deleted'")
 
@@ -136,6 +137,23 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 
 			test.GivenUserAddedInPrimaryDb()
 			expectedNbreUsers++
+
+			// First failover
+
+			test.whenPrimaryIsDeleted()
+
+			test.thenPodsStatesShouldBe(1, 2)
+
+			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
+			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
+
+			test.GivenUserAddedInPrimaryDb()
+			expectedNbreUsers++
+
+			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
+			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
+
+			// Second failover
 
 			test.whenPrimaryIsDeleted()
 
@@ -154,6 +172,61 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 		})
 	})
 
+	Context("GIVEN Kubegres with 1 primary and 2 replicas using custom-configs map AND primary is deleted", func() {
+
+		It("THEN the failover should take place with a replica becoming primary AND a new replica created AND existing data available, twice", func() {
+
+			log.Print("START OF: Test 'GIVEN Kubegres with 1 primary and 2 replicas using custom-configs map AND primary is deleted'")
+
+			test.givenNewKubegresSpecIsSetToWithCustomConfigs(3)
+
+			test.whenKubegresIsCreated()
+
+			test.thenPodsStatesShouldBe(1, 2)
+
+			expectedNbreUsers := 0
+
+			test.GivenUserAddedInPrimaryDb()
+			expectedNbreUsers++
+
+			test.GivenUserAddedInPrimaryDb()
+			expectedNbreUsers++
+
+			// First failover
+
+			test.whenPrimaryIsDeleted()
+
+			test.thenPodsStatesShouldBe(1, 2)
+
+			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
+			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
+
+			test.GivenUserAddedInPrimaryDb()
+			expectedNbreUsers++
+
+			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
+			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
+
+			// Second failover
+
+			test.whenPrimaryIsDeleted()
+
+			test.thenPodsStatesShouldBe(1, 2)
+
+			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
+			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
+
+			test.GivenUserAddedInPrimaryDb()
+			expectedNbreUsers++
+
+			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
+			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
+
+			log.Print("END OF: Test 'GIVEN Kubegres with 1 primary and 2 replicas using custom-configs map AND primary is deleted'")
+		})
+
+	})
+
 })
 
 type PrimaryFailureAndRecoveryTest struct {
@@ -169,6 +242,12 @@ type PrimaryFailureAndRecoveryTest struct {
 func (r *PrimaryFailureAndRecoveryTest) givenNewKubegresSpecIsSetTo(specNbreReplicas int32) {
 	r.kubegresResource = resourceConfigs.LoadKubegresYaml()
 	r.kubegresResource.Spec.Replicas = &specNbreReplicas
+}
+
+func (r *PrimaryFailureAndRecoveryTest) givenNewKubegresSpecIsSetToWithCustomConfigs(specNbreReplicas int32) {
+	r.kubegresResource = resourceConfigs.LoadKubegresYaml()
+	r.kubegresResource.Spec.Replicas = &specNbreReplicas
+	r.kubegresResource.Spec.CustomConfig = resourceConfigs.CustomConfigMapWithPromoteReplicaScriptResourceName
 }
 
 func (r *PrimaryFailureAndRecoveryTest) whenKubegresIsCreated() {

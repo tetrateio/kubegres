@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-with-promote-replica-script
+  namespace: default
+  labels:
+    environment: acceptancetesting
+
+data:
+
+  promote_replica_to_primary.sh: |
+    #!/bin/bash
+    set -e
+
+    dt=$(date '+%d/%m/%Y %H:%M:%S');
+    echo "$dt - Attempting to promote a Replica PostgreSql to Primary...";
+
+    standbyFilePath="$PGDATA/standby.signal"
+
+    if [ ! -f "$standbyFilePath" ]; then
+      echo "$dt - Skipping as this PostgreSql is already a Primary since the file '$standbyFilePath' does not exist."
+      exit 0
+    fi
+
+    promotionTriggerFilePath="$PGDATA/promote_replica_to_primary.log"
+
+    if [ -f "$promotionTriggerFilePath" ]; then
+      echo "$dt - Skipping as the promotion trigger file '$promotionTriggerFilePath' already exists"
+      exit 0
+    fi
+
+    echo "$dt - Promoting by creating the promotion trigger file: '$promotionTriggerFilePath'"
+    touch $promotionTriggerFilePath

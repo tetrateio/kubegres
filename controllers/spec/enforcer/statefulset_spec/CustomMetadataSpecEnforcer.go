@@ -68,17 +68,22 @@ func extractCustom(src map[string]string) map[string]string {
 
 func (r *CustomMetadataSpecEnforcer) EnforceSpec(statefulSet *apps.StatefulSet) (bool, error) {
 	md := getCustomMetadata(r.kubegresContext.Kubegres.GetObjectMeta())
-	merge(statefulSet.ObjectMeta.Labels, md.Labels)
-	merge(statefulSet.ObjectMeta.Annotations, md.Annotations)
-	merge(statefulSet.Spec.Template.ObjectMeta.Labels, md.Labels)
-	merge(statefulSet.Spec.Template.ObjectMeta.Annotations, md.Annotations)
+	statefulSet.ObjectMeta.Labels = merge(statefulSet.ObjectMeta.Labels, md.Labels)
+	statefulSet.ObjectMeta.Annotations = merge(statefulSet.ObjectMeta.Annotations, md.Annotations)
+	statefulSet.Spec.Template.ObjectMeta.Labels = merge(statefulSet.Spec.Template.ObjectMeta.Labels, md.Labels)
+	statefulSet.Spec.Template.ObjectMeta.Annotations = merge(statefulSet.Spec.Template.ObjectMeta.Annotations, md.Annotations)
 	return true, nil
 }
 
-func merge(dst map[string]string, src map[string]string) {
-	for key, value := range src {
-		dst[key] = value
+func merge(a map[string]string, b map[string]string) map[string]string {
+	result := make(map[string]string, len(a)+len(b))
+	for key, value := range a {
+		result[key] = value
 	}
+	for key, value := range b {
+		result[key] = value
+	}
+	return result
 }
 
 func (r *CustomMetadataSpecEnforcer) OnSpecEnforcedSuccessfully(*apps.StatefulSet) error {

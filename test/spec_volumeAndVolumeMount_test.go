@@ -141,7 +141,7 @@ var _ = Describe("Setting Kubegres specs 'volume.volume' and 'volume.volumeMount
 				"and spec 'replica' set to 3'")
 		})
 
-		It("GIVEN existing Kubegres is updated by updating by adding new and updating existing custom 'volume.volume' and 'volume.volumeMount' THEN "+
+		It("GIVEN existing Kubegres is updated by adding new and updating existing custom 'volume.volume' and 'volume.volumeMount' THEN "+
 			"StatefulSets should be updated too", func() {
 
 			log.Print("START OF: Test 'GIVEN existing Kubegres is updated by adding new and updating existing custom 'volume.volume' and 'volume.volumeMount'")
@@ -472,6 +472,13 @@ func (r *SpecVolumeAndVolumeMountTest) thenStatefulSetsStatesShouldBe(
 					log.Println("StatefulSet '" + resource.StatefulSet.Name + "' doesn't have the expected custom volumeMount with name: '" + customVolumeMount.Name + "'. Waiting...")
 					return false
 				}
+
+				if len(resource.StatefulSet.Spec.Template.Spec.InitContainers) > 0 {
+					if !r.doesCustomVolumeMountExistsInStatefulSet(customVolumeMount, resource.StatefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts) {
+						log.Println("StatefulSet '" + resource.StatefulSet.Name + "' doesn't have the expected custom volumeMount in init container with name: '" + customVolumeMount.Name + "'. Waiting...")
+						return false
+					}
+				}
 			}
 
 			for _, volumeMountInStatefulSet := range resource.StatefulSet.Spec.Template.Spec.Containers[0].VolumeMounts {
@@ -479,6 +486,15 @@ func (r *SpecVolumeAndVolumeMountTest) thenStatefulSetsStatesShouldBe(
 					!r.isVolumeMountAnExpectedCustomVolumeMount(volumeMountInStatefulSet, expectedCustomVolumeMounts) {
 					log.Println("StatefulSet '" + resource.StatefulSet.Name + "' still has custom volumeMount with name: '" + volumeMountInStatefulSet.Name + "'. Waiting...")
 					return false
+				}
+			}
+			if len(resource.StatefulSet.Spec.Template.Spec.InitContainers) > 0 {
+				for _, volumeMountInStatefulSet := range resource.StatefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts {
+					if r.isCustomVolumeMount(volumeMountInStatefulSet, kubegresContext) &&
+						!r.isVolumeMountAnExpectedCustomVolumeMount(volumeMountInStatefulSet, expectedCustomVolumeMounts) {
+						log.Println("StatefulSet '" + resource.StatefulSet.Name + "' still has custom volumeMount in init container with name: '" + volumeMountInStatefulSet.Name + "'. Waiting...")
+						return false
+					}
 				}
 			}
 		}
