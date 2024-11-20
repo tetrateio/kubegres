@@ -20,22 +20,23 @@ limitations under the License.
 package test
 
 import (
-	. "github.com/onsi/ginkgo"
+	"log"
+	"reflect"
+	"time"
+
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v12 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"log"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/test/resourceConfigs"
 	"reactive-tech.io/kubegres/test/util"
 	"reactive-tech.io/kubegres/test/util/testcases"
-	"reflect"
-	"time"
 )
 
-var _ = Describe("Setting Kubegres specs 'volume.volume' and 'volume.volumeMount'", func() {
+var _ = Describe("Setting Kubegres specs 'volume.volume' and 'volume.volumeMount'", Label("group:5"), func() {
 
 	var test = SpecVolumeAndVolumeMountTest{}
 
@@ -140,7 +141,7 @@ var _ = Describe("Setting Kubegres specs 'volume.volume' and 'volume.volumeMount
 				"and spec 'replica' set to 3'")
 		})
 
-		It("GIVEN existing Kubegres is updated by updating by adding new and updating existing custom 'volume.volume' and 'volume.volumeMount' THEN "+
+		It("GIVEN existing Kubegres is updated by adding new and updating existing custom 'volume.volume' and 'volume.volumeMount' THEN "+
 			"StatefulSets should be updated too", func() {
 
 			log.Print("START OF: Test 'GIVEN existing Kubegres is updated by adding new and updating existing custom 'volume.volume' and 'volume.volumeMount'")
@@ -471,6 +472,13 @@ func (r *SpecVolumeAndVolumeMountTest) thenStatefulSetsStatesShouldBe(
 					log.Println("StatefulSet '" + resource.StatefulSet.Name + "' doesn't have the expected custom volumeMount with name: '" + customVolumeMount.Name + "'. Waiting...")
 					return false
 				}
+
+				if len(resource.StatefulSet.Spec.Template.Spec.InitContainers) > 0 {
+					if !r.doesCustomVolumeMountExistsInStatefulSet(customVolumeMount, resource.StatefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts) {
+						log.Println("StatefulSet '" + resource.StatefulSet.Name + "' doesn't have the expected custom volumeMount in init container with name: '" + customVolumeMount.Name + "'. Waiting...")
+						return false
+					}
+				}
 			}
 
 			for _, volumeMountInStatefulSet := range resource.StatefulSet.Spec.Template.Spec.Containers[0].VolumeMounts {
@@ -478,6 +486,15 @@ func (r *SpecVolumeAndVolumeMountTest) thenStatefulSetsStatesShouldBe(
 					!r.isVolumeMountAnExpectedCustomVolumeMount(volumeMountInStatefulSet, expectedCustomVolumeMounts) {
 					log.Println("StatefulSet '" + resource.StatefulSet.Name + "' still has custom volumeMount with name: '" + volumeMountInStatefulSet.Name + "'. Waiting...")
 					return false
+				}
+			}
+			if len(resource.StatefulSet.Spec.Template.Spec.InitContainers) > 0 {
+				for _, volumeMountInStatefulSet := range resource.StatefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts {
+					if r.isCustomVolumeMount(volumeMountInStatefulSet, kubegresContext) &&
+						!r.isVolumeMountAnExpectedCustomVolumeMount(volumeMountInStatefulSet, expectedCustomVolumeMounts) {
+						log.Println("StatefulSet '" + resource.StatefulSet.Name + "' still has custom volumeMount in init container with name: '" + volumeMountInStatefulSet.Name + "'. Waiting...")
+						return false
+					}
 				}
 			}
 		}

@@ -21,21 +21,22 @@ limitations under the License.
 package test
 
 import (
-	. "github.com/onsi/ginkgo"
+	"log"
+	"time"
+
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v12 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"log"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/test/resourceConfigs"
 	"reactive-tech.io/kubegres/test/util"
 	"reactive-tech.io/kubegres/test/util/testcases"
-	"time"
 )
 
 const customNamespace = "toto"
 
-var _ = Describe("Creating Kubegres with a custom namespace", func() {
+var _ = Describe("Creating Kubegres with a custom namespace", Label("group:1"), func() {
 
 	var test = CustomNamespaceTest{}
 

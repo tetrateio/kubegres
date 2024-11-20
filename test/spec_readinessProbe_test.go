@@ -25,7 +25,7 @@ import (
 	"reflect"
 	"time"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v12 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -35,7 +35,7 @@ import (
 	"reactive-tech.io/kubegres/test/util/testcases"
 )
 
-var _ = Describe("Setting Kubegres spec 'readinessProbe'", func() {
+var _ = Describe("Setting Kubegres spec 'readinessProbe'", Label("group:4"), func() {
 
 	var test = SpecReadinessProbeTest{}
 
