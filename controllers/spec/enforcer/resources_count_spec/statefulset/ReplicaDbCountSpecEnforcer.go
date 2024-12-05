@@ -154,13 +154,14 @@ func (r *ReplicaDbCountSpecEnforcer) getNbreDeployedReplicas() int32 {
 func (r *ReplicaDbCountSpecEnforcer) getExpectedNbreReplicasToDeploy() int32 {
 	expectedNbreToDeploy := r.resourcesStates.StatefulSets.SpecExpectedNbreToDeploy
 
+	if r.isStandbyEnabled() {
+		return expectedNbreToDeploy
+	}
+
 	if expectedNbreToDeploy <= 1 {
 		return 0
 	}
-	if !r.isStandbyEnabled() {
-		return expectedNbreToDeploy - 1 // subtract the primary isntance
-	}
-	return expectedNbreToDeploy
+	return expectedNbreToDeploy - 1 // subtract the primary
 }
 
 func (r *ReplicaDbCountSpecEnforcer) hasLastAttemptTimedOut() bool {
