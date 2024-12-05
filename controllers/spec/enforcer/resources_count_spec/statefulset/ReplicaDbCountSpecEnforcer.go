@@ -22,6 +22,8 @@ package statefulset
 
 import (
 	"errors"
+	"strconv"
+
 	v1 "k8s.io/api/apps/v1"
 	postgresV1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
@@ -29,7 +31,6 @@ import (
 	"reactive-tech.io/kubegres/controllers/spec/template"
 	"reactive-tech.io/kubegres/controllers/states"
 	"reactive-tech.io/kubegres/controllers/states/statefulset"
-	"strconv"
 )
 
 type ReplicaDbCountSpecEnforcer struct {
@@ -91,7 +92,7 @@ func (r *ReplicaDbCountSpecEnforcer) Enforce() error {
 		}
 	}
 
-	if !r.isPrimaryDbReady() {
+	if !r.isStandbyEnabled() && !r.isPrimaryDbReady() {
 		return nil
 	}
 
@@ -104,7 +105,7 @@ func (r *ReplicaDbCountSpecEnforcer) Enforce() error {
 		return nil
 	}
 
-	// Check if the number of deployed replicas == spec if not then deploy one
+	// Check if the number of deployed replicas == spec, if not then deploy one
 	nbreNewReplicaToDeploy := r.getExpectedNbreReplicasToDeploy() - r.getNbreDeployedReplicas()
 
 	if nbreNewReplicaToDeploy > 0 {
@@ -134,6 +135,10 @@ func (r *ReplicaDbCountSpecEnforcer) Enforce() error {
 	return nil
 }
 
+func (r *ReplicaDbCountSpecEnforcer) isStandbyEnabled() bool {
+	return r.kubegresContext.Kubegres.Spec.Standby.Enabled
+}
+
 func (r *ReplicaDbCountSpecEnforcer) isReplicaOperationInProgress() bool {
 	return r.blockingOperation.GetActiveOperation().OperationId == operation.OperationIdReplicaDbCountSpecEnforcement
 }
@@ -152,7 +157,10 @@ func (r *ReplicaDbCountSpecEnforcer) getExpectedNbreReplicasToDeploy() int32 {
 	if expectedNbreToDeploy <= 1 {
 		return 0
 	}
-	return expectedNbreToDeploy - 1
+	if !r.isStandbyEnabled() {
+		return expectedNbreToDeploy - 1 // subtract the primary isntance
+	}
+	return expectedNbreToDeploy
 }
 
 func (r *ReplicaDbCountSpecEnforcer) hasLastAttemptTimedOut() bool {

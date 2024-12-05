@@ -23,11 +23,16 @@ package test
 import (
 	"context"
 	"log"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/record"
 	"reactive-tech.io/kubegres/controllers"
 	"reactive-tech.io/kubegres/test/util"
@@ -55,6 +60,12 @@ var kindCluster kindcluster.KindTestClusterUtil
 var k8sClientTest client.Client
 var testEnv *envtest.Environment
 var eventRecorderTest util.MockEventRecorderTestUtil
+
+var (
+	k8sRestClient *rest.RESTClient
+	k8sRestConfig *rest.Config
+	k8sPodsGetter corev1client.PodsGetter
+)
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -119,6 +130,27 @@ var _ = BeforeSuite(func() {
 
 	k8sClientTest = k8sManager.GetClient()
 	Expect(k8sClientTest).ToNot(BeNil())
+
+	kubeConfigPath := os.Getenv("KUBECONFIG")
+	if kubeConfigPath == "" {
+		kubeConfigPath = filepath.Join(os.Getenv("HOME"), ".kube", "config")
+	}
+	k8sRestConfig, err = clientcmd.BuildConfigFromFlags("", kubeConfigPath)
+	Expect(err).ToNot(HaveOccurred())
+	Expect(k8sRestConfig).ToNot(BeNil())
+
+	restCfg := *k8sRestConfig
+	gv := v1.SchemeGroupVersion
+	restCfg.GroupVersion = &gv
+	restCfg.NegotiatedSerializer = serializer.NewCodecFactory(scheme.Scheme)
+
+	k8sRestClient, err = rest.RESTClientFor(&restCfg)
+	Expect(err).ToNot(HaveOccurred())
+	Expect(k8sRestClient).ToNot(BeNil())
+
+	k8sPodsGetter, err = corev1client.NewForConfig(&restCfg)
+	Expect(err).ToNot(HaveOccurred())
+	Expect(k8sPodsGetter).ToNot(BeNil())
 
 	// Wait for Kubernetes envtest to start
 	Eventually(func() error { return k8sClientTest.List(context.Background(), &v1.NamespaceList{}) },

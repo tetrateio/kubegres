@@ -24,6 +24,7 @@ import (
 	"io/ioutil"
 	"log"
 
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -70,6 +71,24 @@ func LoadYamlServiceToSqlQueryReplicaDb() v1.Service {
 	fileContents := getFileContents(ServiceToSqlQueryReplicaDbServiceYamlFile)
 	obj := decodeYaml(fileContents)
 	return *obj.(*v1.Service)
+}
+
+func LoadYamlStatefulSetExternalDB() appsv1.StatefulSet {
+	fileContents := getFileContents(StatefulSetExternalDbYamlFile)
+	obj := decodeYaml(fileContents)
+	return *obj.(*appsv1.StatefulSet)
+}
+
+func LoadYamlServiceExternalDB() v1.Service {
+	fileContents := getFileContents(ServiceExternalDbYamlFile)
+	obj := decodeYaml(fileContents)
+	return *obj.(*v1.Service)
+}
+
+func LoadYamlConfigMapExternalDB() v1.ConfigMap {
+	fileContents := getFileContents(ConfigMApExternalDBYamlFile)
+	obj := decodeYaml(fileContents)
+	return *obj.(*v1.ConfigMap)
 }
 
 func getFileContents(filePath string) string {

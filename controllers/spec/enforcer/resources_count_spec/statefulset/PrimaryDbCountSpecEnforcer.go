@@ -22,6 +22,8 @@ package statefulset
 
 import (
 	"errors"
+	"strconv"
+
 	v1 "k8s.io/api/core/v1"
 	postgresV1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
@@ -30,7 +32,6 @@ import (
 	"reactive-tech.io/kubegres/controllers/spec/template"
 	"reactive-tech.io/kubegres/controllers/states"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strconv"
 )
 
 type PrimaryDbCountSpecEnforcer struct {
@@ -69,6 +70,11 @@ func (r *PrimaryDbCountSpecEnforcer) CreateOperationConfigForPrimaryDbDeploying(
 
 func (r *PrimaryDbCountSpecEnforcer) Enforce() error {
 
+	if r.isStandbyEnabled() {
+		r.kubegresContext.Log.InfoEvent("PrimaryDbCountSpecEnforcerDisabled", "PrimaryDbCountSpecEnforcer is disabled as Standby is enabled.")
+		return nil
+	}
+
 	// Backward compatibility logic where we initialize the field 'EnforcedReplicas'
 	// added in Kubegres' status from version 1.8
 	r.initialiseStatusEnforcedReplicas()
@@ -90,6 +96,10 @@ func (r *PrimaryDbCountSpecEnforcer) Enforce() error {
 	}
 
 	return nil
+}
+
+func (r *PrimaryDbCountSpecEnforcer) isStandbyEnabled() bool {
+	return r.kubegresContext.Kubegres.Spec.Standby.Enabled
 }
 
 func (r *PrimaryDbCountSpecEnforcer) initialiseStatusEnforcedReplicas() {

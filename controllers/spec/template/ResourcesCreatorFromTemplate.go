@@ -114,7 +114,12 @@ func (r *ResourcesCreatorFromTemplate) CreateReplicaStatefulSet(statefulSetInsta
 		return apps.StatefulSet{}, err
 	}
 
-	primaryServiceName := r.kubegresContext.GetServiceResourceName(true)
+	var primaryServiceName string
+	if r.kubegresContext.Kubegres.Spec.Standby.Enabled {
+		primaryServiceName = r.kubegresContext.Kubegres.Spec.Standby.PrimaryEndpoint
+	} else {
+		primaryServiceName = r.kubegresContext.GetServiceResourceName(true)
+	}
 	replicaServiceName := r.kubegresContext.GetServiceResourceName(false)
 
 	r.initStatefulSet(replicaServiceName, &statefulSetTemplate, statefulSetInstanceIndex)
