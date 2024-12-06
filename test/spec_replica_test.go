@@ -31,7 +31,7 @@ import (
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/test/resourceConfigs"
 	"reactive-tech.io/kubegres/test/util"
-	//"reactive-tech.io/kubegres/test/util/testcases"
+	"reactive-tech.io/kubegres/test/util/testcases"
 )
 
 var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), Label("replica"), func() {
@@ -44,7 +44,7 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), Label("rep
 		namespace := resourceConfigs.DefaultNamespace
 		test.resourceRetriever = util.CreateTestResourceRetriever(k8sClientTest, namespace)
 		test.resourceCreator = util.CreateTestResourceCreator(k8sClientTest, test.resourceRetriever, namespace)
-		//test.dbQueryTestCases = testcases.InitDbQueryTestCases(test.resourceCreator, resourceConfigs.KubegresResourceName)
+		test.dbQueryTestCases = testcases.InitDbQueryTestCases(test.resourceCreator, resourceConfigs.KubegresResourceName)
 	})
 
 	AfterEach(func() {
@@ -101,7 +101,7 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), Label("rep
 
 			test.thenDeployedKubegresSpecShouldBeSetTo(1)
 
-			//test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 
 			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'replica' set to 1'")
 		})
@@ -122,102 +122,102 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), Label("rep
 
 			test.thenDeployedKubegresSpecShouldBeSetTo(2)
 
-			//test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
-			//test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
 
 			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'replica' set to 2'")
 		})
 
 	})
 
-	//Context("GIVEN new Kubegres is created with spec 'replica' set to 3 and then it is updated to different values", func() {
-	//
-	//	It("GIVEN new Kubegres is created with spec 'replica' set to 3 THEN 1 primary and 2 replica should be created", func() {
-	//
-	//		log.Print("START OF: Test 'GIVEN new Kubegres is created with spec 'replica' set to 3'")
-	//
-	//		test.givenNewKubegresSpecIsSetTo(3)
-	//
-	//		test.whenKubegresIsCreated()
-	//
-	//		test.thenPodsStatesShouldBe(1, 2)
-	//
-	//		test.thenDeployedKubegresSpecShouldBeSetTo(3)
-	//
-	//		test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
-	//		test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
-	//
-	//		test.keepCreatedResourcesForNextTest = true
-	//
-	//		log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'replica' set to 3'")
-	//	})
-	//
-	//	It("GIVEN existing Kubegres is updated with spec 'replica' set from 3 to 4 THEN 1 more replica should be created", func() {
-	//
-	//		log.Print("START OF: Test 'GIVEN existing Kubegres is updated with spec 'replica' set from 3 to 4'")
-	//
-	//		test.givenExistingKubegresSpecIsSetTo(4)
-	//
-	//		test.whenKubernetesIsUpdated()
-	//
-	//		test.thenPodsStatesShouldBe(1, 3)
-	//
-	//		test.thenDeployedKubegresSpecShouldBeSetTo(4)
-	//
-	//		test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
-	//		test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
-	//
-	//		test.keepCreatedResourcesForNextTest = true
-	//
-	//		log.Print("END OF: Test 'GIVEN existing Kubegres is updated with spec 'replica' set from 3 to 4'")
-	//	})
-	//
-	//	It("GIVEN existing Kubegres is updated with spec 'replica' set from 4 to 3 THEN 1 replica should be deleted", func() {
-	//
-	//		log.Print("START OF: Test 'GIVEN existing Kubegres is updated with spec 'replica' set from 4 to 3'")
-	//
-	//		test.givenExistingKubegresSpecIsSetTo(3)
-	//
-	//		test.whenKubernetesIsUpdated()
-	//
-	//		test.thenPodsStatesShouldBe(1, 2)
-	//
-	//		test.thenDeployedKubegresSpecShouldBeSetTo(3)
-	//
-	//		test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
-	//		test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
-	//
-	//		test.keepCreatedResourcesForNextTest = true
-	//
-	//		log.Print("END OF: Test 'GIVEN existing Kubegres is updated with spec 'replica' set from 4 to 3'")
-	//	})
-	//
-	//	It("GIVEN existing Kubegres is updated with spec 'replica' set from 3 to 1 THEN 2 replica should be deleted", func() {
-	//
-	//		log.Print("START OF: Test 'GIVEN existing Kubegres is updated with spec 'replica' set from 3 to 1'")
-	//
-	//		test.givenExistingKubegresSpecIsSetTo(1)
-	//
-	//		test.whenKubernetesIsUpdated()
-	//
-	//		test.thenPodsStatesShouldBe(1, 0)
-	//
-	//		test.thenDeployedKubegresSpecShouldBeSetTo(1)
-	//
-	//		test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
-	//
-	//		log.Print("END OF: Test 'GIVEN existing Kubegres is updated with spec 'replica' set from 3 to 1'")
-	//	})
-	//})
+	Context("GIVEN new Kubegres is created with spec 'replica' set to 3 and then it is updated to different values", func() {
+
+		It("GIVEN new Kubegres is created with spec 'replica' set to 3 THEN 1 primary and 2 replica should be created", func() {
+
+			log.Print("START OF: Test 'GIVEN new Kubegres is created with spec 'replica' set to 3'")
+
+			test.givenNewKubegresSpecIsSetTo(3)
+
+			test.whenKubegresIsCreated()
+
+			test.thenPodsStatesShouldBe(1, 2)
+
+			test.thenDeployedKubegresSpecShouldBeSetTo(3)
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
+
+			test.keepCreatedResourcesForNextTest = true
+
+			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'replica' set to 3'")
+		})
+
+		It("GIVEN existing Kubegres is updated with spec 'replica' set from 3 to 4 THEN 1 more replica should be created", func() {
+
+			log.Print("START OF: Test 'GIVEN existing Kubegres is updated with spec 'replica' set from 3 to 4'")
+
+			test.givenExistingKubegresSpecIsSetTo(4)
+
+			test.whenKubernetesIsUpdated()
+
+			test.thenPodsStatesShouldBe(1, 3)
+
+			test.thenDeployedKubegresSpecShouldBeSetTo(4)
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
+
+			test.keepCreatedResourcesForNextTest = true
+
+			log.Print("END OF: Test 'GIVEN existing Kubegres is updated with spec 'replica' set from 3 to 4'")
+		})
+
+		It("GIVEN existing Kubegres is updated with spec 'replica' set from 4 to 3 THEN 1 replica should be deleted", func() {
+
+			log.Print("START OF: Test 'GIVEN existing Kubegres is updated with spec 'replica' set from 4 to 3'")
+
+			test.givenExistingKubegresSpecIsSetTo(3)
+
+			test.whenKubernetesIsUpdated()
+
+			test.thenPodsStatesShouldBe(1, 2)
+
+			test.thenDeployedKubegresSpecShouldBeSetTo(3)
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
+
+			test.keepCreatedResourcesForNextTest = true
+
+			log.Print("END OF: Test 'GIVEN existing Kubegres is updated with spec 'replica' set from 4 to 3'")
+		})
+
+		It("GIVEN existing Kubegres is updated with spec 'replica' set from 3 to 1 THEN 2 replica should be deleted", func() {
+
+			log.Print("START OF: Test 'GIVEN existing Kubegres is updated with spec 'replica' set from 3 to 1'")
+
+			test.givenExistingKubegresSpecIsSetTo(1)
+
+			test.whenKubernetesIsUpdated()
+
+			test.thenPodsStatesShouldBe(1, 0)
+
+			test.thenDeployedKubegresSpecShouldBeSetTo(1)
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+
+			log.Print("END OF: Test 'GIVEN existing Kubegres is updated with spec 'replica' set from 3 to 1'")
+		})
+	})
 
 })
 
 type SpecReplicaTest struct {
 	keepCreatedResourcesForNextTest bool
 	kubegresResource                *postgresv1.Kubegres
-	//dbQueryTestCases                testcases.DbQueryTestCases
-	resourceCreator   util.TestResourceCreator
-	resourceRetriever util.TestResourceRetriever
+	dbQueryTestCases                testcases.DbQueryTestCases
+	resourceCreator                 util.TestResourceCreator
+	resourceRetriever               util.TestResourceRetriever
 }
 
 func (r *SpecReplicaTest) givenNewKubegresSpecIsSetToNil() {

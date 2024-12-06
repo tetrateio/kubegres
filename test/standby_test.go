@@ -9,7 +9,6 @@ import (
 	v12 "k8s.io/api/core/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
 
-	//v12 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/test/resourceConfigs"

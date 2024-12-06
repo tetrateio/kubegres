@@ -23,12 +23,11 @@ jobs:
       fail-fast: false
       matrix:
         label:
-          - "standby"
-#          - "group:1"
-#          - "group:2"
-#          - "group:3"
-#          - "group:4"
-#          - "group:5"
+          - "group:1"
+          - "group:2"
+          - "group:3"
+          - "group:4"
+          - "group:5"
     runs-on: ubuntu-latest
     env:
       PLATFORMS: linux/amd64
