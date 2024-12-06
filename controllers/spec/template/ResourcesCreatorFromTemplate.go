@@ -169,7 +169,7 @@ func (r *ResourcesCreatorFromTemplate) CreateBackUpCronJob(configMapNameForBackU
 	backUpCronJobContainer.Env = append(backUpCronJobContainer.Env, r.kubegresContext.Kubegres.Spec.Env...)
 
 	backSourceDbHostName := r.kubegresContext.GetServiceResourceName(false)
-	if *postgres.Spec.Replicas == 1 {
+	if !postgres.Spec.Standby.Enabled && *postgres.Spec.Replicas == 1 {
 		backSourceDbHostName = r.kubegresContext.GetServiceResourceName(true)
 	}
 	backUpCronJobContainer.Env[3].Value = backSourceDbHostName

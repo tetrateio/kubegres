@@ -7,6 +7,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v12 "k8s.io/api/core/v1"
+	"reactive-tech.io/kubegres/controllers/ctx"
+
 	//v12 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
@@ -106,151 +108,36 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), Label("sta
 			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
 
-			test.keepCreatedResourcesForNextTest = true
-
 			log.Print("END OF: Test 'GIVEN replica set from 2 to 1 should be running and replicating data from external postgres")
 		})
 
 	})
-	//
-	//	Context("GIVEN new Kubegres is created with spec 'replica' set to 0", func() {
-	//
-	//		It("THEN a validation error event should be logged", func() {
-	//
-	//			log.Print("START OF: Test 'GIVEN new Kubegres is created with spec 'replica' set to 0'")
-	//
-	//			test.givenNewKubegresSpecIsSetTo(0)
-	//
-	//			test.whenKubegresIsCreated()
-	//
-	//			test.thenErrorEventShouldBeLogged()
-	//
-	//			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'replica' set to 0'")
-	//		})
-	//	})
-	//
-	//	Context("GIVEN new Kubegres is created with spec 'replica' set to 1", func() {
-	//
-	//		It("THEN 1 primary and 0 replica should be created", func() {
-	//
-	//			log.Print("START OF: Test 'GIVEN new Kubegres is created with spec 'replica' set to 1'")
-	//
-	//			test.givenNewKubegresSpecIsSetTo(1)
-	//
-	//			test.whenKubegresIsCreated()
-	//
-	//			test.thenPodsStatesShouldBe(1, 0)
-	//
-	//			test.thenDeployedKubegresSpecShouldBeSetTo(1)
-	//
-	//			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
-	//
-	//			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'replica' set to 1'")
-	//		})
-	//
-	//	})
-	//
-	//	Context("GIVEN new Kubegres is created with spec 'replica' set to 2", func() {
-	//
-	//		It("THEN 1 primary and 2 replica should be created", func() {
-	//
-	//			log.Print("START OF: Test 'GIVEN new Kubegres is created with spec 'replica' set to 2'")
-	//
-	//			test.givenNewKubegresSpecIsSetTo(2)
-	//
-	//			test.whenKubegresIsCreated()
-	//
-	//			test.thenPodsStatesShouldBe(1, 1)
-	//
-	//			test.thenDeployedKubegresSpecShouldBeSetTo(2)
-	//
-	//			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
-	//			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
-	//
-	//			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'replica' set to 2'")
-	//		})
-	//
-	//	})
-	//
-	//	Context("GIVEN new Kubegres is created with spec 'replica' set to 3 and then it is updated to different values", func() {
-	//
-	//		It("GIVEN new Kubegres is created with spec 'replica' set to 3 THEN 1 primary and 2 replica should be created", func() {
-	//
-	//			log.Print("START OF: Test 'GIVEN new Kubegres is created with spec 'replica' set to 3'")
-	//
-	//			test.givenNewKubegresSpecIsSetTo(3)
-	//
-	//			test.whenKubegresIsCreated()
-	//
-	//			test.thenPodsStatesShouldBe(1, 2)
-	//
-	//			test.thenDeployedKubegresSpecShouldBeSetTo(3)
-	//
-	//			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
-	//			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
-	//
-	//			test.keepCreatedResourcesForNextTest = true
-	//
-	//			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'replica' set to 3'")
-	//		})
-	//
-	//		It("GIVEN existing Kubegres is updated with spec 'replica' set from 3 to 4 THEN 1 more replica should be created", func() {
-	//
-	//			log.Print("START OF: Test 'GIVEN existing Kubegres is updated with spec 'replica' set from 3 to 4'")
-	//
-	//			test.givenExistingKubegresSpecIsSetTo(4)
-	//
-	//			test.whenKubernetesIsUpdated()
-	//
-	//			test.thenPodsStatesShouldBe(1, 3)
-	//
-	//			test.thenDeployedKubegresSpecShouldBeSetTo(4)
-	//
-	//			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
-	//			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
-	//
-	//			test.keepCreatedResourcesForNextTest = true
-	//
-	//			log.Print("END OF: Test 'GIVEN existing Kubegres is updated with spec 'replica' set from 3 to 4'")
-	//		})
-	//
-	//		It("GIVEN existing Kubegres is updated with spec 'replica' set from 4 to 3 THEN 1 replica should be deleted", func() {
-	//
-	//			log.Print("START OF: Test 'GIVEN existing Kubegres is updated with spec 'replica' set from 4 to 3'")
-	//
-	//			test.givenExistingKubegresSpecIsSetTo(3)
-	//
-	//			test.whenKubernetesIsUpdated()
-	//
-	//			test.thenPodsStatesShouldBe(1, 2)
-	//
-	//			test.thenDeployedKubegresSpecShouldBeSetTo(3)
-	//
-	//			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
-	//			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
-	//
-	//			test.keepCreatedResourcesForNextTest = true
-	//
-	//			log.Print("END OF: Test 'GIVEN existing Kubegres is updated with spec 'replica' set from 4 to 3'")
-	//		})
-	//
-	//		It("GIVEN existing Kubegres is updated with spec 'replica' set from 3 to 1 THEN 2 replica should be deleted", func() {
-	//
-	//			log.Print("START OF: Test 'GIVEN existing Kubegres is updated with spec 'replica' set from 3 to 1'")
-	//
-	//			test.givenExistingKubegresSpecIsSetTo(1)
-	//
-	//			test.whenKubernetesIsUpdated()
-	//
-	//			test.thenPodsStatesShouldBe(1, 0)
-	//
-	//			test.thenDeployedKubegresSpecShouldBeSetTo(1)
-	//
-	//			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
-	//
-	//			log.Print("END OF: Test 'GIVEN existing Kubegres is updated with spec 'replica' set from 3 to 1'")
-	//		})
-	//	})
+
+	Context("GIVEN new Kubegres is created with spec 'standby.enabled' set to true and 'standby.primaryEndpoint' set to external postgres endpoint and"+
+		" 'backup.schedule' AND 'backup.volumeMount' AND 'backup.pvcName' and the given PVC is deployed", func() {
+
+		It("THEN backup CronJob is created AND 1 replica should be replicating from external postgres", func() {
+
+			log.Print("START OF: Test 'GIVEN new Kubegres is created with spec 'backup.schedule' AND 'backup.volumeMount' AND 'backup.pvcName' and the given PVC is deployed")
+
+			test.givenNewExternalPostgresIsCreatedAndReady()
+			test.givenBackupPvcIsCreated()
+
+			test.givenNewKubegresSpecIsStandbySetToTrueAndPrimaryEndpointSetToExternalPostgres()
+			test.givenKubegresSpecIsSetToBackup(scheduleBackupEveryMin, resourceConfigs.BackUpPvcResourceName, "/tmp/my-kubegres", 3)
+
+			test.whenKubegresIsCreated()
+
+			test.thenPodsStatesShouldBe(0, 1)
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
+
+			test.thenCronJobExistsWithSpec(ctx.BaseConfigMapName, scheduleBackupEveryMin, resourceConfigs.BackUpPvcResourceName, "/tmp/my-kubegres")
+
+			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'backup.schedule' AND 'backup.volumeMount' AND 'backup.pvcName' and the given PVC is deployed")
+		})
+	})
 
 })
 
@@ -295,11 +182,10 @@ func (r *StandByTest) givenNewExternalPostgresIsCreatedAndReady() {
 		}
 	}
 }
+func (r *StandByTest) givenBackupPvcIsCreated() {
+	r.resourceCreator.CreateBackUpPvc()
+}
 
-//	func (r *SpecReplicaTest) givenNewKubegresSpecIsSetTo(specNbreReplicas int32) {
-//		r.kubegresResource = resourceConfigs.LoadKubegresYaml()
-//		r.kubegresResource.Spec.Replicas = &specNbreReplicas
-//	}
 func (r *StandByTest) givenExistingKubegresSpecIsSetTo(specNbreReplicas int32) {
 	var err error
 	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
@@ -311,6 +197,14 @@ func (r *StandByTest) givenExistingKubegresSpecIsSetTo(specNbreReplicas int32) {
 	}
 
 	r.kubegresResource.Spec.Replicas = &specNbreReplicas
+}
+
+func (r *StandByTest) givenKubegresSpecIsSetToBackup(backupSchedule, backupPvcName, backupVolumeMount string, specNbreReplicas int32) {
+	if backupSchedule != "" {
+		r.kubegresResource.Spec.Backup.Schedule = backupSchedule
+		r.kubegresResource.Spec.Backup.PvcName = backupPvcName
+		r.kubegresResource.Spec.Backup.VolumeMount = backupVolumeMount
+	}
 }
 
 func (r *StandByTest) whenKubegresIsCreated() {
@@ -359,15 +253,56 @@ func (r *StandByTest) thenPodsStatesShouldBe(nbrePrimary, nbreReplicas int) bool
 	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
 }
 
-//func (r *SpecReplicaTest) thenDeployedKubegresSpecShouldBeSetTo(specNbreReplicas int32) {
-//	var err error
-//	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
-//
-//	if err != nil {
-//		log.Println("Error while getting Kubegres resource : ", err)
-//		Expect(err).Should(Succeed())
-//		return
-//	}
-//
-//	Expect(*r.kubegresResource.Spec.Replicas).Should(Equal(specNbreReplicas))
-//}
+func (r *StandByTest) thenCronJobExistsWithSpec(expectedConfigMapName,
+	expectedBackupSchedule,
+	expectedBackupPvcName,
+	expectedBackupVolumeMount string) bool {
+
+	return Eventually(func() bool {
+
+		kubegresResources, err := r.resourceRetriever.GetKubegresResources()
+		if err != nil && !apierrors.IsNotFound(err) {
+			log.Println("ERROR while retrieving Kubegres kubegresResources")
+			return false
+		}
+
+		backUpCronJob := kubegresResources.BackUpCronJob
+		if backUpCronJob.Name == "" {
+			return false
+		}
+
+		cronJobConfigMapName := backUpCronJob.Spec.JobTemplate.Spec.Template.Spec.Volumes[1].ConfigMap.Name
+		if expectedConfigMapName != cronJobConfigMapName {
+			log.Println("CronJob '" + backUpCronJob.Name + "' doesn't have the expected configMap name: '" + expectedConfigMapName + "'. Waiting...")
+			return false
+		}
+
+		cronJobSchedule := backUpCronJob.Spec.Schedule
+		if expectedBackupSchedule != cronJobSchedule {
+			log.Println("CronJob '" + backUpCronJob.Name + "' doesn't have the expected schedule: '" + expectedBackupSchedule + "'. Waiting...")
+			return false
+		}
+
+		cronJobPvcName := backUpCronJob.Spec.JobTemplate.Spec.Template.Spec.Volumes[0].PersistentVolumeClaim.ClaimName
+		if expectedBackupPvcName != cronJobPvcName {
+			log.Println("CronJob '" + backUpCronJob.Name + "' doesn't have the expected PVC with name: '" + expectedBackupPvcName + "'. Waiting...")
+			return false
+		}
+
+		cronJobVolumeMount := backUpCronJob.Spec.JobTemplate.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath
+		if expectedBackupVolumeMount != cronJobVolumeMount {
+			log.Println("CronJob '" + backUpCronJob.Name + "' doesn't have the expected volume mount: '" + expectedBackupVolumeMount + "'. Waiting...")
+			return false
+		}
+
+		cronJobDBSource := backUpCronJob.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Env[3].Value
+		extpectedDBSource := r.kubegresResource.Name + "-replica"
+		if extpectedDBSource != cronJobDBSource {
+			log.Println("CronJob '" + backUpCronJob.Name + "' doesn't have the expected DB source: '" + extpectedDBSource + "'. Waiting...")
+			return false
+		}
+
+		return true
+
+	}, time.Second*10, time.Second*5).Should(BeTrue())
+}
