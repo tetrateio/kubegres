@@ -34,7 +34,7 @@ import (
 	"reactive-tech.io/kubegres/test/util/testcases"
 )
 
-var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), Label("replica"), func() {
+var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), func() {
 
 	var test = SpecReplicaTest{}
 

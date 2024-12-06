@@ -23,7 +23,6 @@ package test
 import (
 	"context"
 	"log"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -120,11 +119,6 @@ var _ = BeforeSuite(func() {
 
 	k8sClientTest = k8sManager.GetClient()
 	Expect(k8sClientTest).ToNot(BeNil())
-
-	kubeConfigPath := os.Getenv("KUBECONFIG")
-	if kubeConfigPath == "" {
-		kubeConfigPath = filepath.Join(os.Getenv("HOME"), ".kube", "config")
-	}
 
 	// Wait for Kubernetes envtest to start
 	Eventually(func() error { return k8sClientTest.List(context.Background(), &v1.NamespaceList{}) },
