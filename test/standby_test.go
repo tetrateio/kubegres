@@ -66,7 +66,7 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), Label("sta
 
 			test.whenKubegresIsCreated()
 
-			test.thenPodsStatesShouldBe(0, 1)
+			test.thenPodsStatesShouldBe("external-postgres", 0, 1)
 
 			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
@@ -84,7 +84,7 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), Label("sta
 
 			test.whenKubegresIsUpdated()
 
-			test.thenPodsStatesShouldBe(0, 2)
+			test.thenPodsStatesShouldBe("external-postgres", 0, 2)
 
 			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
@@ -102,7 +102,7 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), Label("sta
 
 			test.whenKubegresIsUpdated()
 
-			test.thenPodsStatesShouldBe(0, 1)
+			test.thenPodsStatesShouldBe("external-postgres", 0, 1)
 
 			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
@@ -110,6 +110,38 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), Label("sta
 			log.Print("END OF: Test 'GIVEN replica set from 2 to 1 should be running and replicating data from external postgres")
 		})
 
+	})
+
+	Context("GIVEN new Kubegres is created with spec 'standby.enabled' set to true and 'standby.primaryEndpoint' set to external postgres endpoint and then"+
+		"changed to 'external-postgres.default.svc.cluster.local'", func() {
+
+		It("THEN replica set to 1 should be running and replicating data from external postgres using endpoint 'external-postgres.default.svc.cluster.local", func() {
+			log.Print("START OF: Test '\"GIVEN new Kubegres is created with 'standby." +
+				"primaryEndpoint' set to external postgres endpoint and then changed to 'external-postgres.default.svc.cluster.local'")
+
+			test.givenNewExternalPostgresIsCreatedAndReady()
+
+			test.givenNewKubegresSpecIsStandbySetToTrueAndPrimaryEndpointSetToExternalPostgres()
+
+			test.whenKubegresIsCreated()
+
+			test.thenPodsStatesShouldBe("external-postgres", 0, 1)
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
+
+			test.givenExistingKubegresSpecIsSetToPrimaryEndpoint("external-postgres.default.svc.cluster.local")
+
+			test.whenKubegresIsUpdated()
+
+			test.thenPodsStatesShouldBe("external-postgres.default.svc.cluster.local", 0, 1)
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
+
+			log.Print("END OF: Test '\"GIVEN new Kubegres is created with 'standby." +
+				"primaryEndpoint' set to external postgres endpoint and then changed to 'external-postgres.default.svc.cluster.local'")
+		})
 	})
 
 	Context("GIVEN new Kubegres is created with spec 'standby.enabled' set to true and 'standby.primaryEndpoint' set to external postgres endpoint and"+
@@ -127,7 +159,7 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), Label("sta
 
 			test.whenKubegresIsCreated()
 
-			test.thenPodsStatesShouldBe(0, 1)
+			test.thenPodsStatesShouldBe("external-postgres", 0, 1)
 
 			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
@@ -198,6 +230,19 @@ func (r *StandByTest) givenExistingKubegresSpecIsSetTo(specNbreReplicas int32) {
 	r.kubegresResource.Spec.Replicas = &specNbreReplicas
 }
 
+func (r *StandByTest) givenExistingKubegresSpecIsSetToPrimaryEndpoint(newEndpoint string) {
+	var err error
+	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
+
+	if err != nil {
+		log.Println("Error while getting Kubegres resource : ", err)
+		Expect(err).Should(Succeed())
+		return
+	}
+
+	r.kubegresResource.Spec.Standby.PrimaryEndpoint = newEndpoint
+}
+
 func (r *StandByTest) givenKubegresSpecIsSetToBackup(backupSchedule, backupPvcName, backupVolumeMount string, specNbreReplicas int32) {
 	if backupSchedule != "" {
 		r.kubegresResource.Spec.Backup.Schedule = backupSchedule
@@ -229,13 +274,32 @@ func (r *StandByTest) thenErrorEventShouldBeLogged() {
 	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
 }
 
-func (r *StandByTest) thenPodsStatesShouldBe(nbrePrimary, nbreReplicas int) bool {
+func (r *StandByTest) thenPodsStatesShouldBe(primaryEndpoint string, nbrePrimary, nbreReplicas int) bool {
 	return Eventually(func() bool {
 
 		pods, err := r.resourceRetriever.GetKubegresResources()
 		if err != nil && !apierrors.IsNotFound(err) {
 			log.Println("ERROR while retrieving Kubegres pods")
 			return false
+		}
+
+		for _, resource := range pods.Resources {
+			if len(resource.Pod.Spec.InitContainers) == 0 {
+				log.Println("Pod '" + resource.Pod.Name + "' doesn't have any init container. Waiting...")
+				return false
+			}
+
+			if len(resource.Pod.Spec.InitContainers[0].Env) == 0 {
+				log.Println("Pod '" + resource.Pod.Name + "' doesn't have any env variable in init container. Waiting...")
+				return false
+			}
+
+			currentPrimaryEndpoint := resource.Pod.Spec.InitContainers[0].Env[0].Value
+			if currentPrimaryEndpoint != primaryEndpoint {
+				log.Println("Pod '" + resource.Pod.Name + "' doesn't have the expected primaryEndpoint: '" + primaryEndpoint + "'. " +
+					"Current value: '" + currentPrimaryEndpoint + "'. Waiting...")
+				return false
+			}
 		}
 
 		if pods.AreAllReady &&
