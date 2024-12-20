@@ -980,6 +980,13 @@ spec:
                 type: object
               serviceAccountName:
                 type: string
+              standby:
+                properties:
+                  enabled:
+                    type: boolean
+                  primaryEndpoint:
+                    type: string
+                type: object
               volume:
                 properties:
                   volumeClaimTemplates:
@@ -2454,7 +2461,7 @@ spec:
         - --leader-elect
         command:
         - /manager
-        image: tetrate/kubegres:v1.16.0-tetrate-v13
+        image: tetrate/kubegres:v1.16.0-tetrate-v14
         livenessProbe:
           httpGet:
             path: /healthz
