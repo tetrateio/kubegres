@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -79,6 +80,23 @@ func (r *TestResourceCreator) UpdateResource(resourceToUpdate client.Object, res
 	} else {
 		log.Println("Resources '" + resourceName + "' updated")
 	}
+}
+
+func (r *TestResourceCreator) CreateExternalPostgres() {
+	existingService := v1.Service{}
+	serviceToCreate := resourceConfigs2.LoadYamlServiceExternalDB()
+	serviceToCreate.Namespace = r.namespace
+	r.createResourceFromYaml("External Postgres Service", resourceConfigs2.ServiceExternalDbResourceName, &existingService, &serviceToCreate)
+
+	existingConfigMap := v1.ConfigMap{}
+	configMapToCreate := resourceConfigs2.LoadYamlConfigMapExternalDB()
+	configMapToCreate.Namespace = r.namespace
+	r.createResourceFromYaml("External Postgres ConfigMap", resourceConfigs2.ConfigMapExternalDBResourceName, &existingConfigMap, &configMapToCreate)
+
+	existingResource := appsv1.StatefulSet{}
+	resourceToCreate := resourceConfigs2.LoadYamlStatefulSetExternalDB()
+	resourceToCreate.Namespace = r.namespace
+	r.createResourceFromYaml("External Postgres StatefulSet", resourceConfigs2.StatefulSetExternalDbResourceName, &existingResource, &resourceToCreate)
 }
 
 func (r *TestResourceCreator) CreateSecret() {
@@ -193,6 +211,21 @@ func (r *TestResourceCreator) CreateServiceToSqlQueryDb(kubegresName string, nod
 	resourceToCreate.Namespace = r.namespace
 	resourceToCreate.Name = serviceResourceName
 	resourceToCreate.Spec.Selector["app"] = kubegresName
+
+	resourceLabel := "Service " + serviceResourceName + " (nodePort: " + strconv.Itoa(nodePort) + ")"
+
+	return r.createResourceFromYaml(resourceLabel, serviceResourceName, &existingResource, &resourceToCreate)
+}
+
+func (r *TestResourceCreator) CreateServiceToSqlQueryExternalDb(nodePort int) (runtime.Object, error) {
+	existingResource := v1.Service{}
+	serviceResourceName := "external-postgres-test"
+	resourceToCreate := resourceConfigs2.LoadYamlServiceExternalDB()
+	resourceToCreate.Spec.Type = v1.ServiceTypeNodePort
+	resourceToCreate.Spec.Ports[0].Port = resourceConfigs2.DbPort
+	resourceToCreate.Spec.Ports[0].NodePort = int32(nodePort)
+	resourceToCreate.Namespace = r.namespace
+	resourceToCreate.Name = serviceResourceName
 
 	resourceLabel := "Service " + serviceResourceName + " (nodePort: " + strconv.Itoa(nodePort) + ")"
 

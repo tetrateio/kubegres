@@ -81,6 +81,12 @@ type KubegresSpec struct {
 	SecurityContext    *v1.PodSecurityContext    `json:"securityContext,omitempty"`
 	Probe              Probe                     `json:"probe,omitempty"`
 	ServiceAccountName string                    `json:"serviceAccountName,omitempty"`
+	Standby            Standby                   `json:"standby,omitempty"`
+}
+
+type Standby struct {
+	Enabled         bool   `json:"enabled,omitempty"`
+	PrimaryEndpoint string `json:"primaryEndpoint,omitempty"`
 }
 
 // ----------------------- STATUS -----------------------------------------

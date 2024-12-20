@@ -168,6 +168,7 @@ func addStatefulSetSpecEnforcers(rc *ResourcesContext) {
 	readinessProbeSpecEnforcer := statefulset_spec.CreateReadinessProbeSpecEnforcer(rc.KubegresContext)
 	serviceAccountNameSpecEnforcer := statefulset_spec.CreateServiceAccountNameSpecEnforcer(rc.KubegresContext)
 	metadataSpecEnforcer := statefulset_spec.CreateMetadataSpecEnforcer(rc.KubegresContext)
+	standbyPrimaryEndpointSpecEnforcer := statefulset_spec.CreateStandbyPrimaryEndpointSpecEnforcer(rc.KubegresContext)
 
 	rc.StatefulSetsSpecsEnforcer = statefulset_spec.CreateStatefulSetsSpecsEnforcer(rc.KubegresContext)
 	rc.StatefulSetsSpecsEnforcer.AddSpecEnforcer(&imageSpecEnforcer)
@@ -183,6 +184,7 @@ func addStatefulSetSpecEnforcers(rc *ResourcesContext) {
 	rc.StatefulSetsSpecsEnforcer.AddSpecEnforcer(&readinessProbeSpecEnforcer)
 	rc.StatefulSetsSpecsEnforcer.AddSpecEnforcer(&serviceAccountNameSpecEnforcer)
 	rc.StatefulSetsSpecsEnforcer.AddSpecEnforcer(&metadataSpecEnforcer)
+	rc.StatefulSetsSpecsEnforcer.AddSpecEnforcer(&standbyPrimaryEndpointSpecEnforcer)
 
 	rc.AllStatefulSetsSpecEnforcer = statefulset_spec.CreateAllStatefulSetsSpecEnforcer(rc.KubegresContext, rc.ResourcesStates, rc.BlockingOperation, rc.StatefulSetsSpecsEnforcer)
 }

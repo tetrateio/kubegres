@@ -135,6 +135,16 @@ func (r *BackUpCronJobCountSpecEnforcer) hasSpecChanged() (hasSpecChanged bool) 
 		r.logSpecChange("spec.backup.customConfig")
 	}
 
+	currentDBSource := cronJobTemplateSpec.Containers[0].Env[3].Value
+	expectedDBSource := r.kubegresContext.GetServiceResourceName(false)
+	if !r.kubegresContext.Kubegres.Spec.Standby.Enabled && *r.kubegresContext.Kubegres.Spec.Replicas == 1 {
+		expectedDBSource = r.kubegresContext.GetServiceResourceName(true)
+	}
+	if currentDBSource != expectedDBSource {
+		hasSpecChanged = true
+		r.logSpecChange("spec.backup.dbSource")
+	}
+
 	return hasSpecChanged
 }
 

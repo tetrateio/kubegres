@@ -90,7 +90,7 @@ func (r *AllStatefulSetsSpecEnforcer) CreateOperationConfigForStatefulSetWaiting
 
 func (r *AllStatefulSetsSpecEnforcer) EnforceSpec() error {
 
-	if !r.isPrimaryDbReady() {
+	if !r.isStandbyEnabled() && !r.isPrimaryDbReady() {
 		return nil
 	}
 
@@ -135,8 +135,15 @@ func (r *AllStatefulSetsSpecEnforcer) isPrimaryDbReady() bool {
 	return r.resourcesStates.StatefulSets.Primary.IsReady
 }
 
+func (r *AllStatefulSetsSpecEnforcer) isStandbyEnabled() bool {
+	return r.kubegresContext.Kubegres.Spec.Standby.Enabled
+}
+
 func (r *AllStatefulSetsSpecEnforcer) getAllReverseSortedByInstanceIndex() []statefulset.StatefulSetWrapper {
 	replicas := r.resourcesStates.StatefulSets.Replicas.All.GetAllReverseSortedByInstanceIndex()
+	if r.isStandbyEnabled() {
+		return replicas
+	}
 	return append(replicas, r.resourcesStates.StatefulSets.Primary)
 }
 

@@ -21,8 +21,9 @@ limitations under the License.
 package testcases
 
 import (
-	. "github.com/onsi/gomega"
 	"log"
+
+	. "github.com/onsi/gomega"
 	"reactive-tech.io/kubegres/test/resourceConfigs"
 	"reactive-tech.io/kubegres/test/util"
 )
@@ -37,9 +38,16 @@ func InitDbQueryTestCases(resourceCreator util.TestResourceCreator, kubegresName
 }
 
 func InitDbQueryTestCasesWithNodePorts(resourceCreator util.TestResourceCreator, kubegresName string, primaryServiceNodePort, replicaServiceNodePort int) DbQueryTestCases {
+	return InitDbQueryTestCasesWithConnections(
+		util.InitDbConnectionDbUtil(resourceCreator, kubegresName, primaryServiceNodePort, true),
+		util.InitDbConnectionDbUtil(resourceCreator, kubegresName, replicaServiceNodePort, false),
+	)
+}
+
+func InitDbQueryTestCasesWithConnections(connectionPrimaryDb, connectionReplicaDb util.DbConnectionDbUtil) DbQueryTestCases {
 	return DbQueryTestCases{
-		connectionPrimaryDb: util.InitDbConnectionDbUtil(resourceCreator, kubegresName, primaryServiceNodePort, true),
-		connectionReplicaDb: util.InitDbConnectionDbUtil(resourceCreator, kubegresName, replicaServiceNodePort, false),
+		connectionPrimaryDb: connectionPrimaryDb,
+		connectionReplicaDb: connectionReplicaDb,
 	}
 }
 

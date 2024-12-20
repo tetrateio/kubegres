@@ -1597,6 +1597,13 @@ spec:
                 type: object
               serviceAccountName:
                 type: string
+              standby:
+                properties:
+                  enabled:
+                    type: boolean
+                  primaryEndpoint:
+                    type: string
+                type: object
               volume:
                 properties:
                   volumeClaimTemplates:

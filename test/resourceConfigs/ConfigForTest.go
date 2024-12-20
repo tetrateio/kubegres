@@ -81,4 +81,14 @@ const (
 
 	CustomConfigMapWithPrimaryCreateReplicationRoleResourceName = "config-with-primary-create-replication-role-script"
 	CustomConfigMapwithPrimaryCreateReplicationRoleYamlFile     = "resourceConfigs/customConfig/configMap_with_primary_create_replication_role_script.yaml"
+
+	StatefulSetExternalDbYamlFile     = "resourceConfigs/externalStatefulSet.yaml"
+	StatefulSetExternalDbResourceName = "external-postgres"
+
+	ServiceExternalDbYamlFile           = "resourceConfigs/externalService.yaml"
+	ServiceExternalDbResourceName       = "external-postgres"
+	ServiceToSqlQueryExternalDbNodePort = 30009
+
+	ConfigMApExternalDBYamlFile     = "resourceConfigs/externalConfigMap.yaml"
+	ConfigMapExternalDBResourceName = "external-postgres-config"
 )

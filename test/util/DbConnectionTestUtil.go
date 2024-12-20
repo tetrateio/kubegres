@@ -23,11 +23,12 @@ package util
 import (
 	"database/sql"
 	"fmt"
+	"log"
+	"strconv"
+
 	_ "github.com/lib/pq"
 	"k8s.io/apimachinery/pkg/runtime"
-	"log"
 	"reactive-tech.io/kubegres/test/resourceConfigs"
-	"strconv"
 )
 
 type DbConnectionDbUtil struct {
@@ -63,6 +64,22 @@ func InitDbConnectionDbUtil(resourceCreator TestResourceCreator, kubegresName st
 		LogLabel:         logLabel,
 		IsPrimaryDb:      isPrimaryDb,
 		kubegresName:     kubegresName,
+		serviceToQueryDb: serviceToQueryDb,
+		resourceCreator:  resourceCreator,
+	}
+}
+
+func InitExternalDbConnectionDbUtil(resourceCreator TestResourceCreator, nodePort int) DbConnectionDbUtil {
+	serviceToQueryDb, err := resourceCreator.CreateServiceToSqlQueryExternalDb(nodePort)
+	if err != nil {
+		log.Fatal("Unable to create a Service on port '"+strconv.Itoa(nodePort)+"' to query external DB.", err)
+	}
+
+	return DbConnectionDbUtil{
+		Port:             nodePort,
+		LogLabel:         "External DB",
+		IsPrimaryDb:      true,
+		kubegresName:     "External DB",
 		serviceToQueryDb: serviceToQueryDb,
 		resourceCreator:  resourceCreator,
 	}

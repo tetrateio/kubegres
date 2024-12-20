@@ -22,13 +22,14 @@ package util
 
 import (
 	"context"
+	"log"
+
 	v1 "k8s.io/api/apps/v1"
 	batch "k8s.io/api/batch/v1"
 	core "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"log"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/test/resourceConfigs"
@@ -106,6 +107,12 @@ func (r *TestResourceRetriever) GetKubegresByName(resourceName string) (*postgre
 func (r *TestResourceRetriever) GetService(serviceResourceName string) (*core.Service, error) {
 	resourceToRetrieve := &core.Service{}
 	err := r.getResource(serviceResourceName, resourceToRetrieve)
+	return resourceToRetrieve, err
+}
+
+func (r *TestResourceRetriever) GetStatefulSet(statefulSetName string) (*v1.StatefulSet, error) {
+	resourceToRetrieve := &v1.StatefulSet{}
+	err := r.getResource(statefulSetName, resourceToRetrieve)
 	return resourceToRetrieve, err
 }
 
@@ -225,7 +232,7 @@ func (r *TestResourceRetriever) GetKubegresResourcesByName(kubegresName string) 
 		testKubegresResources.Resources = append(testKubegresResources.Resources, kubegresPostgres)
 	}
 
-	if testKubegresResources.NbreDeployedPrimary > 0 {
+	if testKubegresResources.NbreDeployedPrimary+testKubegresResources.NbreDeployedReplicas > 0 {
 		testKubegresResources.AreAllReady = nbrePodsReady == (testKubegresResources.NbreDeployedPrimary + testKubegresResources.NbreDeployedReplicas)
 	}
 

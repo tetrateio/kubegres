@@ -22,13 +22,14 @@ package checker
 
 import (
 	"errors"
+	"reflect"
+
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	postgresV1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/controllers/states"
 	"reactive-tech.io/kubegres/controllers/states/statefulset"
-	"reflect"
 )
 
 type SpecChecker struct {
@@ -155,6 +156,11 @@ func (r *SpecChecker) CheckSpec() (SpecCheckResult, error) {
 	if spec.Image == "" {
 		specCheckResult.HasSpecFatalError = true
 		specCheckResult.FatalErrorMessage = r.createErrMsgSpecUndefined("spec.image")
+	}
+
+	if spec.Standby.Enabled && spec.Standby.PrimaryEndpoint == emptyStr {
+		specCheckResult.HasSpecFatalError = true
+		specCheckResult.FatalErrorMessage = r.createErrMsgSpecUndefined("spec.standby.primaryEndpoint")
 	}
 
 	if r.isBackUpConfigured(spec) {
