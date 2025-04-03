@@ -22,12 +22,14 @@ package test
 
 import (
 	"log"
+	"reflect"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	v12 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/test/resourceConfigs"
 	"reactive-tech.io/kubegres/test/util"
@@ -127,7 +129,24 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), func() {
 
 			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'replica' set to 2'")
 		})
+	})
 
+	Context("GIVEN new Kubegres is created with spec 'replica' set to 2 and 'resources' set to a value", func() {
+
+		It("THEN replica should be created with and resources are set for both initContainer and container", func() {
+
+			log.Print("START OF: Test 'GIVEN new Kubegres is created with spec 'replica' set to 2 and 'resources' set to a value'")
+
+			resources := test.givenResources("2", "2Gi", "1", "1Gi")
+
+			test.givenNewKubegresSpecWithReplicasAndResources(2, resources)
+			test.whenKubegresIsCreated()
+
+			test.thenPodsStatesShouldBe(1, 1)
+
+			test.replicaShouldHaveResourcesSet(resources)
+
+		})
 	})
 
 	Context("GIVEN new Kubegres is created with spec 'replica' set to 3 and then it is updated to different values", func() {
@@ -230,6 +249,25 @@ func (r *SpecReplicaTest) givenNewKubegresSpecIsSetTo(specNbreReplicas int32) {
 	r.kubegresResource.Spec.Replicas = &specNbreReplicas
 }
 
+func (r *SpecReplicaTest) givenNewKubegresSpecWithReplicasAndResources(specNbreReplicas int32, resources corev1.ResourceRequirements) {
+	r.kubegresResource = resourceConfigs.LoadKubegresYaml()
+	r.kubegresResource.Spec.Replicas = &specNbreReplicas
+	r.kubegresResource.Spec.Resources = resources
+}
+
+func (r *SpecReplicaTest) givenResources(cpuLimit, memLimit, cpuReq, memReq string) corev1.ResourceRequirements {
+	return corev1.ResourceRequirements{
+		Limits: corev1.ResourceList{
+			"cpu":    resource.MustParse(cpuLimit),
+			"memory": resource.MustParse(memLimit),
+		},
+		Requests: corev1.ResourceList{
+			"cpu":    resource.MustParse(cpuReq),
+			"memory": resource.MustParse(memReq),
+		},
+	}
+}
+
 func (r *SpecReplicaTest) givenExistingKubegresSpecIsSetTo(specNbreReplicas int32) {
 	var err error
 	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
@@ -253,7 +291,7 @@ func (r *SpecReplicaTest) whenKubernetesIsUpdated() {
 
 func (r *SpecReplicaTest) thenErrorEventShouldBeLogged() {
 	expectedErrorEvent := util.EventRecord{
-		Eventtype: v12.EventTypeWarning,
+		Eventtype: corev1.EventTypeWarning,
 		Reason:    "SpecCheckErr",
 		Message:   "In the Resources Spec the value of 'spec.replicas' is undefined. Please set a value otherwise this operator cannot work correctly.",
 	}
@@ -301,4 +339,32 @@ func (r *SpecReplicaTest) thenDeployedKubegresSpecShouldBeSetTo(specNbreReplicas
 	}
 
 	Expect(*r.kubegresResource.Spec.Replicas).Should(Equal(specNbreReplicas))
+}
+
+func (r *SpecReplicaTest) replicaShouldHaveResourcesSet(resources corev1.ResourceRequirements) {
+
+	Eventually(func() bool {
+		pods, err := r.resourceRetriever.GetKubegresResources()
+		if err != nil && !apierrors.IsNotFound(err) {
+			log.Println("ERROR while retrieving Kubegres pods")
+			return false
+		}
+
+		for _, kubegresResource := range pods.Resources {
+			for _, initContainer := range kubegresResource.StatefulSet.Spec.Template.Spec.InitContainers {
+				if !reflect.DeepEqual(initContainer.Resources, resources) {
+					log.Printf("InitContainer resources are not equal. got: %v want: %v", initContainer.Resources, resources)
+					return false
+				}
+			}
+			for _, container := range kubegresResource.StatefulSet.Spec.Template.Spec.Containers {
+				if !reflect.DeepEqual(container.Resources, resources) {
+					log.Printf("Container resources are not equal. got: %v want: %v", container.Resources, resources)
+					return false
+				}
+			}
+		}
+		return true
+
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
 }
