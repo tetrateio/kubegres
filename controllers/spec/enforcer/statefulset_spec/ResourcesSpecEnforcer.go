@@ -42,6 +42,9 @@ func (r *ResourcesSpecEnforcer) GetSpecName() string {
 func (r *ResourcesSpecEnforcer) CheckForSpecDifference(statefulSet *apps.StatefulSet) StatefulSetSpecDifference {
 
 	current := statefulSet.Spec.Template.Spec.Containers[0].Resources
+	if len(statefulSet.Spec.Template.Spec.InitContainers) > 0 {
+		_ = statefulSet.Spec.Template.Spec.InitContainers
+	}
 	expected := r.kubegresContext.Kubegres.Spec.Resources
 
 	if !r.compareResources(current, expected) {
@@ -56,7 +59,12 @@ func (r *ResourcesSpecEnforcer) CheckForSpecDifference(statefulSet *apps.Statefu
 }
 
 func (r *ResourcesSpecEnforcer) EnforceSpec(statefulSet *apps.StatefulSet) (wasSpecUpdated bool, err error) {
-	statefulSet.Spec.Template.Spec.Containers[0].Resources = r.kubegresContext.Kubegres.Spec.Resources
+	for i := range statefulSet.Spec.Template.Spec.Containers {
+		statefulSet.Spec.Template.Spec.Containers[i].Resources = r.kubegresContext.Kubegres.Spec.Resources
+	}
+	for i := range statefulSet.Spec.Template.Spec.InitContainers {
+		statefulSet.Spec.Template.Spec.InitContainers[i].Resources = r.kubegresContext.Kubegres.Spec.Resources
+	}
 	return true, nil
 }
 
