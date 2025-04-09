@@ -146,7 +146,27 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), func() {
 
 			test.replicaShouldHaveResourcesSet(resources)
 
+			test.keepCreatedResourcesForNextTest = true
+
 		})
+
+		It("THEN existing Kubegres is updated with 'resources' the 'resources' should be updated for both initContainer and container", func() {
+			log.Print("START OF: Test 'THEN existing Kubegres is updated with 'resources' the 'resources' should be updated for both initContainer and container'")
+
+			resources := test.givenResources("4", "4Gi", "2", "2Gi")
+			test.givenExistingKubegresSpecResourcesIsSetTo(resources)
+
+			test.whenKubernetesIsUpdated()
+
+			test.thenPodsStatesShouldBe(1, 1)
+
+			test.replicaShouldHaveResourcesSet(resources)
+
+			test.keepCreatedResourcesForNextTest = true
+
+			log.Print("END OF: Test 'THEN existing Kubegres is updated with 'resources' the 'resources' should be updated for both initContainer and container'")
+		})
+
 	})
 
 	Context("GIVEN new Kubegres is created with spec 'replica' set to 3 and then it is updated to different values", func() {
@@ -367,4 +387,18 @@ func (r *SpecReplicaTest) replicaShouldHaveResourcesSet(resources corev1.Resourc
 		return true
 
 	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+}
+
+func (r *SpecReplicaTest) givenExistingKubegresSpecResourcesIsSetTo(resources corev1.ResourceRequirements) {
+
+	var err error
+	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
+
+	if err != nil {
+		log.Println("Error while getting Kubegres resource : ", err)
+		Expect(err).Should(Succeed())
+		return
+	}
+
+	r.kubegresResource.Spec.Resources = resources
 }
