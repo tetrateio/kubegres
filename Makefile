@@ -123,11 +123,11 @@ docker-build/%: docker-buildx ## Build docker image with ARCH as image tag suffi
 	docker buildx build --builder $(DOCKER_BUILDER_NAME) --platform ${PLATFORM} -t ${IMG}-${DOCKER_ARCH} --load .
 
 .PHONY: scan-local
-scan-local: IMG=local/kubegres:scan-${LOCAL_ARCH}
-scan-local: build/linux/${LOCAL_ARCH} ## Scan the docker image for vulnerabilities locally.
-	docker context use default
-	docker build -t ${IMG} .
-	trivy image --severity "MEDIUM,HIGH,CRITICAL" ${IMG}
+scan-local: IMG=build/bin/image/kubegres:scan-${LOCAL_ARCH}
+scan-local: build/linux/${LOCAL_ARCH} docker-buildx ## Scan the docker image for vulnerabilities locally.
+	@rm -rf ${IMG}
+	docker build --builder $(DOCKER_BUILDER_NAME) -t ${IMG} . --output type=local,dest=${IMG}
+	grype ${IMG} --by-cve
 
 ##@ Deployment
 
