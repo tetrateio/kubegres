@@ -223,12 +223,21 @@ func (r *SpecResourceTest) thenStatefulSetStatesShouldBe(expectedResources v12.R
 		}
 
 		for _, resource := range kubegresResources.Resources {
-			currentResources := resource.StatefulSet.Spec.Template.Spec.Containers[0].Resources
-
-			if !reflect.DeepEqual(currentResources, expectedResources) {
-				log.Println("StatefulSet '" + resource.StatefulSet.Name + "' doesn't have the expected spec 'resources': " + expectedResources.String() + " " +
-					"Current value: '" + currentResources.String() + "'. Waiting...")
-				return false
+			for i := range resource.StatefulSet.Spec.Template.Spec.Containers {
+				currentResources := resource.StatefulSet.Spec.Template.Spec.Containers[i].Resources
+				if !reflect.DeepEqual(currentResources, expectedResources) {
+					log.Println("StatefulSet '" + resource.StatefulSet.Name + "' doesn't have the expected spec 'resources': " + expectedResources.String() + " " +
+						"Current value: '" + currentResources.String() + "'. Waiting...")
+					return false
+				}
+			}
+			for i := range resource.StatefulSet.Spec.Template.Spec.InitContainers {
+				currentResources := resource.StatefulSet.Spec.Template.Spec.InitContainers[i].Resources
+				if !reflect.DeepEqual(currentResources, expectedResources) {
+					log.Println("StatefulSet '" + resource.StatefulSet.Name + "' doesn't have the expected spec 'resources': " + expectedResources.String() + " " +
+						"Current value: '" + currentResources.String() + "'. Waiting...")
+					return false
+				}
 			}
 		}
 
