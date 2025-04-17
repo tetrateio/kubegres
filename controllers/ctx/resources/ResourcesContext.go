@@ -194,6 +194,7 @@ func addBlockingOperationConfigs(rc *ResourcesContext) {
 	rc.BlockingOperation.AddConfig(rc.BaseConfigMapCountSpecEnforcer.CreateOperationConfig())
 
 	rc.BlockingOperation.AddConfig(rc.PrimaryDbCountSpecEnforcer.CreateOperationConfigForPrimaryDbDeploying())
+	rc.BlockingOperation.AddConfig(rc.PrimaryDbCountSpecEnforcer.CreateOperationConfigForPrimaryDbUndeploying())
 	rc.BlockingOperation.AddConfig(rc.PrimaryToReplicaFailOver.CreateOperationConfigWaitingBeforeForFailingOver())
 	rc.BlockingOperation.AddConfig(rc.PrimaryToReplicaFailOver.CreateOperationConfigForFailingOver())
 

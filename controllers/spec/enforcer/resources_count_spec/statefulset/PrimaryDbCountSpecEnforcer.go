@@ -24,6 +24,7 @@ import (
 	"errors"
 	"strconv"
 
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	postgresV1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
@@ -31,6 +32,7 @@ import (
 	"reactive-tech.io/kubegres/controllers/spec/enforcer/resources_count_spec/statefulset/failover"
 	"reactive-tech.io/kubegres/controllers/spec/template"
 	"reactive-tech.io/kubegres/controllers/states"
+	"reactive-tech.io/kubegres/controllers/states/statefulset"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -68,10 +70,26 @@ func (r *PrimaryDbCountSpecEnforcer) CreateOperationConfigForPrimaryDbDeploying(
 	}
 }
 
+func (r *PrimaryDbCountSpecEnforcer) CreateOperationConfigForPrimaryDbUndeploying() operation.BlockingOperationConfig {
+
+	return operation.BlockingOperationConfig{
+		OperationId:      operation.OperationIdPrimaryDbCountSpecEnforcement,
+		StepId:           operation.OperationStepIdPrimaryDbUndeploying,
+		TimeOutInSeconds: 300,
+		CompletionChecker: func(operation postgresV1.KubegresBlockingOperation) bool {
+			_, err := r.resourcesStates.StatefulSets.All.GetByInstanceIndex(operation.StatefulSetOperation.InstanceIndex)
+			return err != nil
+		},
+	}
+}
+
 func (r *PrimaryDbCountSpecEnforcer) Enforce() error {
 
 	if r.isStandbyEnabled() {
-		r.kubegresContext.Log.InfoEvent("PrimaryDbCountSpecEnforcerDisabled", "PrimaryDbCountSpecEnforcer is disabled as Standby is enabled.")
+		if r.resourcesStates.StatefulSets.NbreDeployed > 0 {
+			r.kubegresContext.Log.InfoEvent("PrimaryDbCountSpecEnforcerRemove", "Remove the Primary DB StatefulSet as it is not needed in standby mode.")
+			return r.undeployPrimaryStatefulSet(r.resourcesStates.StatefulSets.Primary)
+		}
 		return nil
 	}
 
@@ -241,4 +259,49 @@ func (r *PrimaryDbCountSpecEnforcer) getLastDeployedPrimaryPvc() *v1.PersistentV
 	pvc := &v1.PersistentVolumeClaim{}
 	_ = r.kubegresContext.Client.Get(r.kubegresContext.Ctx, resourceKey, pvc)
 	return pvc
+}
+
+func (r *PrimaryDbCountSpecEnforcer) undeployPrimaryStatefulSet(primaryToUndeploy statefulset.StatefulSetWrapper) error {
+
+	if primaryToUndeploy.StatefulSet.Name == "" {
+		return nil
+	}
+
+	r.kubegresContext.Log.Info("We are going to undeploy a Primary statefulSet.", "InstanceIndex", primaryToUndeploy.InstanceIndex)
+
+	err := r.activateBlockingOperationForUndeployment(primaryToUndeploy.InstanceIndex)
+	if err != nil {
+		r.kubegresContext.Log.ErrorEvent("PrimaryStatefulSetOperationActivationErr", err,
+			"Error while activating blocking operation for the undeployment of a Primary StatefulSet.", "InstanceIndex", primaryToUndeploy.InstanceIndex)
+		return err
+	}
+
+	err = r.deleteStatefulSet(primaryToUndeploy.StatefulSet)
+	if err != nil {
+		r.blockingOperation.RemoveActiveOperation()
+		return err
+	}
+
+	r.kubegresContext.Status.SetEnforcedReplicas(r.kubegresContext.Kubegres.Status.EnforcedReplicas - 1)
+
+	return nil
+}
+
+func (r *PrimaryDbCountSpecEnforcer) activateBlockingOperationForUndeployment(statefulSetInstanceIndex int32) error {
+	return r.blockingOperation.ActivateOperationOnStatefulSet(operation.OperationIdPrimaryDbCountSpecEnforcement,
+		operation.OperationStepIdPrimaryDbUndeploying, statefulSetInstanceIndex)
+}
+
+func (r *PrimaryDbCountSpecEnforcer) deleteStatefulSet(statefulSetToDelete appsv1.StatefulSet) error {
+
+	r.kubegresContext.Log.Info("Deleting Primary statefulSet", "name", statefulSetToDelete.Name)
+	err := r.kubegresContext.Client.Delete(r.kubegresContext.Ctx, &statefulSetToDelete)
+
+	if err != nil {
+		r.kubegresContext.Log.ErrorEvent("PrimaryStatefulSetDeletionErr", err, "Unable to delete Primary StatefulSet.", "Primary name", statefulSetToDelete.Name)
+		return err
+	}
+
+	r.kubegresContext.Log.InfoEvent("PrimaryStatefulSetDeletion", "Deleted Primary StatefulSet.", "Primary name", statefulSetToDelete.Name)
+	return nil
 }
