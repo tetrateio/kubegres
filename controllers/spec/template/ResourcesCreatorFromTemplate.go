@@ -135,6 +135,7 @@ func (r *ResourcesCreatorFromTemplate) CreateReplicaStatefulSet(statefulSetInsta
 	initContainer.Env[1].ValueFrom = r.getEnvVar(ctx.EnvVarNameOfPostgresReplicationUserPsw).ValueFrom
 	initContainer.Env[2].Value = postgresSpec.Database.VolumeMount + "/" + ctx.DefaultDatabaseFolder
 	initContainer.VolumeMounts[0].MountPath = postgresSpec.Database.VolumeMount
+	initContainer.Resources = postgresSpec.Resources
 
 	return statefulSetTemplate, nil
 }
