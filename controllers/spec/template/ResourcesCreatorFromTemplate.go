@@ -40,6 +40,9 @@ type ResourcesCreatorFromTemplate struct {
 
 const (
 	KubegresInternalAnnotationKey = "kubectl.kubernetes.io/last-applied-configuration"
+	LabelModeKey                  = "kubegres.reactive-tech.io/mode"
+	LabelModelActiveValue         = "active"
+	LabelModelStandbyValue        = "standby"
 )
 
 func CreateResourcesCreatorFromTemplate(kubegresContext ctx.KubegresContext,
@@ -197,11 +200,17 @@ func (r *ResourcesCreatorFromTemplate) initStatefulSet(
 	statefulSetResourceName := r.kubegresContext.GetStatefulSetResourceName(statefulSetInstanceIndex)
 	postgresSpec := r.kubegresContext.Kubegres.Spec
 
+	labelModeValue := LabelModelActiveValue
+	if r.kubegresContext.Kubegres.Spec.Standby.Enabled {
+		labelModeValue = LabelModelStandbyValue
+	}
+
 	statefulSetTemplate.Name = statefulSetResourceName
 	statefulSetTemplate.Namespace = r.kubegresContext.Kubegres.Namespace
 	statefulSetTemplate.Annotations = r.getCustomAnnotations()
 	statefulSetTemplate.Labels["app"] = resourceName
 	statefulSetTemplate.Labels["index"] = instanceIndex
+	statefulSetTemplate.Labels[LabelModeKey] = labelModeValue
 	statefulSetTemplate.OwnerReferences = r.getOwnerReference()
 
 	statefulSetTemplate.Spec.ServiceName = serviceName
@@ -209,6 +218,7 @@ func (r *ResourcesCreatorFromTemplate) initStatefulSet(
 	statefulSetTemplate.Spec.Selector.MatchLabels["index"] = instanceIndex
 	statefulSetTemplate.Spec.Template.Labels["app"] = resourceName
 	statefulSetTemplate.Spec.Template.Labels["index"] = instanceIndex
+	statefulSetTemplate.Spec.Template.Labels[LabelModeKey] = labelModeValue
 	statefulSetTemplate.Spec.Template.Annotations = r.getCustomAnnotations()
 
 	statefulSetTemplateSpec := &statefulSetTemplate.Spec.Template.Spec

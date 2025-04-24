@@ -81,6 +81,7 @@ func CreateResourcesContext(kubegres *postgresV1.Kubegres,
 
 	rc.LogWrapper = log.LogWrapper{Kubegres: kubegres, Logger: logger, Recorder: recorder}
 	rc.LogWrapper.Info("KUBEGRES", "name", kubegres.Name, "Status", kubegres.Status)
+	rc.LogWrapper.Info("KUBEGRES metadata", "Labels", kubegres.Labels, "Annotations", kubegres.Annotations)
 	//rc.LogWrapper.WithName(kubegres.Name)
 
 	rc.KubegresStatusWrapper = &status.KubegresStatusWrapper{

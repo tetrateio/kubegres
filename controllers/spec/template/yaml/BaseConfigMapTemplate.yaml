@@ -215,6 +215,20 @@ data:
         echo "$dt - Copy completed";
 
     else
+        # The 'primary_conninfo' parameter is set by the 'pg_basebackup' command in the postgresql.auto.conf file and we cannot assume the exact order of the parameters.
+        # Let's pipe grep commands for each parameter
+    
+        host_args="host=$PRIMARY_HOST_NAME"
+        auth_args="user=replication password=$PGPASSWORD"
+  
+        primary_already_set=$(grep "$host_args" $PGDATA/postgresql.auto.conf | grep "$auth_args" > /dev/null; echo $?)
+  
+        if [ $primary_already_set -ne 0 ]; then
+          echo "$dt - Updating primary_conninfo in postgresql.auto.conf to connect to $PRIMARY_HOST_NAME";
+          primary_conninfo="$ssl_mode_args $ssl_cert_args $host_args $auth_args"
+          echo "primary_conninfo = '$primary_conninfo'" > $PGDATA/postgresql.auto.conf
+        fi
+  
         echo "$dt - Skipping copy from Primary DB because Replica DB already exists";
     fi
 
