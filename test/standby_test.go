@@ -16,7 +16,7 @@ import (
 	"reactive-tech.io/kubegres/test/util/testcases"
 )
 
-var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), Label("standby"), func() {
+var _ = Describe("Setting Kubegres spec 'replica'", Label("standby"), func() {
 
 	var test = StandByTest{}
 
