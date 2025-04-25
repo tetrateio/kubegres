@@ -28,6 +28,7 @@ jobs:
           - "group:3"
           - "group:4"
           - "group:5"
+          - "standby"
     runs-on: ubuntu-latest
     env:
       PLATFORMS: linux/amd64

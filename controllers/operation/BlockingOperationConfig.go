@@ -31,6 +31,7 @@ const (
 
 	OperationIdPrimaryDbCountSpecEnforcement         = "Primary DB count spec enforcement"
 	OperationStepIdPrimaryDbDeploying                = "Primary DB is deploying"
+	OperationStepIdPrimaryDbUndeploying              = "Primary DB is undeploying"
 	OperationStepIdPrimaryDbWaitingBeforeFailingOver = "Waiting few seconds before failing over by promoting a Replica DB as a Primary DB"
 	OperationStepIdPrimaryDbFailingOver              = "Failing over by promoting a Replica DB as a Primary DB"
 

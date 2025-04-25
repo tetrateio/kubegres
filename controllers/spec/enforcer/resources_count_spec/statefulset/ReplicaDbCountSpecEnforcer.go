@@ -105,6 +105,17 @@ func (r *ReplicaDbCountSpecEnforcer) Enforce() error {
 		return nil
 	}
 
+	if r.isStandbyEnabled() {
+		for _, replica := range r.resourcesStates.StatefulSets.Replicas.All.GetAllSortedByInstanceIndex() {
+			// if no label is set, we assume it is an update from an older version with no labels applied but no standby config changed
+			if value, ok := replica.StatefulSet.Labels[template.LabelModeKey]; ok && value != template.LabelModelStandbyValue {
+				r.kubegresContext.Log.InfoEvent("ReplicaDbCountSpecEnforcer",
+					"Standby has been enabled and replica DB is not in standby mode. Undeploy it as primary node changed", "InstanceIndex", replica.InstanceIndex)
+				return r.undeployReplicaStatefulSets(replica)
+			}
+		}
+	}
+
 	// Check if the number of deployed replicas == spec, if not then deploy one
 	nbreNewReplicaToDeploy := r.getExpectedNbreReplicasToDeploy() - r.getNbreDeployedReplicas()
 

@@ -33,7 +33,7 @@ import (
 	"reactive-tech.io/kubegres/test/util"
 )
 
-var _ = Describe("Primary instances is not available, checking recovery works", Label("group:2"), func() {
+var _ = Describe("Primary instances is not available, checking recovery works", Label("group:2", "failover"), func() {
 
 	var test = PrimaryFailureAndRecoveryTest{}
 
@@ -118,17 +118,18 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 		})
 	})
 
-	Context("GIVEN Kubegres with 1 primary and 2 replicas AND primary is deleted", func() {
+	// TODO (sergicastro): make this test to deploy 2 replicas once the DBConnectionUtil connects to all pods under the service
+	Context("GIVEN Kubegres with 1 primary and 1 replicas AND primary is deleted", func() {
 
 		It("THEN the failover should take place with a replica becoming primary AND a new replica created AND existing data available, twice", func() {
 
-			log.Print("START OF: Test 'GIVEN Kubegres with 1 primary and 2 replicas AND primary is deleted'")
+			log.Print("START OF: Test 'GIVEN Kubegres with 1 primary and 1 replicas AND primary is deleted'")
 
-			test.givenNewKubegresSpecIsSetTo(3)
+			test.givenNewKubegresSpecIsSetTo(2)
 
 			test.whenKubegresIsCreated()
 
-			test.thenPodsStatesShouldBe(1, 2)
+			test.thenPodsStatesShouldBe(1, 1)
 
 			expectedNbreUsers := 0
 
@@ -142,7 +143,7 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 
 			test.whenPrimaryIsDeleted()
 
-			test.thenPodsStatesShouldBe(1, 2)
+			test.thenPodsStatesShouldBe(1, 1)
 
 			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
 			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
@@ -157,7 +158,7 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 
 			test.whenPrimaryIsDeleted()
 
-			test.thenPodsStatesShouldBe(1, 2)
+			test.thenPodsStatesShouldBe(1, 1)
 
 			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
 			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
@@ -168,7 +169,7 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
 			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
 
-			log.Print("END OF: Test 'GIVEN Kubegres with 1 primary and 2 replicas AND primary is deleted'")
+			log.Print("END OF: Test 'GIVEN Kubegres with 1 primary and 1 replicas AND primary is deleted'")
 		})
 	})
 

@@ -2,11 +2,13 @@ package statefulset_spec
 
 import (
 	"maps"
+	"sort"
 	"strings"
 
 	apps "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
+	"reactive-tech.io/kubegres/controllers/spec/template"
 )
 
 const annotationPrefix = "kubegres.reactive-tech.io/"
@@ -38,6 +40,7 @@ func (r *CustomMetadataSpecEnforcer) CheckForSpecDifference(statefulSet *apps.St
 
 	current := getCustomMetadata(statefulSet.GetObjectMeta())
 	expected := getCustomMetadata(r.kubegresContext.Kubegres.GetObjectMeta())
+	expected.Labels[template.LabelModeKey] = r.getExpectedLabelModeValue()
 
 	if !r.equals(current, expected) {
 		return StatefulSetSpecDifference{
@@ -48,6 +51,18 @@ func (r *CustomMetadataSpecEnforcer) CheckForSpecDifference(statefulSet *apps.St
 	}
 
 	return StatefulSetSpecDifference{}
+}
+
+func (r *CustomMetadataSpecEnforcer) EnforceSpec(statefulSet *apps.StatefulSet) (bool, error) {
+	labelModeValue := r.getExpectedLabelModeValue()
+	md := getCustomMetadata(r.kubegresContext.Kubegres.GetObjectMeta())
+	md.Labels[template.LabelModeKey] = labelModeValue
+
+	statefulSet.ObjectMeta.Labels = merge(statefulSet.ObjectMeta.Labels, md.Labels)
+	statefulSet.ObjectMeta.Annotations = merge(statefulSet.ObjectMeta.Annotations, md.Annotations)
+	statefulSet.Spec.Template.ObjectMeta.Labels = merge(statefulSet.Spec.Template.ObjectMeta.Labels, md.Labels)
+	statefulSet.Spec.Template.ObjectMeta.Annotations = merge(statefulSet.Spec.Template.ObjectMeta.Annotations, md.Annotations)
+	return true, nil
 }
 
 func getCustomMetadata(obj metav1.Object) customMetadata {
@@ -64,15 +79,6 @@ func extractCustom(src map[string]string) map[string]string {
 		}
 	}
 	return custom
-}
-
-func (r *CustomMetadataSpecEnforcer) EnforceSpec(statefulSet *apps.StatefulSet) (bool, error) {
-	md := getCustomMetadata(r.kubegresContext.Kubegres.GetObjectMeta())
-	statefulSet.ObjectMeta.Labels = merge(statefulSet.ObjectMeta.Labels, md.Labels)
-	statefulSet.ObjectMeta.Annotations = merge(statefulSet.ObjectMeta.Annotations, md.Annotations)
-	statefulSet.Spec.Template.ObjectMeta.Labels = merge(statefulSet.Spec.Template.ObjectMeta.Labels, md.Labels)
-	statefulSet.Spec.Template.ObjectMeta.Annotations = merge(statefulSet.Spec.Template.ObjectMeta.Annotations, md.Annotations)
-	return true, nil
 }
 
 func merge(a map[string]string, b map[string]string) map[string]string {
@@ -100,11 +106,13 @@ func (r *CustomMetadataSpecEnforcer) toString(md customMetadata) string {
 	for key, value := range md.Labels {
 		labels = append(labels, key+"="+value)
 	}
+	sort.Strings(labels)
 
 	annotations := make([]string, 0, len(md.Annotations))
 	for key, value := range md.Annotations {
 		annotations = append(annotations, key+"="+value)
 	}
+	sort.Strings(annotations)
 
 	toString := strings.Builder{}
 	toString.WriteString("Labels: ")
@@ -112,4 +120,11 @@ func (r *CustomMetadataSpecEnforcer) toString(md customMetadata) string {
 	toString.WriteString(" - Annotations: ")
 	toString.WriteString(strings.Join(annotations, ", "))
 	return toString.String()
+}
+
+func (r *CustomMetadataSpecEnforcer) getExpectedLabelModeValue() string {
+	if r.kubegresContext.Kubegres.Spec.Standby.Enabled {
+		return template.LabelModelStandbyValue
+	}
+	return template.LabelModelActiveValue
 }

@@ -81,6 +81,7 @@ func CreateResourcesContext(kubegres *postgresV1.Kubegres,
 
 	rc.LogWrapper = log.LogWrapper{Kubegres: kubegres, Logger: logger, Recorder: recorder}
 	rc.LogWrapper.Info("KUBEGRES", "name", kubegres.Name, "Status", kubegres.Status)
+	rc.LogWrapper.Info("KUBEGRES metadata", "Labels", kubegres.Labels, "Annotations", kubegres.Annotations)
 	//rc.LogWrapper.WithName(kubegres.Name)
 
 	rc.KubegresStatusWrapper = &status.KubegresStatusWrapper{
@@ -194,6 +195,7 @@ func addBlockingOperationConfigs(rc *ResourcesContext) {
 	rc.BlockingOperation.AddConfig(rc.BaseConfigMapCountSpecEnforcer.CreateOperationConfig())
 
 	rc.BlockingOperation.AddConfig(rc.PrimaryDbCountSpecEnforcer.CreateOperationConfigForPrimaryDbDeploying())
+	rc.BlockingOperation.AddConfig(rc.PrimaryDbCountSpecEnforcer.CreateOperationConfigForPrimaryDbUndeploying())
 	rc.BlockingOperation.AddConfig(rc.PrimaryToReplicaFailOver.CreateOperationConfigWaitingBeforeForFailingOver())
 	rc.BlockingOperation.AddConfig(rc.PrimaryToReplicaFailOver.CreateOperationConfigForFailingOver())
 
