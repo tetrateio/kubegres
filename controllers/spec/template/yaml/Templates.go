@@ -292,7 +292,7 @@ data:
   
         if [ $primary_already_set -ne 0 ]; then
           echo "$dt - Updating primary_conninfo in postgresql.auto.conf to connect to $PRIMARY_HOST_NAME";
-          primary_conninfo="$ssl_mode_args $ssl_cert_args $host_args $auth_args"
+          primary_conninfo="$host_args $auth_args"
           echo "primary_conninfo = '$primary_conninfo'" > $PGDATA/postgresql.auto.conf
         fi
   
