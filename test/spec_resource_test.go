@@ -23,11 +23,12 @@ package test
 import (
 	"log"
 	"reflect"
+	"slices"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	v12 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
@@ -46,7 +47,7 @@ var _ = Describe("Setting Kubegres spec 'resource'", Label("group:5"), func() {
 		namespace := resourceConfigs.DefaultNamespace
 		test.resourceRetriever = util.CreateTestResourceRetriever(k8sClientTest, namespace)
 		test.resourceCreator = util.CreateTestResourceCreator(k8sClientTest, test.resourceRetriever, namespace)
-		test.dbQueryTestCases = testcases.InitDbQueryTestCases(test.resourceCreator, resourceConfigs.KubegresResourceName)
+		test.dbQueryTestCases = testcases.InitDbQueryTestCases(test.resourceCreator, resourceConfigs.KubegresResourceName, k8sClientTest)
 	})
 
 	AfterEach(func() {
@@ -123,6 +124,57 @@ var _ = Describe("Setting Kubegres spec 'resource'", Label("group:5"), func() {
 		})
 	})
 
+	Context("GIVEN new Kubegres is created with spec 'sidecarContainer'", func() {
+
+		It("THEN created StatefulSets should have sidecarContainer set in pod template", func() {
+
+			log.Print("START OF: Test 'GIVEN new Kubegres is created with spec 'sidecarContainer")
+
+			containers := test.givenSidecarContainers("sidecarcontainer", "busybox")
+
+			test.givenNewKubegresSpecHasSidecarContainersSetTo(containers)
+
+			test.whenKubegresIsCreated()
+
+			test.thenStatefulSetStatesShouldHaveContainer("sidecarcontainer", "busybox")
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+
+			test.keepCreatedResourcesForNextTest = true
+
+			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'sidecarContainer")
+		})
+
+		It("THEN delete `sidecarContainer` field shouold remove the container form pod template spec", func() {
+			log.Print("START OF: Test 'THEN delete `sidecarContainer` field shouold remove the container form pod template spec")
+
+			test.givenExistingKubegresSpecSidecarContainersIsSetTo(nil)
+
+			test.whenKubernetesIsUpdated()
+
+			test.thenStatefulSetStatesShouldHaveNbreContainers(1)
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+
+			test.keepCreatedResourcesForNextTest = true
+
+			log.Print("END OF: Test 'THEN delete `sidecarContainer` field shouold remove the container form pod template spec")
+		})
+
+		It("THEN add back `sidecarContainer` field should add the container back to pod template spec", func() {
+			log.Print("START OF: Test 'THEN add back `sidecarContainer` field should add the container back to pod template spec")
+
+			containers := test.givenSidecarContainers("sidecarcontainer", "busybox")
+			test.givenExistingKubegresSpecSidecarContainersIsSetTo(containers)
+
+			test.whenKubernetesIsUpdated()
+			test.thenStatefulSetStatesShouldHaveContainer("sidecarcontainer", "busybox")
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+
+			log.Print("END OF: Test 'THEN add back `sidecarContainer` field should add the container back to pod template spec")
+		})
+	})
+
 })
 
 type SpecResourceTest struct {
@@ -137,13 +189,13 @@ func (r *SpecResourceTest) whenKubernetesIsUpdated() {
 	r.resourceCreator.UpdateResource(r.kubegresResource, "Kubegres")
 }
 
-func (r *SpecResourceTest) givenResources(cpuLimit, memLimit, cpuReq, memReq string) v12.ResourceRequirements {
-	return v12.ResourceRequirements{
-		Limits: v12.ResourceList{
+func (r *SpecResourceTest) givenResources(cpuLimit, memLimit, cpuReq, memReq string) corev1.ResourceRequirements {
+	return corev1.ResourceRequirements{
+		Limits: corev1.ResourceList{
 			"cpu":    resource.MustParse(cpuLimit),
 			"memory": resource.MustParse(memLimit),
 		},
-		Requests: v12.ResourceList{
+		Requests: corev1.ResourceList{
 			"cpu":    resource.MustParse(cpuReq),
 			"memory": resource.MustParse(memReq),
 		},
@@ -152,17 +204,17 @@ func (r *SpecResourceTest) givenResources(cpuLimit, memLimit, cpuReq, memReq str
 
 func (r *SpecResourceTest) givenNewKubegresSpecIsWithoutResources(specNbreReplicas int32) {
 	r.kubegresResource = resourceConfigs.LoadKubegresYaml()
-	r.kubegresResource.Spec.Resources = v12.ResourceRequirements{}
+	r.kubegresResource.Spec.Resources = corev1.ResourceRequirements{}
 	r.kubegresResource.Spec.Replicas = &specNbreReplicas
 }
 
-func (r *SpecResourceTest) givenNewKubegresSpecIsSetTo(resources v12.ResourceRequirements, specNbreReplicas int32) {
+func (r *SpecResourceTest) givenNewKubegresSpecIsSetTo(resources corev1.ResourceRequirements, specNbreReplicas int32) {
 	r.kubegresResource = resourceConfigs.LoadKubegresYaml()
 	r.kubegresResource.Spec.Resources = resources
 	r.kubegresResource.Spec.Replicas = &specNbreReplicas
 }
 
-func (r *SpecResourceTest) givenExistingKubegresSpecIsSetTo(resources v12.ResourceRequirements) {
+func (r *SpecResourceTest) givenExistingKubegresSpecIsSetTo(resources corev1.ResourceRequirements) {
 	var err error
 	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
 
@@ -190,7 +242,7 @@ func (r *SpecResourceTest) thenStatefulSetStatesShouldBeWithoutResources(nbrePri
 
 		for _, resource := range kubegresResources.Resources {
 			currentResources := resource.StatefulSet.Spec.Template.Spec.Containers[0].Resources
-			emptyResources := v12.ResourceRequirements{}
+			emptyResources := corev1.ResourceRequirements{}
 
 			if !reflect.DeepEqual(currentResources, emptyResources) {
 				log.Println("StatefulSet '" + resource.StatefulSet.Name + emptyResources.String() + "  ' doesn't have the expected spec 'resources' which should be the default one. " +
@@ -213,7 +265,7 @@ func (r *SpecResourceTest) thenStatefulSetStatesShouldBeWithoutResources(nbrePri
 	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
 }
 
-func (r *SpecResourceTest) thenStatefulSetStatesShouldBe(expectedResources v12.ResourceRequirements, nbrePrimary, nbreReplicas int) bool {
+func (r *SpecResourceTest) thenStatefulSetStatesShouldBe(expectedResources corev1.ResourceRequirements, nbrePrimary, nbreReplicas int) bool {
 	return Eventually(func() bool {
 
 		kubegresResources, err := r.resourceRetriever.GetKubegresResources()
@@ -265,11 +317,11 @@ func (r *SpecResourceTest) thenDeployedKubegresSpecShouldWithoutResource() {
 		return
 	}
 	currentResources := r.kubegresResource.Spec.Resources
-	emptyResources := v12.ResourceRequirements{}
+	emptyResources := corev1.ResourceRequirements{}
 	Expect(currentResources).Should(Equal(emptyResources))
 }
 
-func (r *SpecResourceTest) thenDeployedKubegresSpecShouldBeSetTo(expectedResources v12.ResourceRequirements) {
+func (r *SpecResourceTest) thenDeployedKubegresSpecShouldBeSetTo(expectedResources corev1.ResourceRequirements) {
 	var err error
 	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
 
@@ -281,4 +333,87 @@ func (r *SpecResourceTest) thenDeployedKubegresSpecShouldBeSetTo(expectedResourc
 
 	currentResources := r.kubegresResource.Spec.Resources
 	Expect(currentResources).Should(Equal(expectedResources))
+}
+
+func (r *SpecResourceTest) givenSidecarContainers(name, image string) []corev1.Container {
+	return []corev1.Container{
+		{
+			Name:    name,
+			Image:   image,
+			Command: []string{"/bin/sleep", "99999"},
+		},
+	}
+}
+
+func (r *SpecResourceTest) givenNewKubegresSpecHasSidecarContainersSetTo(containers []corev1.Container) {
+	r.kubegresResource = resourceConfigs.LoadKubegresYaml()
+	r.kubegresResource.Spec.SidecarContainers = containers
+	r.kubegresResource.Spec.Replicas = func(i int32) *int32 { return &i }(1)
+}
+
+func (r *SpecResourceTest) thenStatefulSetStatesShouldHaveContainer(containerName string, containerImage string) bool {
+
+	return Eventually(func() bool {
+
+		kubegresResources, err := r.resourceRetriever.GetKubegresResources()
+		if err != nil && !apierrors.IsNotFound(err) {
+			log.Println("ERROR while retrieving Kubegres kubegresResources")
+			return false
+		}
+
+		if kubegresResources.AreAllReady != true {
+			return false
+		}
+
+		found := make([]bool, len(kubegresResources.Resources))
+		for idx, resource := range kubegresResources.Resources {
+			for _, container := range resource.StatefulSet.Spec.Template.Spec.Containers {
+				if container.Name != containerName && container.Image != containerImage {
+					log.Println("StatefulSet '" + resource.StatefulSet.Name + "' doesn't have the expected container'")
+					continue
+				}
+				found[idx] = true
+				break
+			}
+		}
+
+		return !slices.Contains(found, false)
+
+	}, 100*time.Second, time.Second).Should(BeTrue())
+}
+
+func (r *SpecResourceTest) givenExistingKubegresSpecSidecarContainersIsSetTo(containers []corev1.Container) {
+	var err error
+	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
+	if err != nil {
+		log.Println("Error while getting Kubegres resource : ", err)
+		Expect(err).Should(Succeed())
+		return
+	}
+
+	r.kubegresResource.Spec.SidecarContainers = containers
+}
+
+func (r *SpecResourceTest) thenStatefulSetStatesShouldHaveNbreContainers(numberOfContainers int) bool {
+	return Eventually(func() bool {
+
+		kubegresResources, err := r.resourceRetriever.GetKubegresResources()
+		if err != nil && !apierrors.IsNotFound(err) {
+			log.Println("ERROR while retrieving Kubegres kubegresResources")
+			return false
+		}
+
+		if kubegresResources.AreAllReady != true {
+			return false
+		}
+
+		for _, res := range kubegresResources.Resources {
+			if len(res.StatefulSet.Spec.Template.Spec.Containers) != numberOfContainers {
+				log.Println("StatefulSet '" + res.StatefulSet.Name + "' doesn't have the expected number of containers'")
+				return false
+			}
+		}
+
+		return true
+	}, 100*time.Second, time.Second).Should(BeTrue())
 }

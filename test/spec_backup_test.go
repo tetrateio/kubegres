@@ -52,7 +52,7 @@ var _ = Describe("Setting Kubegres specs 'backup.*'", Label("group:3"), func() {
 		namespace := resourceConfigs.DefaultNamespace
 		test.resourceRetriever = util.CreateTestResourceRetriever(k8sClientTest, namespace)
 		test.resourceCreator = util.CreateTestResourceCreator(k8sClientTest, test.resourceRetriever, namespace)
-		test.dbQueryTestCases = testcases.InitDbQueryTestCases(test.resourceCreator, resourceConfigs.KubegresResourceName)
+		test.dbQueryTestCases = testcases.InitDbQueryTestCases(test.resourceCreator, resourceConfigs.KubegresResourceName, k8sClientTest)
 		test.resourceCreator.CreateConfigMapWithBackupDatabaseScript()
 		test.resourceCreator.CreateConfigMapWithPgHbaConf()
 		test.resourceCreator.CreateBackUpPvc()

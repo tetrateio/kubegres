@@ -47,7 +47,7 @@ var _ = Describe("Setting Kubegres specs 'customConfig'", Label("group:2"), func
 		namespace := resourceConfigs.DefaultNamespace
 		test.resourceRetriever = util.CreateTestResourceRetriever(k8sClientTest, namespace)
 		test.resourceCreator = util.CreateTestResourceCreator(k8sClientTest, test.resourceRetriever, namespace)
-		test.dbQueryTestCases = testcases.InitDbQueryTestCases(test.resourceCreator, resourceConfigs.KubegresResourceName)
+		test.dbQueryTestCases = testcases.InitDbQueryTestCases(test.resourceCreator, resourceConfigs.KubegresResourceName, k8sClientTest)
 		test.resourceCreator.CreateBackUpPvc()
 		test.resourceCreator.CreateConfigMapEmpty()
 		test.resourceCreator.CreateConfigMapWithAllConfigs()
