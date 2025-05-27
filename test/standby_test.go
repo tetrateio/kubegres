@@ -6,7 +6,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	v12 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
@@ -358,7 +358,7 @@ func (r *StandByTest) whenKubegresIsUpdated() {
 
 func (r *StandByTest) thenErrorEventShouldBeLogged() {
 	expectedErrorEvent := util.EventRecord{
-		Eventtype: v12.EventTypeWarning,
+		Eventtype: corev1.EventTypeWarning,
 		Reason:    "SpecCheckErr",
 		Message:   "In the Resources Spec the value of 'spec.standby.primaryEndpoint' is undefined. Please set a value otherwise this operator cannot work correctly.",
 	}
