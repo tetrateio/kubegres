@@ -193,8 +193,6 @@ var _ = Describe("Setting Kubegres spec 'resource'", Label("group:5"), func() {
 
 			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 
-			test.keepCreatedResourcesForNextTest = true
-
 			log.Print("END OF: Test 'THEN modify `sidecarContainer` args and env should update the container in pod template spec")
 		})
 
