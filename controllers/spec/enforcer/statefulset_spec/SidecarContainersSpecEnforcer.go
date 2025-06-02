@@ -6,6 +6,7 @@ import (
 
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/json"
 	"reactive-tech.io/kubegres/controllers/ctx"
 )
 
@@ -14,7 +15,7 @@ type SidecarContainersSpecEnforcer struct {
 }
 
 func (c *SidecarContainersSpecEnforcer) GetSpecName() string {
-	return "ContainersSpec"
+	return "SidecarContainersSpec"
 }
 
 func (c *SidecarContainersSpecEnforcer) CheckForSpecDifference(statefulSet *apps.StatefulSet) StatefulSetSpecDifference {
@@ -26,39 +27,15 @@ func (c *SidecarContainersSpecEnforcer) CheckForSpecDifference(statefulSet *apps
 	}
 
 	runningContainersByName := make(map[string]v1.Container)
-	for _, runningContainer := range statefulSet.Spec.Template.Spec.Containers {
+	for _, runningContainer := range runningSidecarContainers {
 		runningContainersByName[runningContainer.Name] = runningContainer
 	}
 
 	for _, wantSidecarContainer := range expectedContainers {
-		runningContainer, found := runningContainersByName[wantSidecarContainer.Name]
+		name := wantSidecarContainer.Name
+		runningContainer, found := runningContainersByName[name]
 		if !found {
 			return c.createDifference(runningSidecarContainers, expectedContainers)
-		}
-
-		// compare fields that use primitive types and fields that are not set by default
-		if runningContainer.Image != wantSidecarContainer.Image ||
-			runningContainer.WorkingDir != wantSidecarContainer.WorkingDir ||
-			runningContainer.Stdin != wantSidecarContainer.Stdin ||
-			runningContainer.StdinOnce != wantSidecarContainer.StdinOnce ||
-			runningContainer.TTY != wantSidecarContainer.TTY {
-			return c.createDifference([]v1.Container{runningContainer}, []v1.Container{wantSidecarContainer})
-		}
-
-		// compare collections fields or pointers
-		if !reflect.DeepEqual(runningContainer.Command, wantSidecarContainer.Command) ||
-			!reflect.DeepEqual(runningContainer.Args, wantSidecarContainer.Args) ||
-			!reflect.DeepEqual(runningContainer.Ports, wantSidecarContainer.Ports) ||
-			!reflect.DeepEqual(runningContainer.Env, wantSidecarContainer.Env) ||
-			!reflect.DeepEqual(runningContainer.EnvFrom, wantSidecarContainer.EnvFrom) ||
-			!reflect.DeepEqual(runningContainer.Resources, wantSidecarContainer.Resources) ||
-			!reflect.DeepEqual(runningContainer.VolumeDevices, wantSidecarContainer.VolumeDevices) ||
-			!reflect.DeepEqual(runningContainer.ReadinessProbe, wantSidecarContainer.ReadinessProbe) ||
-			!reflect.DeepEqual(runningContainer.LivenessProbe, wantSidecarContainer.LivenessProbe) ||
-			!reflect.DeepEqual(runningContainer.StartupProbe, wantSidecarContainer.StartupProbe) ||
-			!reflect.DeepEqual(runningContainer.Lifecycle, wantSidecarContainer.Lifecycle) ||
-			!reflect.DeepEqual(runningContainer.SecurityContext, wantSidecarContainer.SecurityContext) {
-			return c.createDifference([]v1.Container{runningContainer}, []v1.Container{wantSidecarContainer})
 		}
 
 		// fields where K8s sets defaults:
@@ -66,58 +43,70 @@ func (c *SidecarContainersSpecEnforcer) CheckForSpecDifference(statefulSet *apps
 		// - TerminationMessagePath
 		// - TerminationMessagePolicy
 		// - ImagePullPolicy
-		// compare them only if they are set in the spec
-		if len(wantSidecarContainer.VolumeMounts) > 0 && !reflect.DeepEqual(runningContainer.VolumeMounts, wantSidecarContainer.VolumeMounts) {
-			return c.createDifference([]v1.Container{runningContainer}, []v1.Container{wantSidecarContainer})
+		// copy defaults from the running container if they are not set in the spec
+		if len(wantSidecarContainer.VolumeMounts) == 0 {
+			wantSidecarContainer.VolumeMounts = runningContainer.VolumeMounts
 		}
-		if wantSidecarContainer.TerminationMessagePath != "" && runningContainer.TerminationMessagePath != wantSidecarContainer.TerminationMessagePath {
-			return c.createDifference([]v1.Container{runningContainer}, []v1.Container{wantSidecarContainer})
+		if wantSidecarContainer.TerminationMessagePath == "" {
+			wantSidecarContainer.TerminationMessagePath = runningContainer.TerminationMessagePath
 		}
-		if wantSidecarContainer.TerminationMessagePolicy != "" && runningContainer.TerminationMessagePolicy != wantSidecarContainer.TerminationMessagePolicy {
-			return c.createDifference([]v1.Container{runningContainer}, []v1.Container{wantSidecarContainer})
+		if wantSidecarContainer.TerminationMessagePolicy == "" {
+			wantSidecarContainer.TerminationMessagePolicy = runningContainer.TerminationMessagePolicy
 		}
-		if wantSidecarContainer.ImagePullPolicy != "" && runningContainer.ImagePullPolicy != wantSidecarContainer.ImagePullPolicy {
-			return c.createDifference([]v1.Container{runningContainer}, []v1.Container{wantSidecarContainer})
+		if wantSidecarContainer.ImagePullPolicy == "" {
+			wantSidecarContainer.ImagePullPolicy = runningContainer.ImagePullPolicy
+		}
+
+		if !reflect.DeepEqual(runningContainer, wantSidecarContainer) {
+			return c.createDifferenceDetailed(runningContainer, wantSidecarContainer)
 		}
 	}
+
 	// if we reach this point, it means that all sidecar containers are equal
 	return StatefulSetSpecDifference{}
 }
 
-func (c *SidecarContainersSpecEnforcer) createDifference(runningSidecarContainers []v1.Container, expectedContainers []v1.Container) StatefulSetSpecDifference {
-	var currentContainerNames, expectedContainerNames strings.Builder
-	for _, container := range runningSidecarContainers {
-		currentContainerNames.WriteString(container.Name + ", ")
+func (c *SidecarContainersSpecEnforcer) createDifference(currentSidecarContainers []v1.Container, expectedSidecarContainers []v1.Container) StatefulSetSpecDifference {
+	currentContainers := make([]string, 0, len(currentSidecarContainers))
+	for _, container := range currentSidecarContainers {
+		current, _ := json.Marshal(container)
+		currentContainers = append(currentContainers, string(current))
 	}
-	for _, container := range expectedContainers {
-		expectedContainerNames.WriteString(container.Name + ", ")
+
+	expectedContainers := make([]string, 0, len(expectedSidecarContainers))
+	for _, container := range expectedSidecarContainers {
+		expected, _ := json.Marshal(container)
+		expectedContainers = append(expectedContainers, string(expected))
 	}
 
 	difference := StatefulSetSpecDifference{
 		SpecName: c.GetSpecName(),
-		Current:  currentContainerNames.String(),
-		Expected: expectedContainerNames.String(),
+		Current:  strings.Join(expectedContainers, ","),
+		Expected: strings.Join(currentContainers, ","),
+	}
+	return difference
+}
+
+func (c *SidecarContainersSpecEnforcer) createDifferenceDetailed(currentDetail, expectedDetail v1.Container) StatefulSetSpecDifference {
+	current, _ := json.Marshal(currentDetail)
+	expected, _ := json.Marshal(expectedDetail)
+	difference := StatefulSetSpecDifference{
+		SpecName: c.GetSpecName(),
+		Current:  string(current),
+		Expected: string(expected),
 	}
 	return difference
 }
 
 func (c *SidecarContainersSpecEnforcer) EnforceSpec(statefulSet *apps.StatefulSet) (wasSpecUpdated bool, err error) {
+	postgresContainer := statefulSet.Spec.Template.Spec.Containers[0] // the first container is always the postgres container
 	expectedContainers := c.kubegresContext.Kubegres.Spec.SidecarContainers
-	expectedContainersByName := make(map[string]struct{}, len(expectedContainers))
-	for _, container := range expectedContainers {
-		expectedContainersByName[container.Name] = struct{}{}
+	statefulSet.Spec.Template.Spec.Containers = append([]v1.Container{postgresContainer}, expectedContainers...)
+	c.kubegresContext.Log.Info("--> sidecar containers spec", len(expectedContainers))
+	c.kubegresContext.Log.Info("--> Enforcing sidecar containers spec", len(statefulSet.Spec.Template.Spec.Containers))
+	if len(statefulSet.Spec.Template.Spec.Containers) >= 2 {
+		c.kubegresContext.Log.Info("--> cmd", len(statefulSet.Spec.Template.Spec.Containers[1].Command))
 	}
-
-	var postgresContainer v1.Container
-	for _, container := range statefulSet.Spec.Template.Spec.Containers {
-		if strings.HasPrefix(container.Name, c.kubegresContext.Kubegres.GetName()) {
-			postgresContainer = container
-			break
-		}
-	}
-	wantContainers := append([]v1.Container{postgresContainer}, expectedContainers...)
-	statefulSet.Spec.Template.Spec.Containers = wantContainers
-
 	return true, nil
 }
 
