@@ -25,13 +25,13 @@ func (c *SidecarContainersSpecEnforcer) CheckForSpecDifference(statefulSet *apps
 		return c.createDifference(runningSidecarContainers, expectedContainers)
 	}
 
-	byName := make(map[string]v1.Container)
+	runningContainersByName := make(map[string]v1.Container)
 	for _, runningContainer := range statefulSet.Spec.Template.Spec.Containers {
-		byName[runningContainer.Name] = runningContainer
+		runningContainersByName[runningContainer.Name] = runningContainer
 	}
 
 	for _, wantSidecarContainer := range expectedContainers {
-		runningContainer, found := byName[wantSidecarContainer.Name]
+		runningContainer, found := runningContainersByName[wantSidecarContainer.Name]
 		if !found {
 			return c.createDifference(runningSidecarContainers, expectedContainers)
 		}
@@ -103,14 +103,21 @@ func (c *SidecarContainersSpecEnforcer) createDifference(runningSidecarContainer
 
 func (c *SidecarContainersSpecEnforcer) EnforceSpec(statefulSet *apps.StatefulSet) (wasSpecUpdated bool, err error) {
 	expectedContainers := c.kubegresContext.Kubegres.Spec.SidecarContainers
-	if len(expectedContainers) == 0 {
-		// if there are no sidecar containers defined, we remove all sidecars
-		statefulSet.Spec.Template.Spec.Containers = statefulSet.Spec.Template.Spec.Containers[:1]
-		return true, nil
-	}
+	expectedContainersByName := make(map[string]struct{}, len(expectedContainers))
 	for _, container := range expectedContainers {
-		statefulSet.Spec.Template.Spec.Containers = append(statefulSet.Spec.Template.Spec.Containers, container)
+		expectedContainersByName[container.Name] = struct{}{}
 	}
+
+	var postgresContainer v1.Container
+	for _, container := range statefulSet.Spec.Template.Spec.Containers {
+		if strings.HasPrefix(container.Name, c.kubegresContext.Kubegres.GetName()) {
+			postgresContainer = container
+			break
+		}
+	}
+	wantContainers := append([]v1.Container{postgresContainer}, expectedContainers...)
+	statefulSet.Spec.Template.Spec.Containers = wantContainers
+
 	return true, nil
 }
 
