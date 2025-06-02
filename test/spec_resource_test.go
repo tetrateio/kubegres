@@ -23,7 +23,6 @@ package test
 import (
 	"log"
 	"reflect"
-	"slices"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -136,7 +135,8 @@ var _ = Describe("Setting Kubegres spec 'resource'", Label("group:5"), func() {
 
 			test.whenKubegresIsCreated()
 
-			test.thenStatefulSetStatesShouldHaveContainer("sidecarcontainer", "busybox")
+			test.thenStatefulSetStatesShouldHaveContainer("sidecarcontainer", "busybox", nil, nil)
+			test.thenStatefulSetStatesShouldHaveNbreContainers(2) // 1 main container + 1 sidecar container
 
 			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 
@@ -152,6 +152,7 @@ var _ = Describe("Setting Kubegres spec 'resource'", Label("group:5"), func() {
 
 			test.whenKubernetesIsUpdated()
 
+			test.thenStatefulSetStatesShouldNOTHaveContainer("sidecarcontainer", "busybox", nil, nil)
 			test.thenStatefulSetStatesShouldHaveNbreContainers(1)
 			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 
@@ -167,12 +168,44 @@ var _ = Describe("Setting Kubegres spec 'resource'", Label("group:5"), func() {
 			test.givenExistingKubegresSpecSidecarContainersIsSetTo(containers)
 
 			test.whenKubernetesIsUpdated()
-			test.thenStatefulSetStatesShouldHaveContainer("sidecarcontainer", "busybox")
+			test.thenStatefulSetStatesShouldHaveContainer("sidecarcontainer", "busybox", nil, nil)
+			test.thenStatefulSetStatesShouldHaveNbreContainers(2) // 1 main container + 1 sidecar container
 
 			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 
+			test.setAnnotationsOnExisitgKubegres(map[string]string{"foo": "bar"}) // to trigger reconciliation
+			test.whenKubernetesIsUpdated()
+			test.thenStatefulSetStatesShouldHaveNbreContainers(2) // 1 main container + 1 sidecar container
+
+			test.keepCreatedResourcesForNextTest = true
+
 			log.Print("END OF: Test 'THEN add back `sidecarContainer` field should add the container back to pod template spec")
 		})
+
+		It("THEN modify `sidecarContainer` args and env should update the container in pod template spec", func() {
+			log.Print("START OF: Test 'THEN modify `sidecarContainer` args and env should update the container in pod template spec")
+
+			containers := test.givenSidecarContainers("sidecarcontainer", "busybox")
+			containers[0].Command = []string{"/bin/sleep", "12345"}
+			containers[0].Env = []corev1.EnvVar{{Name: "FOO", Value: "BAR"}}
+			test.givenExistingKubegresSpecSidecarContainersIsSetTo(containers)
+
+			test.whenKubernetesIsUpdated()
+			test.thenStatefulSetStatesShouldHaveContainer(
+				"sidecarcontainer",
+				"busybox",
+				[]string{"/bin/sleep", "12345"},
+				[]corev1.EnvVar{{Name: "FOO", Value: "BAR"}},
+			)
+			test.thenStatefulSetStatesShouldHaveNbreContainers(2) // 1 main container + 1 sidecar container
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+
+			test.keepCreatedResourcesForNextTest = true
+
+			log.Print("END OF: Test 'THEN modify `sidecarContainer` args and env should update the container in pod template spec")
+		})
+
 	})
 
 })
@@ -351,35 +384,8 @@ func (r *SpecResourceTest) givenNewKubegresSpecHasSidecarContainersSetTo(contain
 	r.kubegresResource.Spec.Replicas = func(i int32) *int32 { return &i }(1)
 }
 
-func (r *SpecResourceTest) thenStatefulSetStatesShouldHaveContainer(containerName string, containerImage string) bool {
-
-	return Eventually(func() bool {
-
-		kubegresResources, err := r.resourceRetriever.GetKubegresResources()
-		if err != nil && !apierrors.IsNotFound(err) {
-			log.Println("ERROR while retrieving Kubegres kubegresResources")
-			return false
-		}
-
-		if kubegresResources.AreAllReady != true {
-			return false
-		}
-
-		found := make([]bool, len(kubegresResources.Resources))
-		for idx, resource := range kubegresResources.Resources {
-			for _, container := range resource.StatefulSet.Spec.Template.Spec.Containers {
-				if container.Name != containerName && container.Image != containerImage {
-					log.Println("StatefulSet '" + resource.StatefulSet.Name + "' doesn't have the expected container'")
-					continue
-				}
-				found[idx] = true
-				break
-			}
-		}
-
-		return !slices.Contains(found, false)
-
-	}, 100*time.Second, time.Second).Should(BeTrue())
+func (r *SpecResourceTest) thenStatefulSetStatesShouldHaveContainer(containerName string, containerImage string, cmd []string, vars []corev1.EnvVar) bool {
+	return r.assertStatefulSetsResourcesContainers(containerName, containerImage, cmd, vars, true)
 }
 
 func (r *SpecResourceTest) givenExistingKubegresSpecSidecarContainersIsSetTo(containers []corev1.Container) {
@@ -416,4 +422,48 @@ func (r *SpecResourceTest) thenStatefulSetStatesShouldHaveNbreContainers(numberO
 
 		return true
 	}, 100*time.Second, time.Second).Should(BeTrue())
+}
+
+func (r *SpecResourceTest) assertStatefulSetsResourcesContainers(name, image string, cmd []string, vars []corev1.EnvVar, isFound bool) bool {
+	return Eventually(func() bool {
+		kubegresResources, err := r.resourceRetriever.GetKubegresResources()
+		if err != nil && !apierrors.IsNotFound(err) {
+			log.Println("ERROR while retrieving Kubegres kubegresResources")
+			return false
+		}
+
+		if !kubegresResources.AreAllReady {
+			return false
+		}
+
+		containerFound := false
+		for _, resource := range kubegresResources.Resources {
+			for _, container := range resource.StatefulSet.Spec.Template.Spec.Containers {
+				if container.Name == name && container.Image == image {
+					if (cmd == nil && vars == nil) ||
+						(cmd != nil && vars != nil && reflect.DeepEqual(container.Command, cmd) && reflect.DeepEqual(container.Env, vars)) {
+						containerFound = true
+						break
+					}
+				}
+			}
+		}
+		log.Printf("Container found: %v, expected isFound: %v, name: %s, image: %s\n", containerFound, isFound, name, image)
+		return containerFound == isFound
+	}, 100*time.Second, time.Second).Should(BeTrue())
+}
+
+func (r *SpecResourceTest) thenStatefulSetStatesShouldNOTHaveContainer(name, image string, args []string, vars []corev1.EnvVar) bool {
+	return r.assertStatefulSetsResourcesContainers(name, image, args, vars, false)
+}
+
+func (r *SpecResourceTest) setAnnotationsOnExisitgKubegres(annnotations map[string]string) {
+	var err error
+	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
+	if err != nil {
+		log.Println("Error while getting Kubegres resource : ", err)
+		Expect(err).Should(Succeed())
+		return
+	}
+	r.kubegresResource.SetAnnotations(annnotations)
 }
