@@ -100,10 +100,30 @@ func (r *CustomConfigSpecHelper) ConfigureStatefulSet(statefulSet *v1.StatefulSe
 }
 
 func (r *CustomConfigSpecHelper) updateVolumeMountNameIfChanged(volumeName, configMapDataKey string, statefulSet *v1.StatefulSet) (updated bool) {
-
-	for i, volumeMount := range statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts {
+	postgresContainer := &statefulSet.Spec.Template.Spec.Containers[0]
+	volumesBySubPath := make(map[string]core.VolumeMount, len(postgresContainer.VolumeMounts))
+	for i, volumeMount := range postgresContainer.VolumeMounts {
+		volumesBySubPath[volumeMount.SubPath] = volumeMount
 		if volumeMount.SubPath == configMapDataKey && volumeMount.Name != volumeName {
-			statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts[i].Name = volumeName
+			postgresContainer.VolumeMounts[i].Name = volumeName
+			updated = true
+		}
+	}
+
+	for i, sidecar := range statefulSet.Spec.Template.Spec.Containers[1:] {
+		var volumeFound bool
+		for i, volumeMount := range sidecar.VolumeMounts {
+			if volumeMount.SubPath == configMapDataKey {
+				volumeFound = true
+				if volumeMount.Name != volumeName {
+					sidecar.VolumeMounts[i].Name = volumeName
+					updated = true
+				}
+			}
+		}
+		// Only append the volume mount if it is not already present and if it is part of the main container
+		if vol, ok := volumesBySubPath[configMapDataKey]; ok && !volumeFound {
+			statefulSet.Spec.Template.Spec.Containers[i+1].VolumeMounts = append(sidecar.VolumeMounts, vol)
 			updated = true
 		}
 	}

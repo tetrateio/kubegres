@@ -107,6 +107,7 @@ func (r *ResourcesCreatorFromTemplate) CreatePrimaryStatefulSet(statefulSetInsta
 	primaryServiceName := r.kubegresContext.GetServiceResourceName(true)
 	r.initStatefulSet(primaryServiceName, &statefulSetTemplate, statefulSetInstanceIndex)
 	r.customConfigSpecHelper.ConfigureStatefulSet(&statefulSetTemplate)
+
 	return statefulSetTemplate, nil
 }
 
@@ -236,6 +237,8 @@ func (r *ResourcesCreatorFromTemplate) initStatefulSet(
 	container.Env = append(container.Env, core.EnvVar{Name: ctx.EnvVarNamePgData, Value: postgresSpec.Database.VolumeMount + "/" + ctx.DefaultDatabaseFolder})
 	container.Env = append(container.Env, r.kubegresContext.Kubegres.Spec.Env...)
 
+	statefulSetTemplateSpec.Containers = append(statefulSetTemplateSpec.Containers, r.kubegresContext.Kubegres.Spec.SidecarContainers...)
+
 	statefulSetTemplate.Spec.VolumeClaimTemplates[0].Spec.StorageClassName = postgresSpec.Database.StorageClassName
 	statefulSetTemplate.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests = core.ResourceList{core.ResourceStorage: resource.MustParse(postgresSpec.Database.Size)}
 
@@ -266,9 +269,13 @@ func (r *ResourcesCreatorFromTemplate) initStatefulSet(
 	}
 
 	if postgresSpec.Volume.VolumeMounts != nil {
-		statefulSetTemplate.Spec.Template.Spec.Containers[0].VolumeMounts = append(statefulSetTemplate.Spec.Template.Spec.Containers[0].VolumeMounts, r.kubegresContext.Kubegres.Spec.Volume.VolumeMounts...)
-		if len(statefulSetTemplate.Spec.Template.Spec.InitContainers) > 0 {
-			statefulSetTemplate.Spec.Template.Spec.InitContainers[0].VolumeMounts = append(statefulSetTemplate.Spec.Template.Spec.InitContainers[0].VolumeMounts, r.kubegresContext.Kubegres.Spec.Volume.VolumeMounts...)
+		for i := range statefulSetTemplate.Spec.Template.Spec.Containers {
+			statefulSetTemplate.Spec.Template.Spec.Containers[i].VolumeMounts =
+				append(statefulSetTemplate.Spec.Template.Spec.Containers[i].VolumeMounts, r.kubegresContext.Kubegres.Spec.Volume.VolumeMounts...)
+		}
+		for i := range statefulSetTemplate.Spec.Template.Spec.InitContainers {
+			statefulSetTemplate.Spec.Template.Spec.InitContainers[i].VolumeMounts =
+				append(statefulSetTemplate.Spec.Template.Spec.InitContainers[i].VolumeMounts, r.kubegresContext.Kubegres.Spec.Volume.VolumeMounts...)
 		}
 	}
 

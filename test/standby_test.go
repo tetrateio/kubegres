@@ -6,7 +6,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	v12 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
@@ -24,13 +24,14 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("standby"), func() {
 		namespace := resourceConfigs.DefaultNamespace
 		test.resourceRetriever = util.CreateTestResourceRetriever(k8sClientTest, namespace)
 		test.resourceCreator = util.CreateTestResourceCreator(k8sClientTest, test.resourceRetriever, namespace)
+		Expect(k8sClientTest).ToNot(BeNil())
 		test.standbyDBQueryTestCases = testcases.InitDbQueryTestCasesWithConnections(
-			util.InitExternalDbConnectionDbUtil(test.resourceCreator, resourceConfigs.ServiceToSqlQueryExternalDbNodePort),
-			util.InitDbConnectionDbUtil(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort, false),
+			util.InitExternalDbConnectionDbUtil(test.resourceCreator, resourceConfigs.ServiceToSqlQueryExternalDbNodePort, k8sClientTest),
+			util.InitDbConnectionDbUtil(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort, false, k8sClientTest),
 		)
 		test.activeDBQueryTestCases = testcases.InitDbQueryTestCasesWithConnections(
-			util.InitDbConnectionDbUtil(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryPrimaryDbNodePort, true),
-			util.InitDbConnectionDbUtil(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort, false),
+			util.InitDbConnectionDbUtil(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryPrimaryDbNodePort, true, k8sClientTest),
+			util.InitDbConnectionDbUtil(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort, false, k8sClientTest),
 		)
 	})
 
@@ -357,7 +358,7 @@ func (r *StandByTest) whenKubegresIsUpdated() {
 
 func (r *StandByTest) thenErrorEventShouldBeLogged() {
 	expectedErrorEvent := util.EventRecord{
-		Eventtype: v12.EventTypeWarning,
+		Eventtype: corev1.EventTypeWarning,
 		Reason:    "SpecCheckErr",
 		Message:   "In the Resources Spec the value of 'spec.standby.primaryEndpoint' is undefined. Please set a value otherwise this operator cannot work correctly.",
 	}

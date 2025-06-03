@@ -27,7 +27,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	v12 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
@@ -41,12 +41,10 @@ var _ = Describe("Setting Kubegres spec 'resource'", Label("group:5"), func() {
 	var test = SpecResourceTest{}
 
 	BeforeEach(func() {
-		//Skip("Temporarily skipping test")
-
 		namespace := resourceConfigs.DefaultNamespace
 		test.resourceRetriever = util.CreateTestResourceRetriever(k8sClientTest, namespace)
 		test.resourceCreator = util.CreateTestResourceCreator(k8sClientTest, test.resourceRetriever, namespace)
-		test.dbQueryTestCases = testcases.InitDbQueryTestCases(test.resourceCreator, resourceConfigs.KubegresResourceName)
+		test.dbQueryTestCases = testcases.InitDbQueryTestCases(test.resourceCreator, resourceConfigs.KubegresResourceName, k8sClientTest)
 	})
 
 	AfterEach(func() {
@@ -137,13 +135,13 @@ func (r *SpecResourceTest) whenKubernetesIsUpdated() {
 	r.resourceCreator.UpdateResource(r.kubegresResource, "Kubegres")
 }
 
-func (r *SpecResourceTest) givenResources(cpuLimit, memLimit, cpuReq, memReq string) v12.ResourceRequirements {
-	return v12.ResourceRequirements{
-		Limits: v12.ResourceList{
+func (r *SpecResourceTest) givenResources(cpuLimit, memLimit, cpuReq, memReq string) corev1.ResourceRequirements {
+	return corev1.ResourceRequirements{
+		Limits: corev1.ResourceList{
 			"cpu":    resource.MustParse(cpuLimit),
 			"memory": resource.MustParse(memLimit),
 		},
-		Requests: v12.ResourceList{
+		Requests: corev1.ResourceList{
 			"cpu":    resource.MustParse(cpuReq),
 			"memory": resource.MustParse(memReq),
 		},
@@ -152,17 +150,17 @@ func (r *SpecResourceTest) givenResources(cpuLimit, memLimit, cpuReq, memReq str
 
 func (r *SpecResourceTest) givenNewKubegresSpecIsWithoutResources(specNbreReplicas int32) {
 	r.kubegresResource = resourceConfigs.LoadKubegresYaml()
-	r.kubegresResource.Spec.Resources = v12.ResourceRequirements{}
+	r.kubegresResource.Spec.Resources = corev1.ResourceRequirements{}
 	r.kubegresResource.Spec.Replicas = &specNbreReplicas
 }
 
-func (r *SpecResourceTest) givenNewKubegresSpecIsSetTo(resources v12.ResourceRequirements, specNbreReplicas int32) {
+func (r *SpecResourceTest) givenNewKubegresSpecIsSetTo(resources corev1.ResourceRequirements, specNbreReplicas int32) {
 	r.kubegresResource = resourceConfigs.LoadKubegresYaml()
 	r.kubegresResource.Spec.Resources = resources
 	r.kubegresResource.Spec.Replicas = &specNbreReplicas
 }
 
-func (r *SpecResourceTest) givenExistingKubegresSpecIsSetTo(resources v12.ResourceRequirements) {
+func (r *SpecResourceTest) givenExistingKubegresSpecIsSetTo(resources corev1.ResourceRequirements) {
 	var err error
 	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
 
@@ -190,7 +188,7 @@ func (r *SpecResourceTest) thenStatefulSetStatesShouldBeWithoutResources(nbrePri
 
 		for _, resource := range kubegresResources.Resources {
 			currentResources := resource.StatefulSet.Spec.Template.Spec.Containers[0].Resources
-			emptyResources := v12.ResourceRequirements{}
+			emptyResources := corev1.ResourceRequirements{}
 
 			if !reflect.DeepEqual(currentResources, emptyResources) {
 				log.Println("StatefulSet '" + resource.StatefulSet.Name + emptyResources.String() + "  ' doesn't have the expected spec 'resources' which should be the default one. " +
@@ -213,7 +211,7 @@ func (r *SpecResourceTest) thenStatefulSetStatesShouldBeWithoutResources(nbrePri
 	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
 }
 
-func (r *SpecResourceTest) thenStatefulSetStatesShouldBe(expectedResources v12.ResourceRequirements, nbrePrimary, nbreReplicas int) bool {
+func (r *SpecResourceTest) thenStatefulSetStatesShouldBe(expectedResources corev1.ResourceRequirements, nbrePrimary, nbreReplicas int) bool {
 	return Eventually(func() bool {
 
 		kubegresResources, err := r.resourceRetriever.GetKubegresResources()
@@ -265,11 +263,11 @@ func (r *SpecResourceTest) thenDeployedKubegresSpecShouldWithoutResource() {
 		return
 	}
 	currentResources := r.kubegresResource.Spec.Resources
-	emptyResources := v12.ResourceRequirements{}
+	emptyResources := corev1.ResourceRequirements{}
 	Expect(currentResources).Should(Equal(emptyResources))
 }
 
-func (r *SpecResourceTest) thenDeployedKubegresSpecShouldBeSetTo(expectedResources v12.ResourceRequirements) {
+func (r *SpecResourceTest) thenDeployedKubegresSpecShouldBeSetTo(expectedResources corev1.ResourceRequirements) {
 	var err error
 	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
 

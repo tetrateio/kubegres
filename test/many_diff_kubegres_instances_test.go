@@ -49,8 +49,8 @@ var _ = Describe("Testing when there are 2 different Kubegres instances running 
 		namespace := resourceConfigs.DefaultNamespace
 		test.resourceRetriever = util.CreateTestResourceRetriever(k8sClientTest, namespace)
 		test.resourceCreator = util.CreateTestResourceCreator(k8sClientTest, test.resourceRetriever, namespace)
-		test.kubegresOneDbQueryTestCases = testcases.InitDbQueryTestCasesWithNodePorts(test.resourceCreator, kubegresOne, resourceConfigs.ServiceToSqlQueryPrimaryDbNodePort, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort)
-		test.kubegresTwoDbQueryTestCases = testcases.InitDbQueryTestCasesWithNodePorts(test.resourceCreator, kubegresTwo, resourceConfigs.ServiceToSqlQueryPrimaryDbNodePort+2, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort+2)
+		test.kubegresOneDbQueryTestCases = testcases.InitDbQueryTestCasesWithNodePorts(test.resourceCreator, kubegresOne, resourceConfigs.ServiceToSqlQueryPrimaryDbNodePort, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort, k8sClientTest)
+		test.kubegresTwoDbQueryTestCases = testcases.InitDbQueryTestCasesWithNodePorts(test.resourceCreator, kubegresTwo, resourceConfigs.ServiceToSqlQueryPrimaryDbNodePort+2, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort+2, k8sClientTest)
 	})
 
 	AfterEach(func() {

@@ -46,7 +46,7 @@ var _ = Describe("Setting Kubegres spec 'volume.volumeClaimTemplates'", Label("g
 		namespace := resourceConfigs.DefaultNamespace
 		test.resourceRetriever = util.CreateTestResourceRetriever(k8sClientTest, namespace)
 		test.resourceCreator = util.CreateTestResourceCreator(k8sClientTest, test.resourceRetriever, namespace)
-		test.dbQueryTestCases = testcases.InitDbQueryTestCases(test.resourceCreator, resourceConfigs.KubegresResourceName)
+		test.dbQueryTestCases = testcases.InitDbQueryTestCases(test.resourceCreator, resourceConfigs.KubegresResourceName, k8sClientTest)
 	})
 
 	AfterEach(func() {
@@ -82,12 +82,9 @@ var _ = Describe("Setting Kubegres spec 'volume.volumeClaimTemplates'", Label("g
 		})
 	})
 
-	Context("GIVEN new Kubegres is created with specs 'volume.volumeClaimTemplates' and 'volume.volumeMount' and later "+
-		"it is updated by adding/removing 'volume.volumeClaimTemplates'", func() {
+	Context("GIVEN new Kubegres is created with specs 'volume.volumeClaimTemplates' and 'volume.volumeMount' and later it is updated by adding/removing 'volume.volumeClaimTemplates'", func() {
 
-		It("GIVEN new Kubegres is created with a new custom 'volume.volumeClaimTemplates' and 'volume.volumeMount' "+
-			"AND spec 'replica' set to 3 THEN 1 primary and 2 replica should be created with one custom volumeClaimTemplate "+
-			"and volumeMount in StatefulSets", func() {
+		It("GIVEN new Kubegres is created with a new custom 'volume.volumeClaimTemplates' and 'volume.volumeMount' AND spec 'replica' set to 3 THEN 1 primary and 2 replica should be created with one custom volumeClaimTemplate and volumeMount in StatefulSets", func() {
 
 			log.Print("GIVEN new Kubegres is created with a new custom 'volume.volumeClaimTemplates' and " +
 				"'volume.volumeMount' and spec 'replica' set to 3")
