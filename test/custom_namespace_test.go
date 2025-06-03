@@ -46,7 +46,7 @@ var _ = Describe("Creating Kubegres with a custom namespace", Label("group:1"), 
 		namespace := customNamespace
 		test.resourceRetriever = util.CreateTestResourceRetriever(k8sClientTest, namespace)
 		test.resourceCreator = util.CreateTestResourceCreator(k8sClientTest, test.resourceRetriever, namespace)
-		test.dbQueryTestCases = testcases.InitDbQueryTestCasesWithNodePorts(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryPrimaryDbNodePort+4, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort+4)
+		test.dbQueryTestCases = testcases.InitDbQueryTestCasesWithNodePorts(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryPrimaryDbNodePort+4, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort+4, k8sClientTest)
 	})
 
 	AfterEach(func() {

@@ -46,7 +46,7 @@ var _ = Describe("Setting Kubegres specs 'volume.volume' and 'volume.volumeMount
 		namespace := resourceConfigs.DefaultNamespace
 		test.resourceRetriever = util.CreateTestResourceRetriever(k8sClientTest, namespace)
 		test.resourceCreator = util.CreateTestResourceCreator(k8sClientTest, test.resourceRetriever, namespace)
-		test.dbQueryTestCases = testcases.InitDbQueryTestCases(test.resourceCreator, resourceConfigs.KubegresResourceName)
+		test.dbQueryTestCases = testcases.InitDbQueryTestCases(test.resourceCreator, resourceConfigs.KubegresResourceName, k8sClientTest)
 	})
 
 	AfterEach(func() {
@@ -468,9 +468,12 @@ func (r *SpecVolumeAndVolumeMountTest) thenStatefulSetsStatesShouldBe(
 			}
 
 			for _, customVolumeMount := range expectedCustomVolumeMounts {
-				if !r.doesCustomVolumeMountExistsInStatefulSet(customVolumeMount, resource.StatefulSet.Spec.Template.Spec.Containers[0].VolumeMounts) {
-					log.Println("StatefulSet '" + resource.StatefulSet.Name + "' doesn't have the expected custom volumeMount with name: '" + customVolumeMount.Name + "'. Waiting...")
-					return false
+				for _, container := range resource.StatefulSet.Spec.Template.Spec.Containers {
+					if !r.doesCustomVolumeMountExistsInStatefulSet(customVolumeMount, container.VolumeMounts) {
+						log.Printf("Container %q of StatefulSet %q doesn't have the expected custom volumeMount with name: %q. Waiting...\n",
+							container.Name, resource.StatefulSet.Name, customVolumeMount.Name)
+						return false
+					}
 				}
 
 				if len(resource.StatefulSet.Spec.Template.Spec.InitContainers) > 0 {
@@ -481,11 +484,14 @@ func (r *SpecVolumeAndVolumeMountTest) thenStatefulSetsStatesShouldBe(
 				}
 			}
 
-			for _, volumeMountInStatefulSet := range resource.StatefulSet.Spec.Template.Spec.Containers[0].VolumeMounts {
-				if r.isCustomVolumeMount(volumeMountInStatefulSet, kubegresContext) &&
-					!r.isVolumeMountAnExpectedCustomVolumeMount(volumeMountInStatefulSet, expectedCustomVolumeMounts) {
-					log.Println("StatefulSet '" + resource.StatefulSet.Name + "' still has custom volumeMount with name: '" + volumeMountInStatefulSet.Name + "'. Waiting...")
-					return false
+			for _, container := range resource.StatefulSet.Spec.Template.Spec.Containers {
+				for _, volumeMountInStatefulSet := range container.VolumeMounts {
+					if r.isCustomVolumeMount(volumeMountInStatefulSet, kubegresContext) &&
+						!r.isVolumeMountAnExpectedCustomVolumeMount(volumeMountInStatefulSet, expectedCustomVolumeMounts) {
+						log.Printf("Container %q of StatefulSet %q still has custom volumeMount with name: %q. Waiting...\n", container.Name, resource.StatefulSet.Name,
+							volumeMountInStatefulSet.Name)
+						return false
+					}
 				}
 			}
 			if len(resource.StatefulSet.Spec.Template.Spec.InitContainers) > 0 {
@@ -508,6 +514,7 @@ func (r *SpecVolumeAndVolumeMountTest) thenStatefulSetsStatesShouldBe(
 			return true
 		}
 
+		log.Println("Deployed and Ready StatefulSet check failed. Waiting for the next check...")
 		return false
 
 	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())

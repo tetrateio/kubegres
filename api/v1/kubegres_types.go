@@ -82,6 +82,7 @@ type KubegresSpec struct {
 	Probe              Probe                     `json:"probe,omitempty"`
 	ServiceAccountName string                    `json:"serviceAccountName,omitempty"`
 	Standby            Standby                   `json:"standby,omitempty"`
+	SidecarContainers  []v1.Container            `json:"sidecarContainers,omitempty"`
 }
 
 type Standby struct {

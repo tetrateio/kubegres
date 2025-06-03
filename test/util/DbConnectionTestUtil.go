@@ -21,14 +21,17 @@ limitations under the License.
 package util
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
 	"strconv"
 
 	_ "github.com/lib/pq"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"reactive-tech.io/kubegres/test/resourceConfigs"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type DbConnectionDbUtil struct {
@@ -41,13 +44,14 @@ type DbConnectionDbUtil struct {
 	kubegresName       string
 	serviceToQueryDb   runtime.Object
 	resourceCreator    TestResourceCreator
+	k8sClient          client.Client
 }
 
 type AccountUser struct {
 	UserId, Username string
 }
 
-func InitDbConnectionDbUtil(resourceCreator TestResourceCreator, kubegresName string, nodePort int, isPrimaryDb bool) DbConnectionDbUtil {
+func InitDbConnectionDbUtil(resourceCreator TestResourceCreator, kubegresName string, nodePort int, isPrimaryDb bool, k8sClient client.Client) DbConnectionDbUtil {
 
 	serviceToQueryDb, err := resourceCreator.CreateServiceToSqlQueryDb(kubegresName, nodePort, isPrimaryDb)
 	if err != nil {
@@ -66,10 +70,11 @@ func InitDbConnectionDbUtil(resourceCreator TestResourceCreator, kubegresName st
 		kubegresName:     kubegresName,
 		serviceToQueryDb: serviceToQueryDb,
 		resourceCreator:  resourceCreator,
+		k8sClient:        k8sClient,
 	}
 }
 
-func InitExternalDbConnectionDbUtil(resourceCreator TestResourceCreator, nodePort int) DbConnectionDbUtil {
+func InitExternalDbConnectionDbUtil(resourceCreator TestResourceCreator, nodePort int, k8sClient client.Client) DbConnectionDbUtil {
 	serviceToQueryDb, err := resourceCreator.CreateServiceToSqlQueryExternalDb(nodePort)
 	if err != nil {
 		log.Fatal("Unable to create a Service on port '"+strconv.Itoa(nodePort)+"' to query external DB.", err)
@@ -82,6 +87,7 @@ func InitExternalDbConnectionDbUtil(resourceCreator TestResourceCreator, nodePor
 		kubegresName:     "External DB",
 		serviceToQueryDb: serviceToQueryDb,
 		resourceCreator:  resourceCreator,
+		k8sClient:        k8sClient,
 	}
 }
 
@@ -123,15 +129,32 @@ func (r *DbConnectionDbUtil) InsertUser() bool {
 
 func (r *DbConnectionDbUtil) connect() bool {
 
+	var nodeList v1.NodeList
+	err := r.k8sClient.List(context.Background(), &nodeList)
+	if err != nil {
+		return false
+	}
+	if len(nodeList.Items) == 0 {
+		return false
+	}
+	node := nodeList.Items[0]
+	var nodeAddress string
+	for _, address := range node.Status.Addresses {
+		if address.Type != v1.NodeInternalIP {
+			continue
+		}
+		nodeAddress = address.Address
+		break
+	}
+
 	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s "+
 		"password=%s dbname=%s sslmode=disable",
-		resourceConfigs.DbHost, r.Port, resourceConfigs.DbUser, resourceConfigs.DbPassword, resourceConfigs.DbName)
+		nodeAddress, r.Port, resourceConfigs.DbUser, resourceConfigs.DbPassword, resourceConfigs.DbName)
 
 	if r.ping(psqlInfo) {
 		return true
 	}
 
-	var err error
 	r.db, err = sql.Open("postgres", psqlInfo)
 	if err != nil {
 		r.logError("Unable to connect to: "+psqlInfo, err)

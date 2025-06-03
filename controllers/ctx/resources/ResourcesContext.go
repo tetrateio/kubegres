@@ -163,6 +163,7 @@ func addStatefulSetSpecEnforcers(rc *ResourcesContext) {
 	affinitySpecEnforcer := statefulset_spec.CreateAffinitySpecEnforcer(rc.KubegresContext)
 	tolerationsSpecEnforcer := statefulset_spec.CreateTolerationsSpecEnforcer(rc.KubegresContext)
 	resourcesSpecEnforcer := statefulset_spec.CreateResourcesSpecEnforcer(rc.KubegresContext)
+	containersSpecEnforcer := statefulset_spec.CreateSidecarContainersSpecEnforcer(rc.KubegresContext)
 	volumeSpecEnforcer := statefulset_spec.CreateVolumeSpecEnforcer(rc.KubegresContext)
 	securityContextSpecEnforcer := statefulset_spec.CreateSecurityContextSpecEnforcer(rc.KubegresContext)
 	livenessProbeSpecEnforcer := statefulset_spec.CreateLivenessProbeSpecEnforcer(rc.KubegresContext)
@@ -172,6 +173,7 @@ func addStatefulSetSpecEnforcers(rc *ResourcesContext) {
 	standbyPrimaryEndpointSpecEnforcer := statefulset_spec.CreateStandbyPrimaryEndpointSpecEnforcer(rc.KubegresContext)
 
 	rc.StatefulSetsSpecsEnforcer = statefulset_spec.CreateStatefulSetsSpecsEnforcer(rc.KubegresContext)
+	rc.StatefulSetsSpecsEnforcer.AddSpecEnforcer(&containersSpecEnforcer)
 	rc.StatefulSetsSpecsEnforcer.AddSpecEnforcer(&imageSpecEnforcer)
 	rc.StatefulSetsSpecsEnforcer.AddSpecEnforcer(&portSpecEnforcer)
 	rc.StatefulSetsSpecsEnforcer.AddSpecEnforcer(&storageClassSizeSpecEnforcer)

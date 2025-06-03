@@ -26,6 +26,7 @@ import (
 	. "github.com/onsi/gomega"
 	"reactive-tech.io/kubegres/test/resourceConfigs"
 	"reactive-tech.io/kubegres/test/util"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type DbQueryTestCases struct {
@@ -33,14 +34,14 @@ type DbQueryTestCases struct {
 	connectionReplicaDb util.DbConnectionDbUtil
 }
 
-func InitDbQueryTestCases(resourceCreator util.TestResourceCreator, kubegresName string) DbQueryTestCases {
-	return InitDbQueryTestCasesWithNodePorts(resourceCreator, kubegresName, resourceConfigs.ServiceToSqlQueryPrimaryDbNodePort, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort)
+func InitDbQueryTestCases(resourceCreator util.TestResourceCreator, kubegresName string, k8sClient client.Client) DbQueryTestCases {
+	return InitDbQueryTestCasesWithNodePorts(resourceCreator, kubegresName, resourceConfigs.ServiceToSqlQueryPrimaryDbNodePort, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort, k8sClient)
 }
 
-func InitDbQueryTestCasesWithNodePorts(resourceCreator util.TestResourceCreator, kubegresName string, primaryServiceNodePort, replicaServiceNodePort int) DbQueryTestCases {
+func InitDbQueryTestCasesWithNodePorts(resourceCreator util.TestResourceCreator, kubegresName string, primaryServiceNodePort, replicaServiceNodePort int, k8sClient client.Client) DbQueryTestCases {
 	return InitDbQueryTestCasesWithConnections(
-		util.InitDbConnectionDbUtil(resourceCreator, kubegresName, primaryServiceNodePort, true),
-		util.InitDbConnectionDbUtil(resourceCreator, kubegresName, replicaServiceNodePort, false),
+		util.InitDbConnectionDbUtil(resourceCreator, kubegresName, primaryServiceNodePort, true, k8sClient),
+		util.InitDbConnectionDbUtil(resourceCreator, kubegresName, replicaServiceNodePort, false, k8sClient),
 	)
 }
 
