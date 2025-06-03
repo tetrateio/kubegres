@@ -23,7 +23,6 @@ package test
 import (
 	"log"
 	"reflect"
-	"slices"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -56,146 +55,70 @@ var _ = Describe("Setting Kubegres spec 'resource'", Label("group:5"), func() {
 		}
 	})
 
-	//Context("GIVEN new Kubegres is created without spec 'resources' and with spec 'replica' set to 3", func() {
-	//
-	//	It("THEN 1 primary and 2 replica should be created without 'resources' values ", func() {
-	//
-	//		log.Print("START OF: Test 'GIVEN new Kubegres is created without spec 'resources' and with spec 'replica' set to 3'")
-	//
-	//		test.givenNewKubegresSpecIsWithoutResources(3)
-	//
-	//		test.whenKubegresIsCreated()
-	//
-	//		test.thenStatefulSetStatesShouldBeWithoutResources(1, 2)
-	//
-	//		test.thenDeployedKubegresSpecShouldWithoutResource()
-	//
-	//		test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
-	//		test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
-	//
-	//		log.Print("END OF: Test 'GIVEN new Kubegres is created without spec 'resources' and with spec 'replica' set to 3'")
-	//	})
-	//})
-	//
-	//Context("GIVEN new Kubegres is created with spec 'resources' set to a value and spec 'replica' set to 3 and later 'resources' is updated to a new value", func() {
-	//
-	//	It("GIVEN new Kubegres is created with spec 'resources' set to a value and spec 'replica' set to 3 THEN 1 primary and 2 replica should be created with spec 'resources' set the value", func() {
-	//
-	//		log.Print("START OF: Test 'GIVEN new Kubegres is created with spec 'resources' set to a value and spec 'replica' set to 3")
-	//
-	//		resources := test.givenResources("2", "2Gi", "1", "1Gi")
-	//
-	//		test.givenNewKubegresSpecIsSetTo(resources, 3)
-	//
-	//		test.whenKubegresIsCreated()
-	//
-	//		test.thenStatefulSetStatesShouldBe(resources, 1, 2)
-	//
-	//		test.thenDeployedKubegresSpecShouldBeSetTo(resources)
-	//
-	//		test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
-	//		test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
-	//
-	//		test.keepCreatedResourcesForNextTest = true
-	//
-	//		log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'resources' set to a value and spec 'replica' set to 3'")
-	//	})
-	//
-	//	It("GIVEN existing Kubegres is updated with spec 'resources' set to a new value THEN 1 primary and 2 replica should be re-deployed with spec 'resources' set the new value", func() {
-	//
-	//		log.Print("START OF: Test 'GIVEN existing Kubegres is updated with spec 'resources' set to a new value")
-	//
-	//		newResources := test.givenResources("2", "4Gi", "500m", "512Mi")
-	//
-	//		test.givenExistingKubegresSpecIsSetTo(newResources)
-	//
-	//		test.whenKubernetesIsUpdated()
-	//
-	//		test.thenStatefulSetStatesShouldBe(newResources, 1, 2)
-	//
-	//		test.thenDeployedKubegresSpecShouldBeSetTo(newResources)
-	//
-	//		test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
-	//		test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
-	//
-	//		log.Print("END OF: Test 'GIVEN existing Kubegres is updated with spec 'resources' set to a new value")
-	//	})
-	//})
+	Context("GIVEN new Kubegres is created without spec 'resources' and with spec 'replica' set to 3", func() {
 
-	Context("GIVEN new Kubegres is created with spec 'sidecarContainer'", func() {
+		It("THEN 1 primary and 2 replica should be created without 'resources' values ", func() {
 
-		It("THEN created StatefulSets should have sidecarContainer set in pod template", func() {
+			log.Print("START OF: Test 'GIVEN new Kubegres is created without spec 'resources' and with spec 'replica' set to 3'")
 
-			log.Print("START OF: Test 'GIVEN new Kubegres is created with spec 'sidecarContainer")
-
-			containers := test.givenSidecarContainers("sidecarcontainer", "busybox")
-
-			test.givenNewKubegresSpecHasSidecarContainersSetTo(containers)
+			test.givenNewKubegresSpecIsWithoutResources(3)
 
 			test.whenKubegresIsCreated()
 
-			test.thenStatefulSetStatesShouldHaveContainer("sidecarcontainer", "busybox", []string{"/bin/sleep", "99999"}, nil)
-			test.thenStatefulSetStatesShouldHaveNbreContainers(2) // 1 main container + 1 sidecar container
+			test.thenStatefulSetStatesShouldBeWithoutResources(1, 2)
+
+			test.thenDeployedKubegresSpecShouldWithoutResource()
 
 			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
+
+			log.Print("END OF: Test 'GIVEN new Kubegres is created without spec 'resources' and with spec 'replica' set to 3'")
+		})
+	})
+
+	Context("GIVEN new Kubegres is created with spec 'resources' set to a value and spec 'replica' set to 3 and later 'resources' is updated to a new value", func() {
+
+		It("GIVEN new Kubegres is created with spec 'resources' set to a value and spec 'replica' set to 3 THEN 1 primary and 2 replica should be created with spec 'resources' set the value", func() {
+
+			log.Print("START OF: Test 'GIVEN new Kubegres is created with spec 'resources' set to a value and spec 'replica' set to 3")
+
+			resources := test.givenResources("2", "2Gi", "1", "1Gi")
+
+			test.givenNewKubegresSpecIsSetTo(resources, 3)
+
+			test.whenKubegresIsCreated()
+
+			test.thenStatefulSetStatesShouldBe(resources, 1, 2)
+
+			test.thenDeployedKubegresSpecShouldBeSetTo(resources)
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
 
 			test.keepCreatedResourcesForNextTest = true
 
-			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'sidecarContainer")
+			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'resources' set to a value and spec 'replica' set to 3'")
 		})
 
-		It("THEN delete `sidecarContainer` field should remove the container form pod template spec", func() {
-			log.Print("START OF: Test 'THEN delete `sidecarContainer` field should remove the container form pod template spec")
+		It("GIVEN existing Kubegres is updated with spec 'resources' set to a new value THEN 1 primary and 2 replica should be re-deployed with spec 'resources' set the new value", func() {
 
-			test.givenExistingKubegresSpecSidecarContainersIsSetTo(nil)
+			log.Print("START OF: Test 'GIVEN existing Kubegres is updated with spec 'resources' set to a new value")
+
+			newResources := test.givenResources("2", "4Gi", "500m", "512Mi")
+
+			test.givenExistingKubegresSpecIsSetTo(newResources)
 
 			test.whenKubernetesIsUpdated()
 
-			test.thenStatefulSetStatesShouldNOTHaveContainer("sidecarcontainer", "busybox")
-			test.thenStatefulSetStatesShouldHaveNbreContainers(1)
-			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.thenStatefulSetStatesShouldBe(newResources, 1, 2)
 
-			test.keepCreatedResourcesForNextTest = true
-
-			log.Print("END OF: Test 'THEN delete `sidecarContainer` field shouold remove the container form pod template spec")
-		})
-
-		It("THEN add back `sidecarContainer` field should add the container back to pod template spec", func() {
-			log.Print("START OF: Test 'THEN add back `sidecarContainer` field should add the container back to pod template spec")
-
-			containers := test.givenSidecarContainers("sidecarcontainer", "busybox")
-			test.givenExistingKubegresSpecSidecarContainersIsSetTo(containers)
-
-			test.whenKubernetesIsUpdated()
-			test.thenStatefulSetStatesShouldHaveContainer("sidecarcontainer", "busybox", []string{"/bin/sleep", "99999"}, nil)
-			test.thenStatefulSetStatesShouldHaveNbreContainers(2) // 1 main container + 1 sidecar container
+			test.thenDeployedKubegresSpecShouldBeSetTo(newResources)
 
 			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
 
-			test.keepCreatedResourcesForNextTest = true
-
-			log.Print("END OF: Test 'THEN add back `sidecarContainer` field should add the container back to pod template spec")
+			log.Print("END OF: Test 'GIVEN existing Kubegres is updated with spec 'resources' set to a new value")
 		})
-
-		It("THEN modify `sidecarContainer` args and env should update the container in pod template spec", func() {
-			log.Print("START OF: Test 'THEN modify `sidecarContainer` args and env should update the container in pod template spec")
-
-			containers := test.givenSidecarContainers("sidecarcontainer", "busybox:1.37.0")
-			newCommand := []string{"/bin/sleep", "99999"}
-			newEnv := []corev1.EnvVar{{Name: "FOO", Value: "BAR"}}
-			containers[0].Command = newCommand
-			containers[0].Env = newEnv
-			test.givenExistingKubegresSpecSidecarContainersIsSetTo(containers)
-
-			test.whenKubernetesIsUpdated()
-			test.thenStatefulSetStatesShouldHaveContainer("sidecarcontainer", "busybox:1.37.0", newCommand, newEnv)
-			test.thenStatefulSetStatesShouldHaveNbreContainers(2) // 1 main container + 1 sidecar container
-
-			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
-
-			log.Print("END OF: Test 'THEN modify `sidecarContainer` args and env should update the container in pod template spec")
-		})
-
 	})
 
 })
@@ -356,102 +279,4 @@ func (r *SpecResourceTest) thenDeployedKubegresSpecShouldBeSetTo(expectedResourc
 
 	currentResources := r.kubegresResource.Spec.Resources
 	Expect(currentResources).Should(Equal(expectedResources))
-}
-
-func (r *SpecResourceTest) givenSidecarContainers(name, image string) []corev1.Container {
-	return []corev1.Container{
-		{
-			Name:    name,
-			Image:   image,
-			Command: []string{"/bin/sleep", "99999"},
-		},
-	}
-}
-
-func (r *SpecResourceTest) givenNewKubegresSpecHasSidecarContainersSetTo(containers []corev1.Container) {
-	r.kubegresResource = resourceConfigs.LoadKubegresYaml()
-	r.kubegresResource.Spec.SidecarContainers = containers
-	r.kubegresResource.Spec.Replicas = func(i int32) *int32 { return &i }(1)
-}
-
-func (r *SpecResourceTest) thenStatefulSetStatesShouldHaveContainer(containerName string, containerImage string, cmd []string, vars []corev1.EnvVar) bool {
-	return r.assertStatefulSetsResourcesContainers(containerName, containerImage, cmd, vars, true)
-}
-
-func (r *SpecResourceTest) givenExistingKubegresSpecSidecarContainersIsSetTo(containers []corev1.Container) {
-	var err error
-	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
-	if err != nil {
-		log.Println("Error while getting Kubegres resource : ", err)
-		Expect(err).Should(Succeed())
-		return
-	}
-
-	r.kubegresResource.Spec.SidecarContainers = containers
-}
-
-func (r *SpecResourceTest) thenStatefulSetStatesShouldHaveNbreContainers(numberOfContainers int) bool {
-	return Eventually(func() bool {
-
-		kubegresResources, err := r.resourceRetriever.GetKubegresResources()
-		if err != nil && !apierrors.IsNotFound(err) {
-			log.Println("ERROR while retrieving Kubegres kubegresResources")
-			return false
-		}
-
-		if kubegresResources.AreAllReady != true {
-			return false
-		}
-
-		for _, res := range kubegresResources.Resources {
-			if len(res.StatefulSet.Spec.Template.Spec.Containers) != numberOfContainers {
-				log.Println("StatefulSet '" + res.StatefulSet.Name + "' doesn't have the expected number of containers'")
-				return false
-			}
-		}
-
-		return true
-	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
-}
-
-func (r *SpecResourceTest) assertStatefulSetsResourcesContainers(name, image string, cmd []string, vars []corev1.EnvVar, isFound bool) bool {
-	return Eventually(func() bool {
-		kubegresResources, err := r.resourceRetriever.GetKubegresResources()
-		if err != nil && !apierrors.IsNotFound(err) {
-			log.Println("ERROR while retrieving Kubegres kubegresResources")
-			return false
-		}
-
-		if !kubegresResources.AreAllReady {
-			return false
-		}
-
-		containerFound := false
-		for _, resource := range kubegresResources.Resources {
-			for _, container := range resource.StatefulSet.Spec.Template.Spec.Containers {
-				if container.Name == name && container.Image == image {
-					containerFound = slices.Equal(container.Command, cmd) && reflect.DeepEqual(container.Env, vars)
-					break
-				}
-			}
-		}
-		log.Printf("Container found: %v, expected isFound: %v, name: %s, image: %s, cmd: %s, env: %s\n",
-			containerFound, isFound, name, image, cmd, vars)
-		return containerFound == isFound
-	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
-}
-
-func (r *SpecResourceTest) thenStatefulSetStatesShouldNOTHaveContainer(name, image string) bool {
-	return r.assertStatefulSetsResourcesContainers(name, image, nil, nil, false)
-}
-
-func (r *SpecResourceTest) setAnnotationsOnExisitgKubegres(annnotations map[string]string) {
-	var err error
-	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
-	if err != nil {
-		log.Println("Error while getting Kubegres resource : ", err)
-		Expect(err).Should(Succeed())
-		return
-	}
-	r.kubegresResource.SetAnnotations(annnotations)
 }

@@ -163,7 +163,7 @@ func addStatefulSetSpecEnforcers(rc *ResourcesContext) {
 	affinitySpecEnforcer := statefulset_spec.CreateAffinitySpecEnforcer(rc.KubegresContext)
 	tolerationsSpecEnforcer := statefulset_spec.CreateTolerationsSpecEnforcer(rc.KubegresContext)
 	resourcesSpecEnforcer := statefulset_spec.CreateResourcesSpecEnforcer(rc.KubegresContext)
-	containersSpecEnforcer := statefulset_spec.CreateContainersSpecEnforcer(rc.KubegresContext)
+	containersSpecEnforcer := statefulset_spec.CreateSidecarContainersSpecEnforcer(rc.KubegresContext)
 	volumeSpecEnforcer := statefulset_spec.CreateVolumeSpecEnforcer(rc.KubegresContext)
 	securityContextSpecEnforcer := statefulset_spec.CreateSecurityContextSpecEnforcer(rc.KubegresContext)
 	livenessProbeSpecEnforcer := statefulset_spec.CreateLivenessProbeSpecEnforcer(rc.KubegresContext)

@@ -14,6 +14,12 @@ type SidecarContainersSpecEnforcer struct {
 	kubegresContext ctx.KubegresContext
 }
 
+func CreateSidecarContainersSpecEnforcer(ctx ctx.KubegresContext) SidecarContainersSpecEnforcer {
+	return SidecarContainersSpecEnforcer{
+		kubegresContext: ctx,
+	}
+}
+
 func (c *SidecarContainersSpecEnforcer) GetSpecName() string {
 	return "SidecarContainersSpec"
 }
@@ -113,10 +119,4 @@ func (c *SidecarContainersSpecEnforcer) EnforceSpec(statefulSet *apps.StatefulSe
 func (c *SidecarContainersSpecEnforcer) OnSpecEnforcedSuccessfully(statefulSet *apps.StatefulSet) error {
 	c.kubegresContext.Log.InfoEvent("StatefulSetOperation", "Sidecar containers spec enforced successfully", "StatefulSet name", statefulSet.Name, "Sidecar containers", c.kubegresContext.Kubegres.Spec.SidecarContainers)
 	return nil
-}
-
-func CreateContainersSpecEnforcer(ctx ctx.KubegresContext) SidecarContainersSpecEnforcer {
-	return SidecarContainersSpecEnforcer{
-		kubegresContext: ctx,
-	}
 }

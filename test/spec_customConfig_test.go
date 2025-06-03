@@ -553,7 +553,8 @@ func (r *SpecCustomConfigTest) thenPodsContainsConfigTypeAssociatedToFile(expect
 			}
 
 			if !r.hasConfigTypeAssociatedToFile(resource.StatefulSet.Spec, expectedVolumeNameForConfigType, expectedConfigFile) {
-				log.Println("Pod '" + resource.Pod.Name + "' doesn't have the expected config type: '" + expectedVolumeNameForConfigType + "' and file: '" + expectedConfigFile + "'. Waiting...")
+				log.Printf("Some container or init container of Pod %q doesn't have the expected config type: %q and file: %q. Waiting...\n",
+					resource.Pod.Name, expectedVolumeNameForConfigType, expectedConfigFile)
 				return false
 			}
 		}
@@ -592,16 +593,29 @@ func (r *SpecCustomConfigTest) thenCronJobContainsConfigMap(expectedConfigMapNam
 }
 
 func (r *SpecCustomConfigTest) hasConfigTypeAssociatedToFile(statefulSetSpec v1.StatefulSetSpec, expectedVolumeNameForConfigType, expectedConfigFile string) bool {
-	for _, volumeMount := range statefulSetSpec.Template.Spec.Containers[0].VolumeMounts {
-		if volumeMount.Name == expectedVolumeNameForConfigType && volumeMount.SubPath == expectedConfigFile {
-			return true
+	allContainersMount := true
+	for _, container := range statefulSetSpec.Template.Spec.Containers {
+		var volumeMountFound bool
+		for _, volumeMount := range container.VolumeMounts {
+			if volumeMount.Name == expectedVolumeNameForConfigType && volumeMount.SubPath == expectedConfigFile {
+				volumeMountFound = true
+				break
+			}
+		}
+		if !volumeMountFound {
+			log.Printf("Container %q does not have the expected volume mount: %q with subPath: %q", container.Name, expectedVolumeNameForConfigType, expectedConfigFile)
+			allContainersMount = false
+			break
 		}
 	}
-	if len(statefulSetSpec.Template.Spec.InitContainers) > 0 {
-		for _, volumeMount := range statefulSetSpec.Template.Spec.InitContainers[0].VolumeMounts {
-			if volumeMount.Name == expectedVolumeNameForConfigType && volumeMount.SubPath == expectedConfigFile {
-				return true
-			}
+
+	if allContainersMount {
+		return true
+	}
+
+	for _, volumeMount := range statefulSetSpec.Template.Spec.InitContainers[0].VolumeMounts {
+		if volumeMount.Name == expectedVolumeNameForConfigType && volumeMount.SubPath == expectedConfigFile {
+			return true
 		}
 	}
 	return false
