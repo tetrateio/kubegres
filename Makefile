@@ -165,6 +165,18 @@ deploy: deploy-check kustomize ## Deploy controller to the K8s cluster specified
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/default | kubectl delete --ignore-not-found=$(ignore-not-found) -f -
 
+check: yq ## sanity check of the project
+	@echo "Checking project sanity..."
+	@go mod tidy
+	$(MAKE) deploy IMG=$(shell $(YQ) '.images[0] | ( .newName + ":" + .newTag)' config/manager/kustomization.yaml)
+	$(MAKE) manifests generate fmt vet
+	@if [ ! -z "`git status -s`" ]; then \
+		echo "Following files are not consistent with CI:"; \
+		git status -s; \
+		git diff; \
+		exit 1; \
+	fi
+
 ##@ Build Dependencies
 
 ## Location to install dependencies to
@@ -177,12 +189,14 @@ KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 KIND ?= $(LOCALBIN)/kind
+YQ ?= $(LOCALBIN)/yq
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v3.8.7
 CONTROLLER_TOOLS_VERSION ?= v0.15.0
 KIND_VERSION ?= v0.19.0
 KUBEBUILDER_TOOLS_VERSION := 1.24.2
+YQ_VERSION ?= v4.45.4
 
 ## Kubebuilder Tools (etcd, kube-apiserver)
 # using tar instead of go install to be able to pin the version, since latest versions are not always compatible with 1.20 go version
@@ -220,3 +234,7 @@ $(KUBEBUILDER_TOOLS):
 	  "https://storage.googleapis.com/kubebuilder-tools/kubebuilder-tools-$(KUBEBUILDER_TOOLS_VERSION)-$(KUBEBUILDER_TOOLS_OS)-$(KUBEBUILDER_TOOLS_ARCH).tar.gz"
 	@mkdir -p $(KUBEBUILDER_TOOLS_DIR)
 	@tar -xvf $(KUBEBUILDER_TOOLS_TGZ) -C $(KUBEBUILDER_TOOLS_DIR) --strip-components 1
+
+.PHONY: yq
+yq:
+	test -s $(LOCALBIN)/yq || GOBIN=$(LOCALBIN) go install github.com/mikefarah/yq/v4@$(YQ_VERSION)
