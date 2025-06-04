@@ -108,11 +108,6 @@ func (c *SidecarContainersSpecEnforcer) EnforceSpec(statefulSet *apps.StatefulSe
 	postgresContainer := statefulSet.Spec.Template.Spec.Containers[0] // the first container is always the postgres container
 	expectedContainers := c.kubegresContext.Kubegres.Spec.SidecarContainers
 	statefulSet.Spec.Template.Spec.Containers = append([]v1.Container{postgresContainer}, expectedContainers...)
-	c.kubegresContext.Log.Info("--> sidecar containers spec", "len(spec.sidecarContainers)", len(expectedContainers))
-	c.kubegresContext.Log.Info("--> Enforcing sidecar containers spec", "len(statefulset.spec.template.spec.containers)", len(statefulSet.Spec.Template.Spec.Containers))
-	if len(statefulSet.Spec.Template.Spec.Containers) >= 2 {
-		c.kubegresContext.Log.Info("--> cmd", "len(statefulSet.Spec.Template.Spec.Containers[1].Command)", len(statefulSet.Spec.Template.Spec.Containers[1].Command))
-	}
 	return true, nil
 }
 
