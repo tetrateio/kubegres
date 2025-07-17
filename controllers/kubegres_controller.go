@@ -41,9 +41,10 @@ import (
 // KubegresReconciler reconciles a Kubegres object
 type KubegresReconciler struct {
 	client.Client
-	Logger   logr.Logger
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Logger      logr.Logger
+	Scheme      *runtime.Scheme
+	Recorder    record.EventRecorder
+	ClusterName string
 }
 
 //+kubebuilder:rbac:groups=kubegres.reactive-tech.io,resources=kubegres,verbs=get;list;watch;create;update;patch;delete
@@ -74,7 +75,7 @@ func (r *KubegresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
-	resourcesContext, err := resources.CreateResourcesContext(kubegres, ctx, r.Logger, r.Client, r.Recorder)
+	resourcesContext, err := resources.CreateResourcesContext(kubegres, ctx, r.Logger, r.Client, r.Recorder, r.ClusterName)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

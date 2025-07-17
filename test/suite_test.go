@@ -56,6 +56,8 @@ var k8sClientTest client.Client
 var testEnv *envtest.Environment
 var eventRecorderTest util.MockEventRecorderTestUtil
 
+const TestClusterName = "testcluster"
+
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
@@ -100,10 +102,11 @@ var _ = BeforeSuite(func() {
 	eventRecorderTest = util.MockEventRecorderTestUtil{}
 
 	err = (&controllers.KubegresReconciler{
-		Client:   k8sManager.GetClient(),
-		Logger:   mockLogger,
-		Scheme:   k8sManager.GetScheme(),
-		Recorder: record.EventRecorder(&eventRecorderTest),
+		Client:      k8sManager.GetClient(),
+		Logger:      mockLogger,
+		Scheme:      k8sManager.GetScheme(),
+		Recorder:    record.EventRecorder(&eventRecorderTest),
+		ClusterName: TestClusterName,
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 

@@ -21,7 +21,10 @@ limitations under the License.
 package v1
 
 import (
+	"time"
+
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -65,6 +68,14 @@ type Probe struct {
 	ReadinessProbe *v1.Probe `json:"readinessProbe,omitempty"`
 }
 
+type ReplicationSlots struct {
+	Enabled                 bool              `json:"enabled,omitempty"`
+	DisableCleanup          bool              `json:"disableCleanup,omitempty"`
+	MaxWalKeepSize          resource.Quantity `json:"maxWalKeepSize,omitempty"`
+	InactiveSlotGracePeriod time.Duration     `json:"inactiveSlotGracePeriod,omitempty"`
+	HealthCheckInterval     time.Duration     `json:"healthCheckInterval,omitempty"`
+}
+
 type KubegresSpec struct {
 	Replicas           *int32                    `json:"replicas,omitempty"`
 	Image              string                    `json:"image,omitempty"`
@@ -77,6 +88,7 @@ type KubegresSpec struct {
 	Env                []v1.EnvVar               `json:"env,omitempty"`
 	Scheduler          KubegresScheduler         `json:"scheduler,omitempty"`
 	Resources          v1.ResourceRequirements   `json:"resources,omitempty"`
+	ReplicationSlots   ReplicationSlots          `json:"replicationSlots,omitempty"`
 	Volume             Volume                    `json:"volume,omitempty"`
 	SecurityContext    *v1.PodSecurityContext    `json:"securityContext,omitempty"`
 	Probe              Probe                     `json:"probe,omitempty"`

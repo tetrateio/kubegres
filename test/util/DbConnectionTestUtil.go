@@ -30,6 +30,7 @@ import (
 	_ "github.com/lib/pq"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"reactive-tech.io/kubegres/internal/replicationslot"
 	"reactive-tech.io/kubegres/test/resourceConfigs"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -214,6 +215,45 @@ func (r *DbConnectionDbUtil) DeleteUser(userIdToDelete string) bool {
 	r.logInfo("Success of: " + sqlQuery)
 	r.NbreInsertedUsers--
 	return true
+}
+
+func (r *DbConnectionDbUtil) GetReplicationSlots() []replicationslot.ReplicationSlot {
+	if !r.connect() {
+		return nil
+	}
+
+	sqlQuery := "SELECT slot_name, active FROM pg_replication_slots;"
+	rows, err := r.db.Query(sqlQuery)
+	if err != nil {
+		r.logError("Error of query: "+sqlQuery+" ", err)
+		return nil
+	}
+
+	r.logInfo("Success of: " + sqlQuery)
+
+	defer rows.Close()
+
+	var replicationSlots []replicationslot.ReplicationSlot
+
+	for rows.Next() {
+		var slotName string
+		var active bool
+		err := rows.Scan(&slotName, &active)
+		if err != nil {
+			r.logError("Error while retrieving a replication slot row: ", err)
+			return nil
+		}
+
+		replicationSlots = append(replicationSlots, replicationslot.ReplicationSlot{Name: slotName, Active: active})
+		r.logInfo("Replication Slot Name: '" + slotName + "', Active: '" + strconv.FormatBool(active) + "'")
+	}
+
+	err = rows.Err()
+	if err != nil {
+		r.logError("Row error: ", err)
+	}
+
+	return replicationSlots
 }
 
 func (r *DbConnectionDbUtil) GetUsers() []AccountUser {

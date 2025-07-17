@@ -69,11 +69,14 @@ type ResourcesContext struct {
 	BackUpCronJobCountSpecEnforcer resources_count_spec.BackUpCronJobCountSpecEnforcer
 }
 
-func CreateResourcesContext(kubegres *postgresV1.Kubegres,
+func CreateResourcesContext(
+	kubegres *postgresV1.Kubegres,
 	ctx context.Context,
 	logger logr.Logger,
 	client client.Client,
-	recorder record.EventRecorder) (rc *ResourcesContext, err error) {
+	recorder record.EventRecorder,
+	clusterName string,
+) (rc *ResourcesContext, err error) {
 
 	setReplicaFieldToZeroIfNil(kubegres)
 
