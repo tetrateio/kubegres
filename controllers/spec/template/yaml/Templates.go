@@ -278,8 +278,16 @@ data:
         then
         chown -R postgres:postgres $PGDATA;
         fi
-
+    
+        grep "primary_slot_name" $PGDATA/postgresql.auto.conf > /dev/null && sed -i '/primary_slot_name/d' $PGDATA/postgresql.auto.conf
+        if [ -n "$POSTGRES_REPLICATION_SLOT" ]; then
+          echo "$dt - Setting replication slot '$POSTGRES_REPLICATION_SLOT' in postgresql.auto.conf";
+          echo "primary_slot_name = '$POSTGRES_REPLICATION_SLOT'" >> $PGDATA/postgresql.auto.conf
+        fi
         echo "$dt - Copy completed";
+    
+        echo "Running configuration - postgresql.auto.conf:"
+        cat $PGDATA/postgresql.auto.conf
 
     else
         # The 'primary_conninfo' parameter is set by the 'pg_basebackup' command in the postgresql.auto.conf file and we cannot assume the exact order of the parameters.
@@ -295,10 +303,18 @@ data:
           primary_conninfo="$host_args $auth_args"
           echo "primary_conninfo = '$primary_conninfo'" > $PGDATA/postgresql.auto.conf
         fi
+    
+        grep "primary_slot_name" $PGDATA/postgresql.auto.conf > /dev/null && sed -i '/primary_slot_name/d' $PGDATA/postgresql.auto.conf
+        if [ -n "$POSTGRES_REPLICATION_SLOT" ]; then
+          echo "$dt - Setting replication slot '$POSTGRES_REPLICATION_SLOT' in postgresql.auto.conf";
+          echo "primary_slot_name = '$POSTGRES_REPLICATION_SLOT'" >> $PGDATA/postgresql.auto.conf
+        fi
   
         echo "$dt - Skipping copy from Primary DB because Replica DB already exists";
+        echo "Running configuration - postgresql.auto.conf:"
+        cat $PGDATA/postgresql.auto.conf
     fi
-
+    
 
   # This script promotes a Replica to a Primary by creating a trigger-file signaling PostgreSql to start the promotion process.
   # It is executed once, when a Replica is set to become a Primary.
@@ -330,7 +346,6 @@ data:
 
     echo "$dt - Promoting by creating the promotion trigger file: '$promotionTriggerFilePath'"
     touch $promotionTriggerFilePath
-
 `
 	PrimaryServiceTemplate = `apiVersion: v1
 kind: Service

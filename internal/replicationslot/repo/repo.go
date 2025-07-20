@@ -44,16 +44,21 @@ type replicationSlotDb struct {
 	Datoid      sql.NullInt64
 	Database    sql.NullString
 	Active      bool
+	ActivePid   sql.NullInt64
 	Xmin        sql.NullInt64
 	CatalogXmin sql.NullInt64
 	RestartLSN  sql.NullString
 }
 
 func toReplicationSlot(s replicationSlotDb) replicationslot.ReplicationSlot {
-	return replicationslot.ReplicationSlot{
+	slot := replicationslot.ReplicationSlot{
 		Name:   s.SlotName,
 		Active: s.Active,
 	}
+	if s.ActivePid.Valid {
+		slot.ActivePid = s.ActivePid.Int64
+	}
+	return slot
 }
 
 // CreateSlot creates a new physical replication slot and returns its details.
@@ -78,7 +83,7 @@ func (r *repo) FindSlotByName(ctx context.Context, name string) (replicationslot
 	findSlotStmt := `
 		SELECT
 			slot_name, plugin, slot_type, datoid, database,
-			active, xmin, catalog_xmin, restart_lsn
+			active, active_pid, xmin, catalog_xmin, restart_lsn
 		FROM pg_replication_slots
 		WHERE slot_name = $1`
 
@@ -90,6 +95,7 @@ func (r *repo) FindSlotByName(ctx context.Context, name string) (replicationslot
 		&rs.Datoid,
 		&rs.Database,
 		&rs.Active,
+		&rs.ActivePid,
 		&rs.Xmin,
 		&rs.CatalogXmin,
 		&rs.RestartLSN,

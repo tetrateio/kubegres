@@ -78,3 +78,17 @@ func (r *KubegresContext) IsReservedVolumeName(volumeName string) bool {
 		volumeName == CustomConfigMapVolumeName ||
 		strings.Contains(volumeName, "kube-api")
 }
+
+type ClusterRole string
+
+const (
+	ActiveRoleName  ClusterRole = "active"
+	StandbyRoleName ClusterRole = "standby"
+)
+
+func (r *KubegresContext) ClusterRole() ClusterRole {
+	if r.Kubegres.Spec.Standby.Enabled {
+		return StandbyRoleName
+	}
+	return ActiveRoleName
+}

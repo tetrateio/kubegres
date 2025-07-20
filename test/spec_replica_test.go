@@ -25,6 +25,7 @@ import (
 	"log"
 	"reflect"
 	"slices"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -116,23 +117,50 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), func() {
 		})
 
 		It("THEN existing Kubegres is updated with replicationSlots enabled and default values", func() {
+			maxWalKeepSize := resource.MustParse("100Mi")
 			test.givenExistingKubegresReplicationSlotsIsSetTo(postgresv1.ReplicationSlots{
-				Enabled: true,
+				Enabled:        true,
+				MaxWalKeepSize: maxWalKeepSize,
 			})
 			test.whenKubernetesIsUpdated()
 
-			test.thenReplicationSlotsShouldHaveDefaultSettings()
+			test.thenReplicationSlotsShouldHaveDefaultSettingsWith(maxWalKeepSize)
 
 			test.thenPodsStatesShouldBe(1, 0)
 
-			test.thenDeployedKubegresSpecShouldBeSetTo(1)
+			test.givenExistingKubegresSpecIsSetTo(2)
+
+			test.whenKubernetesIsUpdated()
+
+			test.thenPodsStatesShouldBe(1, 1)
 
 			test.thenReplicationSlotShouldBeActive()
 
 			test.keepCreatedResourcesForNextTest = true
 		})
 
-		It("THEN existing Kubegres is updated with replicationSlots settings", func() {
+		It("THEN existing Kubegres is with replicationSlots enabled decreased to 0 replicas", func() {
+
+			test.givenExistingKubegresSpecIsSetTo(1)
+
+			test.whenKubernetesIsUpdated()
+
+			test.thenPodsStatesShouldBe(1, 0)
+
+			Eventually(func() bool {
+				runningReplicationSlots := test.dbQueryTestCases.GetReplicationSlots()
+				if len(runningReplicationSlots) == 0 {
+					log.Println("no replication slots found")
+					return true
+				}
+				log.Println("Replication slots found: ", runningReplicationSlots)
+				return false
+			}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+
+			test.keepCreatedResourcesForNextTest = true
+		})
+
+		It("THEN existing Kubegres is updated with wrong replicationSlots settings", func() {
 			kubegres, err := test.resourceRetriever.GetKubegres()
 			Expect(err).ToNot(HaveOccurred())
 
@@ -460,7 +488,7 @@ func (r *SpecReplicaTest) givenExistingKubegresReplicationSlotsIsSetTo(slots pos
 	r.kubegresResource.Spec.ReplicationSlots = slots
 }
 
-func (r *SpecReplicaTest) thenReplicationSlotsShouldHaveDefaultSettings() {
+func (r *SpecReplicaTest) thenReplicationSlotsShouldHaveDefaultSettingsWith(wantMaxWalKeepSize resource.Quantity) {
 
 	Eventually(func() bool {
 		kubegres, err := r.resourceRetriever.GetKubegres()
@@ -470,12 +498,14 @@ func (r *SpecReplicaTest) thenReplicationSlotsShouldHaveDefaultSettings() {
 		}
 
 		if kubegres.Spec.ReplicationSlots.Enabled &&
-			kubegres.Spec.ReplicationSlots.MaxWalKeepSize.Equal(resource.MustParse("1Gi")) &&
+			kubegres.Spec.ReplicationSlots.MaxWalKeepSize.Equal(wantMaxWalKeepSize) &&
 			kubegres.Spec.ReplicationSlots.HealthCheckInterval == 30*time.Second &&
 			kubegres.Spec.ReplicationSlots.InactiveSlotGracePeriod == 2*time.Minute {
 
 			return true
 		}
+		log.Printf("Replication slots settings do not match. Expected: Enabled=%v, MaxWalKeepSize=%s, HealthCheckInterval=%s, InactiveSlotGracePeriod=%s. Got: ReplicationSlots: %v",
+			true, wantMaxWalKeepSize.String(), "30s", "2m", kubegres.Spec.ReplicationSlots)
 
 		return false
 
@@ -536,7 +566,7 @@ func (r *SpecReplicaTest) thenReplicationSlotShouldBeActive() {
 	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
 
 	r.thenReplicationSlotShouldBe(replicationslot.ReplicationSlot{
-		Name:   fmt.Sprintf("%s_%s_%s_%s", kubegresName, TestClusterName, "active", replicaActiveName),
+		Name:   strings.ReplaceAll(fmt.Sprintf("%s_%s_%s_%s", kubegresName, TestClusterName, "active", replicaActiveName), "-", "_"),
 		Active: true,
 	})
 
