@@ -119,26 +119,27 @@ type simpleReplicationSlotCreateDeleter struct {
 
 func (r *simpleReplicationSlotCreateDeleter) Create(statefulSet *v1.StatefulSet) (*v1.StatefulSet, error) {
 	replicationSlotName, err := createReplicationSlotName(r.kubegresContext.Kubegres.GetName(), r.clusterName, statefulSet.GetName(), r.kubegresContext.ClusterRole())
+	objKey := ctrlclient.ObjectKeyFromObject(statefulSet)
 	if err != nil {
-		r.kubegresContext.Log.ErrorEvent("ReplicationSlotCreate", fmt.Errorf("replication slot name: %v: %w", statefulSet.GetObjectKind(), err), "Failed to create replication slot name")
+		r.kubegresContext.Log.ErrorEvent("ReplicationSlotCreate", fmt.Errorf("replication slot name: %v: %w", objKey, err), "Failed to create replication slot name")
 		return nil, err
 	}
 	slot, err := r.repo.CreateSlot(r.kubegresContext.Ctx, replicationSlotName)
 	if err != nil {
-		r.kubegresContext.Log.ErrorEvent("ReplicationSlotCreate", fmt.Errorf("replication slot: %v for statefulSet: %v: %w", slot, statefulSet.GetObjectMeta(), err), "Failed to create replication slot")
+		r.kubegresContext.Log.ErrorEvent("ReplicationSlotCreate", fmt.Errorf("replication slot: %v for statefulSet: %v: %w", slot, objKey, err), "Failed to create replication slot")
 		return nil, err
 	}
 
 	ss := statefulSet.DeepCopy()
 	for i, container := range ss.Spec.Template.Spec.Containers {
 		ss.Spec.Template.Spec.Containers[i].Env = append(container.Env, corev1.EnvVar{
-			Name:  "POSTGRES_REPLICATION_SLOT",
+			Name:  kubegresCtx.EnvVarReplicationSlotName,
 			Value: slot.Name,
 		})
 	}
 	for i, container := range ss.Spec.Template.Spec.InitContainers {
 		ss.Spec.Template.Spec.InitContainers[i].Env = append(container.Env, corev1.EnvVar{
-			Name:  "POSTGRES_REPLICATION_SLOT",
+			Name:  kubegresCtx.EnvVarReplicationSlotName,
 			Value: slot.Name,
 		})
 	}
@@ -171,13 +172,18 @@ func createReplicationSlotName(kubegresName, clusterName, statefulSetName string
 
 func (r *simpleReplicationSlotCreateDeleter) Delete(statefulSet *v1.StatefulSet) error {
 	replicationSlotName, err := createReplicationSlotName(r.kubegresContext.Kubegres.GetName(), r.clusterName, statefulSet.GetName(), r.kubegresContext.ClusterRole())
+	objKey := ctrlclient.ObjectKeyFromObject(statefulSet)
 	if err != nil {
-		r.kubegresContext.Log.ErrorEvent("ReplicationSlotDelete", fmt.Errorf("replication slot name: %v: %w", statefulSet.GetObjectMeta(), err), "Failed to create replication slot name")
+		r.kubegresContext.Log.ErrorEvent("ReplicationSlotDelete", fmt.Errorf("replication slot name: %v: %w", objKey, err), "Failed to create replication slot name")
 		return err
 	}
 	err = r.repo.DeleteSlot(r.kubegresContext.Ctx, replicationSlotName)
 	if err != nil {
-		r.kubegresContext.Log.ErrorEvent("ReplicationSlotDelete", fmt.Errorf("replication slot: %v for statefulSet: %v: %w", replicationSlotName, statefulSet.GetObjectMeta(), err), "Failed to delete replication slot")
+		if errors.Is(err, replicationSlotRepo.ErrDoesNotExist) {
+			r.kubegresContext.Log.InfoEvent("ReplicationSlotDelete", fmt.Sprintf("Replication slot '%s' for statefulSet '%s' does not exist, skipping deletion.", replicationSlotName, statefulSet.GetName()))
+			return nil // If the slot does not exist, we can safely ignore this error.
+		}
+		r.kubegresContext.Log.ErrorEvent("ReplicationSlotDelete", fmt.Errorf("replication slot: %v for statefulSet: %v: %w", replicationSlotName, objKey, err), "Failed to delete replication slot")
 		return err
 	}
 	return nil
@@ -339,6 +345,14 @@ func (r *ReplicaDbCountSpecEnforcer) Enforce() error {
 		}
 	}
 
+	// Then undeploy replicas that don't match running configuration
+	replicationSlotDesired := r.replicationSlotsEnabled()
+	for _, deployedStatefulSet := range r.resourcesStates.StatefulSets.Replicas.All.GetAllReverseSortedByInstanceIndex() {
+		if r.hasReplicationSlotsEnabled(deployedStatefulSet) != replicationSlotDesired {
+			return r.undeployReplicaStatefulSets(deployedStatefulSet)
+		}
+	}
+
 	return nil
 }
 
@@ -355,7 +369,13 @@ func (r *ReplicaDbCountSpecEnforcer) getDeployedReplicas() []statefulset.Statefu
 }
 
 func (r *ReplicaDbCountSpecEnforcer) getNbreDeployedReplicas() int32 {
-	return r.resourcesStates.StatefulSets.Replicas.NbreDeployed
+	deployedReplicas := r.resourcesStates.StatefulSets.Replicas.NbreDeployed
+	for _, deployedReplica := range r.resourcesStates.StatefulSets.Replicas.All.GetAllReverseSortedByInstanceIndex() {
+		if r.hasReplicationSlotsEnabled(deployedReplica) != r.replicationSlotsEnabled() {
+			deployedReplicas--
+		}
+	}
+	return deployedReplicas
 }
 
 func (r *ReplicaDbCountSpecEnforcer) getExpectedNbreReplicasToDeploy() int32 {
@@ -596,4 +616,22 @@ func (r *ReplicaDbCountSpecEnforcer) logAutomaticFailoverIsDisabled() {
 			"However, a Replica failover cannot happen because the automatic failover feature is disabled in the YAML. "+
 			"To re-enable automatic failover, either set the field 'failover.isDisabled' to false "+
 			"or remove that field from the YAML.")
+}
+
+func (r *ReplicaDbCountSpecEnforcer) replicationSlotsEnabled() bool {
+	return r.kubegresContext.Kubegres.Spec.ReplicationSlots.Enabled
+}
+
+func (r *ReplicaDbCountSpecEnforcer) hasReplicationSlotsEnabled(statefulSet statefulset.StatefulSetWrapper) bool {
+	if !statefulSet.IsDeployed || !statefulSet.IsReady {
+		return false
+	}
+	for _, container := range statefulSet.StatefulSet.Spec.Template.Spec.Containers {
+		for _, envVar := range container.Env {
+			if envVar.Name == kubegresCtx.EnvVarReplicationSlotName && envVar.Value != "" {
+				return true
+			}
+		}
+	}
+	return false
 }

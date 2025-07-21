@@ -66,6 +66,7 @@ func (r *repo) CreateSlot(ctx context.Context, name string) (replicationslot.Rep
 	createSlotStmt := "SELECT pg_create_physical_replication_slot($1)"
 	_, err := r.db.ExecContext(ctx, createSlotStmt, name)
 	if err != nil {
+		// TODO(piotrkpc): handle errors better using pg error codes
 		if strings.Contains(err.Error(), "already exists") {
 			return replicationslot.ReplicationSlot{}, fmt.Errorf("%w: %s", ErrAlreadyExist, err.Error())
 		}
@@ -113,6 +114,10 @@ func (r *repo) DeleteSlot(ctx context.Context, name string) error {
 	deleteSlotStmt := "SELECT pg_drop_replication_slot($1)"
 	_, err := r.db.ExecContext(ctx, deleteSlotStmt, name)
 	if err != nil {
+		// TODO(piotrkpc): handle errors better using pg error codes
+		if strings.Contains(err.Error(), "does not exist") {
+			return fmt.Errorf("replication slot '%s': %w", name, ErrDoesNotExist)
+		}
 		return fmt.Errorf("failed to delete replication slot '%s': %w", name, err)
 	}
 	return nil

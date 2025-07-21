@@ -56,6 +56,7 @@ const (
 	EnvVarNamePgData                               = "PGDATA"
 	EnvVarNameOfPostgresSuperUserPsw               = "POSTGRES_PASSWORD"
 	EnvVarNameOfPostgresReplicationUserPsw         = "POSTGRES_REPLICATION_PASSWORD"
+	EnvVarReplicationSlotName                      = "POSTGRES_REPLICATION_SLOT"
 	DefaultReplicationSlotsMaxWalKeepSize          = "1Gi"
 	DefaultReplicationSlotsInactiveSlotGracePeriod = 2 * time.Minute
 	DefaultReplicationSlotsHealthCheckInterval     = 30 * time.Second

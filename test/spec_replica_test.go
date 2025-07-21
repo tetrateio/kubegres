@@ -113,7 +113,25 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), func() {
 
 			Expect(test.dbQueryTestCases.GetReplicationSlots()).Should(BeEmpty())
 
-			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'replica' set to 1'")
+		})
+
+		It("THEN 1 primary and 1 replica should be created", func() {
+
+			test.givenExistingKubegresSpecIsSetTo(2)
+
+			test.whenKubernetesIsUpdated()
+
+			test.thenPodsStatesShouldBe(1, 1)
+
+			test.thenDeployedKubegresSpecShouldBeSetTo(2)
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
+
+			Expect(test.dbQueryTestCases.GetReplicationSlots()).Should(BeEmpty())
+
+			test.keepCreatedResourcesForNextTest = true
+
 		})
 
 		It("THEN existing Kubegres is updated with replicationSlots enabled and default values", func() {
@@ -126,15 +144,12 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), func() {
 
 			test.thenReplicationSlotsShouldHaveDefaultSettingsWith(maxWalKeepSize)
 
-			test.thenPodsStatesShouldBe(1, 0)
-
-			test.givenExistingKubegresSpecIsSetTo(2)
-
-			test.whenKubernetesIsUpdated()
-
 			test.thenPodsStatesShouldBe(1, 1)
 
 			test.thenReplicationSlotShouldBeActive()
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
 
 			test.keepCreatedResourcesForNextTest = true
 		})
@@ -178,7 +193,12 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), func() {
 			test.thenErrorEventShouldBeLogged(fmt.Sprintf("In the Resources Spec the value of 'spec.replicationSlots.maxWalKeepSize' (%s) must be less than 'spec.database.size' (%s).",
 				parsedSize.String(), dbSize.String()))
 
+			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'replica' set to 1'")
+
 		})
+
+		// TODO(piotrkpc): missing tests:
+		// - start with replication slot enabled and at least one replica - disable replication slots and the old replicas with replication slots should be recreated
 
 	})
 
