@@ -2671,6 +2671,10 @@ spec:
                     type: string
                   secretName:
                     type: string
+                  serverCert:
+                    type: string
+                  serverKey:
+                    type: string
                 type: object
               volume:
                 properties:
