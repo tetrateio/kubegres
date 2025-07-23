@@ -173,14 +173,15 @@ func (r *DbConnectionDbUtil) connect() bool {
 	}
 
 	var psqlInfo string
-	if r.SSLMode == "disable" {
-		psqlInfo = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-			nodeAddress, r.Port, resourceConfigs.DbUser, resourceConfigs.DbPassword, resourceConfigs.DbName)
-	} else {
-		psqlInfo = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s "+
-			"sslmode=%s sslrootcert=%s sslcert=%s sslkey=%s",
+	switch r.SSLMode {
+	case "require", "verify-ca", "verify-full", "allow", "prefer":
+		psqlInfo = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s sslrootcert=%s sslcert=%s sslkey=%s",
 			nodeAddress, r.Port, resourceConfigs.DbUser, resourceConfigs.DbPassword, resourceConfigs.DbName,
 			r.SSLMode, r.SSLRootCertFile, r.SSLCertFile, r.SSLKeyFile)
+
+	default:
+		psqlInfo = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+			nodeAddress, r.Port, resourceConfigs.DbUser, resourceConfigs.DbPassword, resourceConfigs.DbName)
 	}
 
 	if r.ping(psqlInfo) {
