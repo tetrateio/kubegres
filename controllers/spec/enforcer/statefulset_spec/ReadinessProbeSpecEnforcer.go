@@ -23,15 +23,21 @@ package statefulset_spec
 import (
 	apps "k8s.io/api/apps/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
+	"reactive-tech.io/kubegres/controllers/spec/template"
+
 	"reflect"
 )
 
 type ReadinessProbeSpecEnforcer struct {
-	kubegresContext ctx.KubegresContext
+	kubegresContext     ctx.KubegresContext
+	tlsConfigSpecHelper template.TLSConfigSpecHelper
 }
 
-func CreateReadinessProbeSpecEnforcer(kubegresContext ctx.KubegresContext) ReadinessProbeSpecEnforcer {
-	return ReadinessProbeSpecEnforcer{kubegresContext: kubegresContext}
+func CreateReadinessProbeSpecEnforcer(kubegresContext ctx.KubegresContext, tlsConfigSpecHelper template.TLSConfigSpecHelper) ReadinessProbeSpecEnforcer {
+	return ReadinessProbeSpecEnforcer{
+		kubegresContext:     kubegresContext,
+		tlsConfigSpecHelper: tlsConfigSpecHelper,
+	}
 }
 
 func (r *ReadinessProbeSpecEnforcer) GetSpecName() string {
@@ -43,7 +49,10 @@ func (r *ReadinessProbeSpecEnforcer) CheckForSpecDifference(statefulSet *apps.St
 	expected := r.kubegresContext.Kubegres.Spec.Probe.ReadinessProbe
 
 	if expected == nil {
-		return StatefulSetSpecDifference{}
+		// If the expected readiness probe is using the default value,
+		// let's create a copy of the current one with the TLS defaults applied to compare.
+		expected = current.DeepCopy()
+		r.tlsConfigSpecHelper.OverrideDefaultReadinessProbeWithTLS(expected)
 	}
 
 	if !reflect.DeepEqual(current, expected) {
@@ -59,6 +68,7 @@ func (r *ReadinessProbeSpecEnforcer) CheckForSpecDifference(statefulSet *apps.St
 
 func (r *ReadinessProbeSpecEnforcer) EnforceSpec(statefulSet *apps.StatefulSet) (wasSpecUpdated bool, err error) {
 	statefulSet.Spec.Template.Spec.Containers[0].ReadinessProbe = r.kubegresContext.Kubegres.Spec.Probe.ReadinessProbe
+	r.tlsConfigSpecHelper.OverrideDefaultReadinessProbeWithTLS(statefulSet.Spec.Template.Spec.Containers[0].ReadinessProbe)
 	return true, nil
 }
 

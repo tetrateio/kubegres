@@ -28,7 +28,7 @@ jobs:
           - "group:3"
           - "group:4"
           - "group:5"
-          - "standby || sidecars"
+          - "standby || sidecars || tls"
     runs-on: ubuntu-latest
     env:
       PLATFORMS: linux/amd64

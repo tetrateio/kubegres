@@ -67,6 +67,8 @@ type ResourcesContext struct {
 	StatefulSetCountSpecEnforcer   resources_count_spec.StatefulSetCountSpecEnforcer
 	ServicesCountSpecEnforcer      resources_count_spec.ServicesCountSpecEnforcer
 	BackUpCronJobCountSpecEnforcer resources_count_spec.BackUpCronJobCountSpecEnforcer
+	TLSConfigMapCountSpecEnforcer  resources_count_spec.TLSConfigMapCountSpecEnforcer
+	TLSConfigSpecHelper            template.TLSConfigSpecHelper
 }
 
 func CreateResourcesContext(kubegres *postgresV1.Kubegres,
@@ -118,8 +120,15 @@ func CreateResourcesContext(kubegres *postgresV1.Kubegres,
 
 	rc.CustomConfigSpecHelper = template.CreateCustomConfigSpecHelper(rc.KubegresContext, rc.ResourcesStates)
 
+	rc.TLSConfigSpecHelper = template.CreateTLSConfigSpecHelper(rc.KubegresContext)
+
 	resourceTemplateLoader := template.ResourceTemplateLoader{}
-	rc.ResourcesCreatorFromTemplate = template.CreateResourcesCreatorFromTemplate(rc.KubegresContext, rc.CustomConfigSpecHelper, resourceTemplateLoader)
+	rc.ResourcesCreatorFromTemplate = template.CreateResourcesCreatorFromTemplate(
+		rc.KubegresContext,
+		resourceTemplateLoader,
+		rc.CustomConfigSpecHelper,
+		rc.TLSConfigSpecHelper,
+	)
 
 	addResourcesCountSpecEnforcers(rc)
 	addStatefulSetSpecEnforcers(rc)
@@ -145,11 +154,13 @@ func addResourcesCountSpecEnforcers(rc *ResourcesContext) {
 	rc.StatefulSetCountSpecEnforcer = resources_count_spec.CreateStatefulSetCountSpecEnforcer(rc.PrimaryDbCountSpecEnforcer, rc.ReplicaDbCountSpecEnforcer)
 
 	rc.BaseConfigMapCountSpecEnforcer = resources_count_spec.CreateBaseConfigMapCountSpecEnforcer(rc.KubegresContext, rc.ResourcesStates, rc.ResourcesCreatorFromTemplate, rc.BlockingOperation)
+	rc.TLSConfigMapCountSpecEnforcer = resources_count_spec.CreateTLSConfigMapCountSpecEnforcer(rc.KubegresContext, rc.ResourcesStates, rc.ResourcesCreatorFromTemplate, rc.BlockingOperation)
 	rc.ServicesCountSpecEnforcer = resources_count_spec.CreateServicesCountSpecEnforcer(rc.KubegresContext, rc.ResourcesStates, rc.ResourcesCreatorFromTemplate)
 	rc.BackUpCronJobCountSpecEnforcer = resources_count_spec.CreateBackUpCronJobCountSpecEnforcer(rc.KubegresContext, rc.ResourcesStates, rc.ResourcesCreatorFromTemplate)
 
 	rc.ResourcesCountSpecEnforcer = resources_count_spec.ResourcesCountSpecEnforcer{}
 	rc.ResourcesCountSpecEnforcer.AddSpecEnforcer(&rc.BaseConfigMapCountSpecEnforcer)
+	rc.ResourcesCountSpecEnforcer.AddSpecEnforcer(&rc.TLSConfigMapCountSpecEnforcer)
 	rc.ResourcesCountSpecEnforcer.AddSpecEnforcer(&rc.StatefulSetCountSpecEnforcer)
 	rc.ResourcesCountSpecEnforcer.AddSpecEnforcer(&rc.ServicesCountSpecEnforcer)
 	rc.ResourcesCountSpecEnforcer.AddSpecEnforcer(&rc.BackUpCronJobCountSpecEnforcer)
@@ -166,11 +177,12 @@ func addStatefulSetSpecEnforcers(rc *ResourcesContext) {
 	containersSpecEnforcer := statefulset_spec.CreateSidecarContainersSpecEnforcer(rc.KubegresContext)
 	volumeSpecEnforcer := statefulset_spec.CreateVolumeSpecEnforcer(rc.KubegresContext)
 	securityContextSpecEnforcer := statefulset_spec.CreateSecurityContextSpecEnforcer(rc.KubegresContext)
-	livenessProbeSpecEnforcer := statefulset_spec.CreateLivenessProbeSpecEnforcer(rc.KubegresContext)
-	readinessProbeSpecEnforcer := statefulset_spec.CreateReadinessProbeSpecEnforcer(rc.KubegresContext)
+	livenessProbeSpecEnforcer := statefulset_spec.CreateLivenessProbeSpecEnforcer(rc.KubegresContext, rc.TLSConfigSpecHelper)
+	readinessProbeSpecEnforcer := statefulset_spec.CreateReadinessProbeSpecEnforcer(rc.KubegresContext, rc.TLSConfigSpecHelper)
 	serviceAccountNameSpecEnforcer := statefulset_spec.CreateServiceAccountNameSpecEnforcer(rc.KubegresContext)
 	metadataSpecEnforcer := statefulset_spec.CreateMetadataSpecEnforcer(rc.KubegresContext)
 	standbyPrimaryEndpointSpecEnforcer := statefulset_spec.CreateStandbyPrimaryEndpointSpecEnforcer(rc.KubegresContext)
+	tlsSpecEnforcer := statefulset_spec.CreateTLSSpecEnforcer(rc.KubegresContext, rc.TLSConfigSpecHelper)
 
 	rc.StatefulSetsSpecsEnforcer = statefulset_spec.CreateStatefulSetsSpecsEnforcer(rc.KubegresContext)
 	rc.StatefulSetsSpecsEnforcer.AddSpecEnforcer(&containersSpecEnforcer)
@@ -182,6 +194,7 @@ func addStatefulSetSpecEnforcers(rc *ResourcesContext) {
 	rc.StatefulSetsSpecsEnforcer.AddSpecEnforcer(&tolerationsSpecEnforcer)
 	rc.StatefulSetsSpecsEnforcer.AddSpecEnforcer(&resourcesSpecEnforcer)
 	rc.StatefulSetsSpecsEnforcer.AddSpecEnforcer(&volumeSpecEnforcer)
+	rc.StatefulSetsSpecsEnforcer.AddSpecEnforcer(&tlsSpecEnforcer)
 	rc.StatefulSetsSpecsEnforcer.AddSpecEnforcer(&securityContextSpecEnforcer)
 	rc.StatefulSetsSpecsEnforcer.AddSpecEnforcer(&livenessProbeSpecEnforcer)
 	rc.StatefulSetsSpecsEnforcer.AddSpecEnforcer(&readinessProbeSpecEnforcer)
@@ -195,6 +208,7 @@ func addStatefulSetSpecEnforcers(rc *ResourcesContext) {
 func addBlockingOperationConfigs(rc *ResourcesContext) {
 
 	rc.BlockingOperation.AddConfig(rc.BaseConfigMapCountSpecEnforcer.CreateOperationConfig())
+	rc.BlockingOperation.AddConfig(rc.TLSConfigMapCountSpecEnforcer.CreateOperationConfig())
 
 	rc.BlockingOperation.AddConfig(rc.PrimaryDbCountSpecEnforcer.CreateOperationConfigForPrimaryDbDeploying())
 	rc.BlockingOperation.AddConfig(rc.PrimaryDbCountSpecEnforcer.CreateOperationConfigForPrimaryDbUndeploying())

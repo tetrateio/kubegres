@@ -23,6 +23,8 @@ package util
 import (
 	"context"
 	"log"
+	"os"
+	"path"
 	"strconv"
 	"time"
 
@@ -33,7 +35,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
+	"reactive-tech.io/kubegres/controllers/ctx"
 	resourceConfigs2 "reactive-tech.io/kubegres/test/resourceConfigs"
+	"reactive-tech.io/kubegres/test/util/tls"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -202,6 +206,36 @@ func (r *TestResourceCreator) CreateConfigMapWithPrimaryInitScript() {
 	r.createResourceFromYaml("Custom ConfigMap with primary init script", resourceConfigs2.CustomConfigMapWithPrimaryInitScriptResourceName, &existingResource, &resourceToCreate)
 }
 
+func (r *TestResourceCreator) CreateTLSSecretEmpty() {
+	existingResource := v1.Secret{}
+	resourceToCreate := resourceConfigs2.LoadYamlTLSSecretWithNameAndKeys(resourceConfigs2.TLSSecretNameEmpty, nil)
+	resourceToCreate.Namespace = r.namespace
+	r.createResourceFromYaml("Empty TLS Secret", resourceConfigs2.TLSSecretNameEmpty, &existingResource, &resourceToCreate)
+}
+
+func (r *TestResourceCreator) CreateTLSSecretWithValidCerts() {
+	existingResource := v1.Secret{}
+
+	nodeIps := r.getNodeIPs()
+
+	certs, err := tls.NewSelfSignedCerts([]string{"localhost", "tls-test-kubegres"}, nodeIps)
+	gomega.Expect(err).Should(gomega.Succeed())
+
+	data := map[string][]byte{
+		path.Base(ctx.DefaultTLSRootCertPath):   certs.RootCert,
+		path.Base(ctx.DefaultTLSServerCertPath): certs.ServerCert,
+		path.Base(ctx.DefaultTLSServerKeyPath):  certs.ServerKey,
+		path.Base(ctx.DefaultTLSClientCertPath): certs.ClientCert,
+		path.Base(ctx.DefaultTLSClientKeyPath):  certs.ClientKey,
+	}
+
+	resourceToCreate := resourceConfigs2.LoadYamlTLSSecretWithNameAndKeys(resourceConfigs2.TLSSecretNameValid, data)
+	resourceToCreate.Namespace = r.namespace
+	_, err = r.createResourceFromYaml("TLS Secret with valid certs", resourceConfigs2.TLSSecretNameValid, &existingResource, &resourceToCreate)
+	gomega.Expect(err).Should(gomega.Succeed())
+
+}
+
 func (r *TestResourceCreator) CreateServiceToSqlQueryDb(kubegresName string, nodePort int, isPrimaryDb bool) (runtime.Object, error) {
 	existingResource := v1.Service{}
 	serviceResourceName := r.resourceRetriever.GetServiceNameAllowingToSqlQueryDb(kubegresName, isPrimaryDb)
@@ -306,8 +340,17 @@ func (r *TestResourceCreator) DeleteAllTestResources(resourceNamesToNotDelete ..
 		}
 	}
 
-	log.Println("Deleted all resources created during tests. Waiting for 30 seconds...")
-	time.Sleep(30 * time.Second)
+	sleep := 15 * time.Second
+	if dr, ok := os.LookupEnv("TEST_DELETE_WAIT_DURATION"); ok {
+		s, err := time.ParseDuration(dr)
+		if err != nil {
+			log.Printf("Invalid TEST_DELETE_WAIT_DURATION value: %s, using default sleep duration of %s\n", dr, sleep)
+		} else {
+			sleep = s
+		}
+	}
+	log.Printf("Deleted all resources created during tests. Waiting for %s seconds... (use TEST_DELETE_WAIT_DURATION to tune this)\n", sleep)
+	time.Sleep(sleep)
 }
 
 func (r *TestResourceCreator) doesArrayContain(valueToSearch string, resourceNamesToNotDelete ...string) bool {
@@ -367,6 +410,22 @@ func (r *TestResourceCreator) searchList(listToSearch client.ObjectList) {
 		client.InNamespace(r.namespace),
 		client.MatchingLabels{"environment": "acceptancetesting"},
 	}
-	ctx := context.Background()
-	_ = r.client.List(ctx, listToSearch, opts...)
+	err := r.client.List(context.Background(), listToSearch, opts...)
+	gomega.Expect(err).To(gomega.Succeed(), "Failed to list resources in namespace '%s': %v", r.namespace, err)
+}
+
+func (r *TestResourceCreator) getNodeIPs() []string {
+	nodes := &v1.NodeList{}
+	err := r.client.List(context.Background(), nodes)
+	gomega.Expect(err).To(gomega.Succeed(), "Failed to list nodes: %v", err)
+
+	nodeIPs := make([]string, 0, len(nodes.Items))
+	for _, node := range nodes.Items {
+		for _, address := range node.Status.Addresses {
+			if address.Type == v1.NodeInternalIP {
+				nodeIPs = append(nodeIPs, address.Address)
+			}
+		}
+	}
+	return nodeIPs
 }

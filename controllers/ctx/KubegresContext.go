@@ -55,6 +55,15 @@ const (
 	EnvVarNamePgData                       = "PGDATA"
 	EnvVarNameOfPostgresSuperUserPsw       = "POSTGRES_PASSWORD"
 	EnvVarNameOfPostgresReplicationUserPsw = "POSTGRES_REPLICATION_PASSWORD"
+	DefaultTLSMountPath                    = "/var/lib/postgresql/data/tls"
+	DefaultTLSRootCertPath                 = "/var/lib/postgresql/data/tls/root.crt"
+	DefaultTLSServerCertPath               = "/var/lib/postgresql/data/tls/server.crt"
+	DefaultTLSServerKeyPath                = "/var/lib/postgresql/data/tls/server.key"
+	DefaultTLSClientCertPath               = "/var/lib/postgresql/data/tls/client.crt"
+	DefaultTLSClientKeyPath                = "/var/lib/postgresql/data/tls/client.key"
+	DefaultTLSMode                         = "verify-full"
+	TLSVolumeName                          = "tls-certs"
+	DefaultTLSVolumeMode                   = int32(0o640)
 )
 
 func (r *KubegresContext) GetServiceResourceName(isPrimary bool) string {
@@ -72,5 +81,6 @@ func (r *KubegresContext) IsReservedVolumeName(volumeName string) bool {
 	return volumeName == DatabaseVolumeName ||
 		volumeName == BaseConfigMapVolumeName ||
 		volumeName == CustomConfigMapVolumeName ||
+		volumeName == TLSVolumeName ||
 		strings.Contains(volumeName, "kube-api")
 }

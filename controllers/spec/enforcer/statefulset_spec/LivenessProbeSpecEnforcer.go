@@ -21,19 +21,23 @@ limitations under the License.
 package statefulset_spec
 
 import (
+	"reflect"
+
 	apps "k8s.io/api/apps/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
-	"reactive-tech.io/kubegres/controllers/states"
-	"reflect"
+	"reactive-tech.io/kubegres/controllers/spec/template"
 )
 
 type LivenessProbeSpecEnforcer struct {
-	kubegresContext ctx.KubegresContext
-	resourcesStates states.ResourcesStates
+	kubegresContext     ctx.KubegresContext
+	tlsConfigSpecHelper template.TLSConfigSpecHelper
 }
 
-func CreateLivenessProbeSpecEnforcer(kubegresContext ctx.KubegresContext) LivenessProbeSpecEnforcer {
-	return LivenessProbeSpecEnforcer{kubegresContext: kubegresContext}
+func CreateLivenessProbeSpecEnforcer(kubegresContext ctx.KubegresContext, tlsConfigSpecHelper template.TLSConfigSpecHelper) LivenessProbeSpecEnforcer {
+	return LivenessProbeSpecEnforcer{
+		kubegresContext:     kubegresContext,
+		tlsConfigSpecHelper: tlsConfigSpecHelper,
+	}
 }
 
 func (r *LivenessProbeSpecEnforcer) GetSpecName() string {
@@ -45,7 +49,10 @@ func (r *LivenessProbeSpecEnforcer) CheckForSpecDifference(statefulSet *apps.Sta
 	expected := r.kubegresContext.Kubegres.Spec.Probe.LivenessProbe
 
 	if expected == nil {
-		return StatefulSetSpecDifference{}
+		// If the expected liveness probe is using the default value,
+		// let's create a copy of the current one with the TLS defaults applied to compare.
+		expected = current.DeepCopy()
+		r.tlsConfigSpecHelper.OverrideDefaultLivenessProbeWithTLS(expected)
 	}
 
 	if !reflect.DeepEqual(current, expected) {
@@ -61,6 +68,7 @@ func (r *LivenessProbeSpecEnforcer) CheckForSpecDifference(statefulSet *apps.Sta
 
 func (r *LivenessProbeSpecEnforcer) EnforceSpec(statefulSet *apps.StatefulSet) (wasSpecUpdated bool, err error) {
 	statefulSet.Spec.Template.Spec.Containers[0].LivenessProbe = r.kubegresContext.Kubegres.Spec.Probe.LivenessProbe
+	r.tlsConfigSpecHelper.OverrideDefaultLivenessProbeWithTLS(statefulSet.Spec.Template.Spec.Containers[0].LivenessProbe)
 	return true, nil
 }
 

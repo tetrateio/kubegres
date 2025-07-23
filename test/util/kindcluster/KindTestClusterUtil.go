@@ -76,10 +76,13 @@ func (r *KindTestClusterUtil) StartCluster() {
 	err := cmdStartCluster.Run()
 	if err != nil {
 		log.Fatal("Unable to execute the command 'kind create cluster --name "+clusterName+" --config "+clusterConfigFilePath+"'", err)
-	} else {
-		log.Println("CLUSTER STARTED")
-		r.installOperator()
+		return
 	}
+
+	log.Println("CLUSTER STARTED")
+
+	r.tryLoadPostgresImage()
+	r.installOperator()
 }
 
 func (r *KindTestClusterUtil) DeleteCluster() bool {
@@ -182,4 +185,47 @@ func (r *KindTestClusterUtil) getMakeFilePath() string {
 
 func (r *KindTestClusterUtil) getMakeFileFolder(makeFilePath string) string {
 	return filepath.Dir(makeFilePath)
+}
+
+func (r *KindTestClusterUtil) tryLoadPostgresImage() {
+
+	log.Println("Running 'docker pull postgres:14.16'")
+
+	dockerPath, err := exec.LookPath("docker")
+	if err != nil {
+		log.Println("We cannot find the executable 'docker'. " +
+			"Make sure 'docker' is installed and the executable 'docker' is in the classpath before running the tests.")
+		return
+	}
+
+	out := &bytes.Buffer{}
+	cmdPullImage := &exec.Cmd{
+		Path:   dockerPath,
+		Args:   []string{dockerPath, "pull", "postgres:14.16"},
+		Stdout: out,
+		Stderr: os.Stdout,
+	}
+
+	err = cmdPullImage.Run()
+	if err != nil {
+		log.Print("Unable to execute the command 'docker pull postgres:14.16'", err)
+	}
+
+	log.Println("Running 'kind load docker-image postgres:14.16 --name " + clusterName + "'")
+
+	out = &bytes.Buffer{}
+	cmdLoadImage := &exec.Cmd{
+		Path:   r.kindExecPath,
+		Args:   []string{r.kindExecPath, "load", "docker-image", "postgres:14.16", "--name", clusterName},
+		Stdout: out,
+		Stderr: os.Stdout,
+	}
+
+	err = cmdLoadImage.Run()
+	if err != nil {
+		log.Print("Unable to execute the command 'kind load docker-image postgres:14.16 --name "+clusterName+"'", err)
+		return
+	}
+
+	log.Println("Postgres 14.16 image loaded into the cluster")
 }

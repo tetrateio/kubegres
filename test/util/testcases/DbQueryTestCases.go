@@ -38,10 +38,10 @@ func InitDbQueryTestCases(resourceCreator util.TestResourceCreator, kubegresName
 	return InitDbQueryTestCasesWithNodePorts(resourceCreator, kubegresName, resourceConfigs.ServiceToSqlQueryPrimaryDbNodePort, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort, k8sClient)
 }
 
-func InitDbQueryTestCasesWithNodePorts(resourceCreator util.TestResourceCreator, kubegresName string, primaryServiceNodePort, replicaServiceNodePort int, k8sClient client.Client) DbQueryTestCases {
+func InitDbQueryTestCasesWithNodePorts(resourceCreator util.TestResourceCreator, kubegresName string, primaryServiceNodePort, replicaServiceNodePort int, k8sClientTest client.Client) DbQueryTestCases {
 	return InitDbQueryTestCasesWithConnections(
-		util.InitDbConnectionDbUtil(resourceCreator, kubegresName, primaryServiceNodePort, true, k8sClient),
-		util.InitDbConnectionDbUtil(resourceCreator, kubegresName, replicaServiceNodePort, false, k8sClient),
+		util.InitDbConnectionDbUtil(k8sClientTest, util.WithBaseConfig(resourceCreator, kubegresName, primaryServiceNodePort, true)),
+		util.InitDbConnectionDbUtil(k8sClientTest, util.WithBaseConfig(resourceCreator, kubegresName, replicaServiceNodePort, false)),
 	)
 }
 

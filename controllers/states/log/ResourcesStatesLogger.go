@@ -1,6 +1,9 @@
 package log
 
 import (
+	"sort"
+	"strings"
+
 	"reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/controllers/states"
 	"reactive-tech.io/kubegres/controllers/states/statefulset"
@@ -21,6 +24,7 @@ func (r *ResourcesStatesLogger) Log() {
 	r.logStatefulSetsStates()
 	r.logServicesStates()
 	r.logBackUpStates()
+	r.logTLSSecretStates()
 }
 
 func (r *ResourcesStatesLogger) logDbStorageClassStates() {
@@ -96,4 +100,15 @@ func (r *ResourcesStatesLogger) logBackUpStates() {
 		"IsPvcDeployed", r.resourcesStates.BackUp.IsPvcDeployed,
 		"ConfigMap", r.resourcesStates.BackUp.ConfigMap,
 		"CronJobLastScheduleTime", r.resourcesStates.BackUp.CronJobLastScheduleTime)
+}
+
+func (r *ResourcesStatesLogger) logTLSSecretStates() {
+	keys := make([]string, 0, len(r.resourcesStates.TLSSecret.SecretKeys))
+	for k := range r.resourcesStates.TLSSecret.SecretKeys {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	r.kubegresContext.Log.Info("TLS Secret states.",
+		"IsSecretDeployed", r.resourcesStates.TLSSecret.IsSecretDeployed,
+		"SecretKeys", strings.Join(keys, ","))
 }

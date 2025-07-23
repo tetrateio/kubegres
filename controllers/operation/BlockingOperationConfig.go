@@ -43,4 +43,7 @@ const (
 	OperationStepIdStatefulSetSpecUpdating      = "StatefulSet's spec is updating"
 	OperationStepIdStatefulSetPodSpecUpdating   = "StatefulSet Pod's spec is updating"
 	OperationStepIdStatefulSetWaitingOnStuckPod = "Attempting to fix a stuck Pod by recreating it"
+
+	OperationIdTLSConfigMapCountSpecEnforcement = "TLS config map update count spec enforcement"
+	OperationStepIdTLSConfigMapDeploying        = "TLS config map is deploying"
 )

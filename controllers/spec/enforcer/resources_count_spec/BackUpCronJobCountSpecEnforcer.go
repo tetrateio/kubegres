@@ -21,6 +21,8 @@ limitations under the License.
 package resources_count_spec
 
 import (
+	"fmt"
+
 	batch "k8s.io/api/batch/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/controllers/spec/template"
@@ -135,6 +137,16 @@ func (r *BackUpCronJobCountSpecEnforcer) hasSpecChanged() (hasSpecChanged bool) 
 		r.logSpecChange("spec.backup.customConfig")
 	}
 
+	currentVolumeMountSubPath := cronJobTemplateSpec.Containers[0].VolumeMounts[1].SubPath
+	expectedVolumeMountSubPath := states.ConfigMapDataKeyBackUpScript
+	if r.kubegresContext.Kubegres.Spec.TLS.Enabled {
+		expectedVolumeMountSubPath = states.ConfigMapDataKeyTLSBackupDatabaseScript
+	}
+	if currentVolumeMountSubPath != expectedVolumeMountSubPath {
+		hasSpecChanged = true
+		r.logSpecChange("spec.tls.enabled (volumeMount.SubPath)")
+	}
+
 	currentDBSource := cronJobTemplateSpec.Containers[0].Env[3].Value
 	expectedDBSource := r.kubegresContext.GetServiceResourceName(false)
 	if !r.kubegresContext.Kubegres.Spec.Standby.Enabled && *r.kubegresContext.Kubegres.Spec.Replicas == 1 {
@@ -143,6 +155,45 @@ func (r *BackUpCronJobCountSpecEnforcer) hasSpecChanged() (hasSpecChanged bool) 
 	if currentDBSource != expectedDBSource {
 		hasSpecChanged = true
 		r.logSpecChange("spec.backup.dbSource")
+	}
+
+	if r.kubegresContext.Kubegres.Spec.TLS.Enabled {
+		if len(cronJobTemplateSpec.Volumes) < 3 {
+			hasSpecChanged = true
+			r.logSpecChange("spec.tls.enabled (missing TLS volumes)")
+		} else {
+			currentTLSVolume := cronJobTemplateSpec.Volumes[2]
+			expectedTLSVolume := template.TLSVolume(r.kubegresContext.Kubegres.Spec.TLS)
+			if currentTLSVolume.Name != expectedTLSVolume.Name ||
+				currentTLSVolume.Secret == nil || currentTLSVolume.Secret.SecretName != expectedTLSVolume.Secret.SecretName ||
+				currentTLSVolume.Secret.DefaultMode == nil || *currentTLSVolume.Secret.DefaultMode != *expectedTLSVolume.Secret.DefaultMode {
+				hasSpecChanged = true
+				fmt.Println("currentTLSVolume:", currentTLSVolume)
+				r.logSpecChange("spec.tls.enabled (volume)")
+			}
+		}
+
+		if len(cronJobTemplateSpec.Containers[0].VolumeMounts) < 3 {
+			hasSpecChanged = true
+			r.logSpecChange("spec.tls.enabled (missing TLS volumeMounts)")
+		} else {
+			currentTLSVolumeMount := cronJobTemplateSpec.Containers[0].VolumeMounts[2]
+			expectedTLSVolumeMount := template.TLSVolumeMount(r.kubegresContext.Kubegres.Spec.TLS)
+			if currentTLSVolumeMount != expectedTLSVolumeMount {
+				hasSpecChanged = true
+				r.logSpecChange("spec.tls.enabled (volumeMount)")
+			}
+		}
+	} else {
+		if len(cronJobTemplateSpec.Volumes) > 2 {
+			hasSpecChanged = true
+			r.logSpecChange("spec.tls.enabled (unexpected TLS volumes)")
+		}
+
+		if len(cronJobTemplateSpec.Containers[0].VolumeMounts) > 2 {
+			hasSpecChanged = true
+			r.logSpecChange("spec.tls.enabled (unexpected TLS volumeMounts)")
+		}
 	}
 
 	return hasSpecChanged

@@ -21,6 +21,7 @@ limitations under the License.
 package states
 
 import (
+	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"reactive-tech.io/kubegres/controllers/ctx"
@@ -35,7 +36,77 @@ const (
 	ConfigMapDataKeyCopyPrimaryDataToReplica = "copy_primary_data_to_replica.sh"
 	ConfigMapDataKeyPrimaryCreateReplicaRole = "primary_create_replication_role.sh"
 	ConfigMapDataKeyPromoteReplica           = "promote_replica_to_primary.sh"
+
+	ConfigMapDataKeyTLSPostgresConf                   = "tls_postgres.conf"
+	ConfigMapDataKeyTLSPgHbaConf                      = "tls_pg_hba.conf"
+	ConfigMapDataKeyTLSCopyPrimaryDataToReplicaScript = "tls_copy_primary_data_to_replica.sh"
+	ConfigMapDataKeyTLSBackupDatabaseScript           = "tls_backup_database.sh"
 )
+
+var TLSConfigKeyReplacements = []TLSConfigKeyReplacement{
+	{
+		OriginalKey:      ConfigMapDataKeyPostgresConf,
+		ReplacementKey:   ConfigMapDataKeyTLSPostgresConf,
+		AppliesInstance:  PrimaryAndReplicaInstance,
+		AppliesContainer: OnlyMainContainer,
+	},
+	{
+		OriginalKey:      ConfigMapDataKeyPgHbaConf,
+		ReplacementKey:   ConfigMapDataKeyTLSPgHbaConf,
+		AppliesInstance:  PrimaryAndReplicaInstance,
+		AppliesContainer: OnlyMainContainer,
+	},
+	{
+		OriginalKey:      ConfigMapDataKeyCopyPrimaryDataToReplica,
+		ReplacementKey:   ConfigMapDataKeyTLSCopyPrimaryDataToReplicaScript,
+		AppliesInstance:  ReplicaInstance,
+		AppliesContainer: OnlyInitContainer,
+	},
+	{
+		OriginalKey:      ConfigMapDataKeyBackUpScript,
+		ReplacementKey:   ConfigMapDataKeyTLSBackupDatabaseScript,
+		AppliesInstance:  BackupJob,
+		AppliesContainer: OnlyMainContainer,
+	},
+}
+
+type (
+	TLSConfigKeyReplacement struct {
+		OriginalKey      string
+		ReplacementKey   string
+		AppliesInstance  appliesInstance
+		AppliesContainer appliesContainer
+	}
+	appliesInstance  int
+	appliesContainer int
+)
+
+const (
+	PrimaryInstance appliesInstance = iota
+	ReplicaInstance
+	PrimaryAndReplicaInstance
+	BackupJob
+)
+const (
+	OnlyMainContainer appliesContainer = iota
+	OnlyInitContainer
+	AllContainers
+)
+
+func (t TLSConfigKeyReplacement) DoesApplyContainer() bool {
+	return t.AppliesContainer == AllContainers || t.AppliesContainer == OnlyMainContainer
+}
+
+func (t TLSConfigKeyReplacement) DoesApplyInitContainer() bool {
+	return t.AppliesContainer == AllContainers || t.AppliesContainer == OnlyInitContainer
+}
+
+func (t TLSConfigKeyReplacement) DoesApplyStatefulSet(statefulSet *apps.StatefulSet) bool {
+	if statefulSet.Labels["replicationRole"] == ctx.PrimaryRoleName {
+		return t.AppliesInstance == PrimaryInstance || t.AppliesInstance == PrimaryAndReplicaInstance
+	}
+	return t.AppliesInstance == ReplicaInstance || t.AppliesInstance == PrimaryAndReplicaInstance
+}
 
 type ConfigStates struct {
 	IsBaseConfigDeployed   bool
@@ -43,19 +114,25 @@ type ConfigStates struct {
 	IsCustomConfigDeployed bool
 	CustomConfigName       string
 	ConfigLocations        ConfigLocations
+	IsTLSConfigDeployed    bool
 
 	kubegresContext ctx.KubegresContext
 }
 
 // Stores as string the volume-name for each config-type which can be either 'base-config' or 'custom-config'
 type ConfigLocations struct {
-	PostgreConf              string
+	PostgresConf             string
 	PrimaryInitScript        string
 	BackUpScript             string
 	PgHbaConf                string
 	CopyPrimaryDataToReplica string
 	PrimaryCreateReplicaRole string
 	PromoteReplica           string
+	// TLS
+	TLSPostgresConfForPrimary   string
+	TLSPostgresConfForReplica   string
+	TLSPgHbaConf                string
+	TLSCopyPrimaryDataToReplica string
 }
 
 func loadConfigStates(kubegresContext ctx.KubegresContext) (ConfigStates, error) {
@@ -71,7 +148,7 @@ func loadConfigStates(kubegresContext ctx.KubegresContext) (ConfigStates, error)
 
 func (r *ConfigStates) loadStates() (err error) {
 
-	r.ConfigLocations.PostgreConf = ctx.BaseConfigMapVolumeName
+	r.ConfigLocations.PostgresConf = ctx.BaseConfigMapVolumeName
 	r.ConfigLocations.PrimaryInitScript = ctx.BaseConfigMapVolumeName
 	r.ConfigLocations.BackUpScript = ctx.BaseConfigMapVolumeName
 	r.ConfigLocations.PgHbaConf = ctx.BaseConfigMapVolumeName
@@ -88,7 +165,20 @@ func (r *ConfigStates) loadStates() (err error) {
 		r.IsBaseConfigDeployed = true
 	}
 
+	if baseConfigMap.Data[ConfigMapDataKeyTLSPostgresConf] != "" {
+		r.ConfigLocations.TLSPostgresConfForReplica = ctx.BaseConfigMapVolumeName
+	}
+
+	if baseConfigMap.Data[ConfigMapDataKeyTLSPgHbaConf] != "" {
+		r.ConfigLocations.TLSPgHbaConf = ctx.BaseConfigMapVolumeName
+	}
+
+	if baseConfigMap.Data[ConfigMapDataKeyTLSCopyPrimaryDataToReplicaScript] != "" {
+		r.ConfigLocations.TLSCopyPrimaryDataToReplica = ctx.BaseConfigMapVolumeName
+	}
+
 	if r.isBaseConfigAlsoCustomConfig() {
+		r.IsTLSConfigDeployed = r.isTLSConfigDeployed(baseConfigMap)
 		return nil
 	}
 
@@ -102,7 +192,7 @@ func (r *ConfigStates) loadStates() (err error) {
 		r.IsCustomConfigDeployed = true
 
 		if customConfigMap.Data[ConfigMapDataKeyPostgresConf] != "" {
-			r.ConfigLocations.PostgreConf = ctx.CustomConfigMapVolumeName
+			r.ConfigLocations.PostgresConf = ctx.CustomConfigMapVolumeName
 		}
 
 		if customConfigMap.Data[ConfigMapDataKeyPrimaryInitScript] != "" {
@@ -128,9 +218,47 @@ func (r *ConfigStates) loadStates() (err error) {
 		if customConfigMap.Data[ConfigMapDataKeyPromoteReplica] != "" {
 			r.ConfigLocations.PromoteReplica = ctx.CustomConfigMapVolumeName
 		}
+
+		if customConfigMap.Data[ConfigMapDataKeyTLSPostgresConf] != "" {
+			r.ConfigLocations.TLSPostgresConfForPrimary = ctx.CustomConfigMapVolumeName
+		}
+
+		if customConfigMap.Data[ConfigMapDataKeyTLSPgHbaConf] != "" {
+			r.ConfigLocations.TLSPgHbaConf = ctx.CustomConfigMapVolumeName
+		}
+
+		if customConfigMap.Data[ConfigMapDataKeyTLSCopyPrimaryDataToReplicaScript] != "" {
+			r.ConfigLocations.TLSCopyPrimaryDataToReplica = ctx.CustomConfigMapVolumeName
+		}
+
+		r.IsTLSConfigDeployed = r.isTLSConfigDeployed(baseConfigMap, customConfigMap)
 	}
 
+	r.IsTLSConfigDeployed = r.isTLSConfigDeployed(baseConfigMap)
+
 	return nil
+}
+
+func (r *ConfigStates) isTLSConfigDeployed(cms ...*core.ConfigMap) bool {
+	var requiredKeys = make([]string, 0, len(TLSConfigKeyReplacements))
+	for _, replacement := range TLSConfigKeyReplacements {
+		requiredKeys = append(requiredKeys, replacement.ReplacementKey)
+	}
+
+	for _, required := range requiredKeys {
+		keyFound := false
+		for _, cm := range cms {
+			if cm.Data[required] != "" {
+				keyFound = true
+				break
+			}
+		}
+		// If the key is not found in any of the provided ConfigMaps, early break with false
+		if !keyFound {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *ConfigStates) isBaseConfigAlsoCustomConfig() bool {

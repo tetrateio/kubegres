@@ -21,10 +21,11 @@ limitations under the License.
 package defaultspec
 
 import (
+	"strconv"
+
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
-	"strconv"
 )
 
 type UndefinedSpecValuesChecker struct {
@@ -80,6 +81,57 @@ func (r *UndefinedSpecValuesChecker) apply() error {
 		kubegresSpec.Scheduler.Affinity = r.createDefaultAffinity()
 		wasSpecChanged = true
 		r.createLog("spec.Affinity", kubegresSpec.Scheduler.Affinity.String())
+	}
+
+	if kubegresSpec.TLS.Enabled {
+		if kubegresSpec.TLS.MountPath == "" {
+			wasSpecChanged = true
+			kubegresSpec.TLS.MountPath = ctx.DefaultTLSMountPath
+			r.createLog("spec.TLS.MountPath", kubegresSpec.TLS.MountPath)
+		}
+		if kubegresSpec.TLS.Mode == "" {
+			wasSpecChanged = true
+			kubegresSpec.TLS.Mode = ctx.DefaultTLSMode
+			r.createLog("spec.TLS.Mode", kubegresSpec.TLS.Mode)
+		}
+		if kubegresSpec.TLS.RootCertPath == "" {
+			wasSpecChanged = true
+			kubegresSpec.TLS.RootCertPath = ctx.DefaultTLSRootCertPath
+			r.createLog("spec.TLS.RootCertPath", kubegresSpec.TLS.RootCertPath)
+		}
+		if kubegresSpec.TLS.ServerCertPath == "" {
+			wasSpecChanged = true
+			kubegresSpec.TLS.ServerCertPath = ctx.DefaultTLSServerCertPath
+			r.createLog("spec.TLS.ServerCertPath", kubegresSpec.TLS.ServerCertPath)
+		}
+		if kubegresSpec.TLS.ServerKeyPath == "" {
+			wasSpecChanged = true
+			kubegresSpec.TLS.ServerKeyPath = ctx.DefaultTLSServerKeyPath
+			r.createLog("spec.TLS.ServerKeyPath", kubegresSpec.TLS.ServerKeyPath)
+		}
+		if kubegresSpec.TLS.ClientCertPath == "" {
+			wasSpecChanged = true
+			kubegresSpec.TLS.ClientCertPath = ctx.DefaultTLSClientCertPath
+			r.createLog("spec.TLS.ClientCertPath", kubegresSpec.TLS.ClientCertPath)
+		}
+		if kubegresSpec.TLS.ClientKeyPath == "" {
+			wasSpecChanged = true
+			kubegresSpec.TLS.ClientKeyPath = ctx.DefaultTLSClientKeyPath
+			r.createLog("spec.TLS.ClientKeyPath", kubegresSpec.TLS.ClientKeyPath)
+		}
+
+		if kubegresSpec.SecurityContext == nil {
+			wasSpecChanged = true
+			var (
+				runAsUser    int64 = 70   // Default UID for PostgreSQL TODO: Check if this is the correct UID for your use case
+				runAsNonRoot bool  = true // Ensures the container runs as a non-root user
+			)
+			kubegresSpec.SecurityContext = &core.PodSecurityContext{
+				RunAsUser:    &runAsUser,
+				RunAsNonRoot: &runAsNonRoot,
+			}
+			r.createLog("spec.SecurityContext", "RunAsUser=70, RunAsNonRoot=true")
+		}
 	}
 
 	if wasSpecChanged {

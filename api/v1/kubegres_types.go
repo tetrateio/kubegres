@@ -27,6 +27,17 @@ import (
 
 // ----------------------- SPEC -------------------------------------------
 
+type TLS struct {
+	Enabled        bool   `json:"enabled,omitempty"`
+	SecretName     string `json:"secretName,omitempty"`
+	MountPath      string `json:"mountPath,omitempty"`  // Defaults to /var/lib/postgresql/data/tls
+	RootCertPath   string `json:"rootCert,omitempty"`   // Defaults to /var/lib/postgresql/data/tls/root.crt
+	ServerCertPath string `json:"serverCert,omitempty"` // Defaults to /var/lib/postgresql/data/tls/server.crt
+	ServerKeyPath  string `json:"serverKey,omitempty"`  // Defaults to /var/lib/postgresql/data/tls/server.key
+	ClientCertPath string `json:"clientCert,omitempty"` // Defaults to /var/lib/postgresql/data/tls/client.crt
+	ClientKeyPath  string `json:"clientKey,omitempty"`  // Defaults to /var/lib/postgresql/data/tls/client.key
+	Mode           string `json:"mode,omitempty"`       // see: https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION. Defaults to "verify-full"
+}
 type KubegresDatabase struct {
 	Size             string  `json:"size,omitempty"`
 	VolumeMount      string  `json:"volumeMount,omitempty"`
@@ -83,6 +94,7 @@ type KubegresSpec struct {
 	ServiceAccountName string                    `json:"serviceAccountName,omitempty"`
 	Standby            Standby                   `json:"standby,omitempty"`
 	SidecarContainers  []v1.Container            `json:"sidecarContainers,omitempty"`
+	TLS                TLS                       `json:"tls,omitempty"`
 }
 
 type Standby struct {

@@ -21,8 +21,10 @@ limitations under the License.
 package resourceConfigs
 
 import (
-	"io/ioutil"
 	"log"
+	"os"
+	"strings"
+	"text/template"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -92,7 +94,7 @@ func LoadYamlConfigMapExternalDB() v1.ConfigMap {
 }
 
 func getFileContents(filePath string) string {
-	contents, err := ioutil.ReadFile(filePath)
+	contents, err := os.ReadFile(filePath)
 	if err != nil {
 		log.Fatal("Unable to find file '"+filePath+"'. Given error: ", err)
 	}
@@ -106,8 +108,54 @@ func decodeYaml(yamlContents string) runtime.Object {
 	obj, _, err := decode([]byte(yamlContents), nil, nil)
 
 	if err != nil {
-		log.Fatal("Error in decode:", obj, err)
+		log.Fatal("Error in decode:", obj, err, "contents:", yamlContents)
 	}
 
 	return obj
+}
+
+func LoadYamlTLSSecretWithNameAndKeys(secretName string, data map[string][]byte) v1.Secret {
+	templateByes, err := os.ReadFile(TLSSecretYamlTemplateFile)
+	if err != nil {
+		log.Fatal("Error reading TLS secret template file:", err)
+		return v1.Secret{}
+	}
+
+	t, err := template.New("tls-secret-" + secretName).Parse(string(templateByes))
+	if err != nil {
+		log.Fatal("Error parsing template for TLS secret:", err)
+		return v1.Secret{}
+	}
+
+	certData := make(map[string]string, len(data))
+	for key, value := range data {
+		certData[key] = string(value)
+	}
+
+	d := struct {
+		Name   string
+		Data   map[string]string
+		Indent func(int, string) string
+	}{
+		Name: secretName,
+		Data: certData,
+		Indent: func(i int, s string) string {
+			var indented string
+			for _, line := range strings.Split(s, "\n") {
+				if len(line) > 0 {
+					indented += strings.Repeat(" ", i) + line + "\n"
+				}
+			}
+			return indented
+		},
+	}
+
+	yamlContent := strings.Builder{}
+	err = t.Execute(&yamlContent, d)
+	if err != nil {
+		log.Fatal("Error executing template for TLS secret:", err)
+		return v1.Secret{}
+	}
+
+	return *decodeYaml(yamlContent.String()).(*v1.Secret)
 }

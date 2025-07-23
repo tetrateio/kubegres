@@ -22,6 +22,7 @@ package checker
 
 import (
 	"errors"
+	"path"
 	"reflect"
 
 	apps "k8s.io/api/apps/v1"
@@ -116,6 +117,27 @@ func (r *SpecChecker) CheckSpec() (SpecCheckResult, error) {
 
 		if specCheckResult.HasSpecFatalError {
 			return specCheckResult, nil
+		}
+	}
+
+	if r.kubegresContext.Kubegres.Spec.TLS.Enabled {
+		if len(r.kubegresContext.Kubegres.Spec.TLS.SecretName) == 0 {
+			specCheckResult.HasSpecFatalError = true
+			specCheckResult.FatalErrorMessage = r.logSpecErrMsg("In the Resources Spec the value of 'spec.tls.enabled' is true but 'spec.tls.secretName' " +
+				"has an empty secret name. Please set a valid secret name, otherwise this operator cannot work correctly.")
+		}
+
+		if !r.resourcesStates.TLSSecret.IsSecretDeployed {
+			specCheckResult.HasSpecFatalError = true
+			specCheckResult.FatalErrorMessage = r.logSpecErrMsg("In the Resources Spec the value of 'spec.tls.secretName' " +
+				"has a secret name which is not deployed. Please deploy this secret, otherwise this operator cannot work correctly.")
+		}
+
+		if r.resourcesStates.TLSSecret.IsSecretDeployed && !r.doesTLSSecretKeysMatch() {
+			specCheckResult.HasSpecFatalError = true
+			specCheckResult.FatalErrorMessage = r.logSpecErrMsg("In the Resources Spec the value of 'spec.tls' " +
+				"has a secret name which does not have all the required keys. Please deploy this secret with all the required keys or change the spec.tls, " +
+				"otherwise this operator cannot work correctly.")
 		}
 	}
 
@@ -240,6 +262,21 @@ func (r *SpecChecker) isCustomConfigNotDeployed(spec *postgresV1.KubegresSpec) b
 	return spec.CustomConfig != "" &&
 		spec.CustomConfig != ctx.BaseConfigMapName &&
 		!r.resourcesStates.Config.IsCustomConfigDeployed
+}
+
+func (r *SpecChecker) doesTLSSecretKeysMatch() bool {
+	for _, required := range []string{
+		path.Base(r.kubegresContext.Kubegres.Spec.TLS.RootCertPath),
+		path.Base(r.kubegresContext.Kubegres.Spec.TLS.ServerCertPath),
+		path.Base(r.kubegresContext.Kubegres.Spec.TLS.ServerKeyPath),
+		path.Base(r.kubegresContext.Kubegres.Spec.TLS.ClientCertPath),
+		path.Base(r.kubegresContext.Kubegres.Spec.TLS.ClientKeyPath),
+	} {
+		if !r.resourcesStates.TLSSecret.SecretKeys[required] {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *SpecChecker) createErrMsgSpecUndefined(specName string) string {

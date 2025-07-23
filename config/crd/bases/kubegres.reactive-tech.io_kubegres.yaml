@@ -2772,6 +2772,27 @@ spec:
                   primaryEndpoint:
                     type: string
                 type: object
+              tls:
+                properties:
+                  clientCert:
+                    type: string
+                  clientKey:
+                    type: string
+                  enabled:
+                    type: boolean
+                  mode:
+                    type: string
+                  mountPath:
+                    type: string
+                  rootCert:
+                    type: string
+                  secretName:
+                    type: string
+                  serverCert:
+                    type: string
+                  serverKey:
+                    type: string
+                type: object
               volume:
                 properties:
                   volumeClaimTemplates:
