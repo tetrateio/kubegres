@@ -185,46 +185,6 @@ func (r *TLSSpecEnforcer) compareVolumeMount(volumeMount core.VolumeMount, expec
 		volumeMount.ReadOnly == expected.ReadOnly
 }
 
-//func (r *TLSSpecEnforcer) haveVolumeMountsUpdatedTLSConfigMapKeys(statefulSet *apps.StatefulSet) bool {
-//	var containersUpdated, initContainersUpdated bool
-//
-//	for _, container := range statefulSet.Spec.Template.Spec.Containers {
-//		var updated bool
-//		for _, volumeMount := range container.VolumeMounts {
-//			if volumeMount.Name == ctx.BaseConfigMapVolumeName &&
-//				(volumeMount.SubPath == states.ConfigMapDataKeyTLSPostgresConfForPrimary ||
-//					volumeMount.SubPath == states.ConfigMapDataKeyTLSPostgresConfForReplica) {
-//				updated = true
-//				break
-//			}
-//		}
-//		if !updated {
-//			containersUpdated = false
-//			break
-//		}
-//		containersUpdated = true
-//	}
-//
-//	for _, initContainer := range statefulSet.Spec.Template.Spec.InitContainers {
-//		var updated bool
-//		for _, volumeMount := range initContainer.VolumeMounts {
-//			if volumeMount.Name == ctx.BaseConfigMapVolumeName &&
-//				(volumeMount.SubPath == states.ConfigMapDataKeyTLSPostgresConfForPrimary ||
-//					volumeMount.SubPath == states.ConfigMapDataKeyTLSPostgresConfForReplica) {
-//				updated = true
-//				break
-//			}
-//		}
-//		if !updated {
-//			initContainersUpdated = false
-//			break
-//		}
-//		initContainersUpdated = true
-//	}
-//
-//	return containersUpdated && initContainersUpdated
-//}
-
 func (r *TLSSpecEnforcer) addTLSVolume(statefulSet *apps.StatefulSet) {
 	tlsVolume := template.TLSVolume(r.kubegresContext.Kubegres.Spec.TLS)
 

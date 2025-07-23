@@ -48,7 +48,7 @@ func (r *TLSConfigSpecHelper) ConfigureStatefulSet(statefulSet *apps.StatefulSet
 	}
 
 	r.UndoVolumeMountsWithTLSConfigMapKeys(statefulSet)
-	// TODO (sergicastro) undo readiness and liveness probes
+	r.RestoreNonTLSDefaultProbes(statefulSet)
 }
 
 func (r *TLSConfigSpecHelper) UpdateVolumeMountsWithTLSConfigMapKeys(statefulSet *apps.StatefulSet) {
@@ -184,8 +184,7 @@ func (r *TLSConfigSpecHelper) OverrideDefaultLivenessProbeWithTLS(probe *corev1.
 }
 
 func (r *TLSConfigSpecHelper) overrideDefaultProbeWithTLS(probe *corev1.Probe) {
-	tls := r.kubegresContext.Kubegres.Spec.TLS
-	probe.Exec.Command = tlsProbeCommand(tls)
+	probe.Exec.Command = tlsProbeCommand(r.kubegresContext.Kubegres.Spec)
 }
 
 func (r *TLSConfigSpecHelper) OverrideDefaultProbesWithTLS(statefulSet *apps.StatefulSet) {
@@ -193,15 +192,38 @@ func (r *TLSConfigSpecHelper) OverrideDefaultProbesWithTLS(statefulSet *apps.Sta
 	r.OverrideDefaultLivenessProbeWithTLS(statefulSet.Spec.Template.Spec.Containers[0].LivenessProbe)
 }
 
-func tlsProbeCommand(tls apiv1.TLS) []string {
+func (r *TLSConfigSpecHelper) RestoreNonTLSDefaultProbes(statefulSet *apps.StatefulSet) {
+	if !r.kubegresContext.Kubegres.Spec.TLS.Enabled && r.kubegresContext.Kubegres.Spec.Probe.ReadinessProbe == nil {
+		statefulSet.Spec.Template.Spec.Containers[0].ReadinessProbe.Exec.Command = defaultProbeCommand()
+	}
+	if !r.kubegresContext.Kubegres.Spec.TLS.Enabled && r.kubegresContext.Kubegres.Spec.Probe.LivenessProbe == nil {
+		statefulSet.Spec.Template.Spec.Containers[0].LivenessProbe.Exec.Command = defaultProbeCommand()
+	}
+}
+
+func tlsProbeCommand(spec apiv1.KubegresSpec) []string {
+	postgresUser := "postgres"
+	for _, ev := range spec.Env {
+		if ev.Name == "POSTGRES_USER" {
+			postgresUser = ev.Value
+			break
+		}
+	}
+
 	return []string{
 		"sh",
 		"-c",
 		fmt.Sprintf("PGPASSWORD=$POSTGRES_PASSWORD psql \"sslmode=verify-ca "+
 			"sslrootcert=%[1]s sslcert=%[2]s sslkey=%[3]s "+
-			//"host=$POD_IP user=$POSTGRES_USER\" -c \"SELECT 1\"",
-			// TODO (sergicastro) check about $POSTGRES_USER env var defined or not
-			"host=$POD_IP user=postgres\" -c \"SELECT 1\"",
-			tls.RootCertPath, tls.ClientCertPath, tls.ClientKeyPath),
+			"host=$POD_IP user=%[4]s\" -c \"SELECT 1\"",
+			spec.TLS.RootCertPath, spec.TLS.ClientCertPath, spec.TLS.ClientKeyPath, postgresUser),
+	}
+}
+
+func defaultProbeCommand() []string {
+	return []string{
+		"sh",
+		"-c",
+		"exec pg_isready -U postgres -h $POD_IP",
 	}
 }

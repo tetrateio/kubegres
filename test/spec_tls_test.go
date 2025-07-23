@@ -33,7 +33,6 @@ var _ = Describe("Kubegres TLS Spec", Label("tls"), func() {
 		test.resourceCreator.CreateTLSSecretWithValidCerts()
 		rootCertPath, clientCertPath, clientKeyPath := test.storeClientTLSCerts()
 
-		test.dbQueryTestCases = testcases.InitDbQueryTestCases(test.resourceCreator, resourceConfigs.KubegresResourceName, k8sClientTest)
 		test.dbQueryTestCases = testcases.InitDbQueryTestCasesWithConnections(
 			util.InitDbConnectionDbUtil(
 				k8sClientTest,
@@ -42,7 +41,7 @@ var _ = Describe("Kubegres TLS Spec", Label("tls"), func() {
 			),
 			util.InitDbConnectionDbUtil(
 				k8sClientTest,
-				util.WithBaseConfig(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryPrimaryDbNodePort, false),
+				util.WithBaseConfig(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort, false),
 				util.WithSSLConfig("verify-ca", rootCertPath, clientCertPath, clientKeyPath),
 			),
 		)
