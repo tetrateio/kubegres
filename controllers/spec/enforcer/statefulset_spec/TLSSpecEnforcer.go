@@ -2,6 +2,7 @@ package statefulset_spec
 
 import (
 	"fmt"
+	"strings"
 
 	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
@@ -65,6 +66,8 @@ func (r *TLSSpecEnforcer) CheckForSpecDifference(statefulSet *apps.StatefulSet) 
 				}
 			}
 		}
+
+		return StatefulSetSpecDifference{} // No differences found when TLS is disabled
 	}
 
 	currentTLSVolume := r.getCurrentTLSVolume(statefulSet)
@@ -319,9 +322,19 @@ func (r *TLSSpecEnforcer) removeTLSVolumeMounts(statefulSet *apps.StatefulSet) {
 }
 
 func (r *TLSSpecEnforcer) volumeToString(volume core.Volume) string {
-	return "Name: " + volume.Name +
-		", SecretName: " + volume.VolumeSource.Secret.SecretName +
-		", DefaultMode: " + string(*volume.VolumeSource.Secret.DefaultMode)
+	str := strings.Builder{}
+	str.WriteString("Name: " + volume.Name)
+	if volume.VolumeSource.Secret == nil {
+		str.WriteString(", Secret: nil")
+		return str.String()
+	}
+	str.WriteString(", SecretName: " + volume.VolumeSource.Secret.SecretName)
+	if volume.VolumeSource.Secret.DefaultMode == nil {
+		str.WriteString(", DefaultMode: nil")
+		return str.String()
+	}
+	str.WriteString(", DefaultMode: " + string(*volume.VolumeSource.Secret.DefaultMode))
+	return str.String()
 }
 
 func (r *TLSSpecEnforcer) volumeMountToString(volumeMount core.VolumeMount) string {
