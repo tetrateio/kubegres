@@ -213,7 +213,7 @@ func (r *TestResourceCreator) CreateTLSSecretEmpty() {
 	r.createResourceFromYaml("Empty TLS Secret", resourceConfigs2.TLSSecretNameEmpty, &existingResource, &resourceToCreate)
 }
 
-func (r *TestResourceCreator) CreateTLSSecretWithValidCerts() {
+func (r *TestResourceCreator) CreateTLSSecretWithValidCerts() *v1.Secret {
 	existingResource := v1.Secret{}
 
 	nodeIps := r.getNodeIPs()
@@ -231,9 +231,9 @@ func (r *TestResourceCreator) CreateTLSSecretWithValidCerts() {
 
 	resourceToCreate := resourceConfigs2.LoadYamlTLSSecretWithNameAndKeys(resourceConfigs2.TLSSecretNameValid, data)
 	resourceToCreate.Namespace = r.namespace
-	_, err = r.createResourceFromYaml("TLS Secret with valid certs", resourceConfigs2.TLSSecretNameValid, &existingResource, &resourceToCreate)
+	secret, err := r.createResourceFromYaml("TLS Secret with valid certs", resourceConfigs2.TLSSecretNameValid, &existingResource, &resourceToCreate)
 	gomega.Expect(err).Should(gomega.Succeed())
-
+	return secret.(*v1.Secret)
 }
 
 func (r *TestResourceCreator) CreateServiceToSqlQueryDb(kubegresName string, nodePort int, isPrimaryDb bool) (runtime.Object, error) {

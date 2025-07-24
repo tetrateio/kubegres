@@ -30,8 +30,8 @@ var _ = Describe("Kubegres TLS Spec", Label("tls"), func() {
 
 		test.resourceCreator.CreateBackUpPvc()
 		test.resourceCreator.CreateTLSSecretEmpty()
-		test.resourceCreator.CreateTLSSecretWithValidCerts()
-		rootCertPath, clientCertPath, clientKeyPath := test.storeClientTLSCerts()
+		certsSecret := test.resourceCreator.CreateTLSSecretWithValidCerts()
+		rootCertPath, clientCertPath, clientKeyPath := test.storeClientTLSCerts(certsSecret)
 
 		test.dbQueryTestCases = testcases.InitDbQueryTestCasesWithConnections(
 			util.InitDbConnectionDbUtil(
@@ -559,12 +559,9 @@ func (t *TLSTest) thenMissingKeysErrorEventShouldBeLogged() {
 	t.eventuallyErrorEventShouldBeLogged(expectedErrorEvent)
 }
 
-func (t *TLSTest) storeClientTLSCerts() (string, string, string) {
-	secret, err := t.resourceRetriever.GetTLSSecret(resourceConfigs.TLSSecretNameValid)
-	Expect(err).Should(Succeed(), "Failed to retrieve TLS secret")
-
+func (t *TLSTest) storeClientTLSCerts(secret *corev1.Secret) (string, string, string) {
 	t.tmpDir = path.Join(os.TempDir(), "kubegres-tls-test")
-	err = os.MkdirAll(t.tmpDir, 0755)
+	err := os.MkdirAll(t.tmpDir, 0755)
 	Expect(err).Should(Succeed(), "Failed to create temporary directory %s", t.tmpDir)
 
 	for _, key := range []string{
