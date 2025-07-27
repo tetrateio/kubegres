@@ -109,10 +109,9 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), func() {
 
 			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 
-			test.keepCreatedResourcesForNextTest = true
-
 			Expect(test.dbQueryTestCases.GetReplicationSlots()).Should(BeEmpty())
 
+			test.keepCreatedResourcesForNextTest = true
 		})
 
 		It("THEN 1 primary and 1 replica should be created", func() {
@@ -131,7 +130,35 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), func() {
 			Expect(test.dbQueryTestCases.GetReplicationSlots()).Should(BeEmpty())
 
 			test.keepCreatedResourcesForNextTest = true
+		})
 
+		It("THEN existing Kubegres is updated with wrong replicationSlots settings", func() {
+			kubegres, err := test.resourceRetriever.GetKubegres()
+			Expect(err).ToNot(HaveOccurred())
+
+			dbSize := resource.MustParse(kubegres.Spec.Database.Size)
+			a1Gi := resource.MustParse("1Gi")
+			a1Gi.Add(dbSize)
+			invalidSize := a1Gi // 1Gi + DB size > DB Size - invalid config
+
+			test.givenExistingKubegresReplicationSlotsIsSetTo(postgresv1.ReplicationSlots{
+				Enabled:        true,
+				MaxWalKeepSize: invalidSize,
+			})
+
+			test.whenKubernetesIsUpdated()
+
+			test.thenErrorEventShouldBeLogged(fmt.Sprintf("In the Resources Spec the value of 'spec.replicationSlots.maxWalKeepSize' (%s) must be less than 'spec.database.size' (%s).",
+				a1Gi.String(), dbSize.String()))
+
+			test.thenPodsStatesShouldBe(1, 1)
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
+
+			Expect(test.dbQueryTestCases.GetReplicationSlots()).Should(BeEmpty())
+
+			test.keepCreatedResourcesForNextTest = true
 		})
 
 		It("THEN existing Kubegres is updated with replicationSlots enabled and default values", func() {
@@ -144,8 +171,10 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), func() {
 
 			test.thenReplicationSlotsShouldHaveDefaultSettingsWith(maxWalKeepSize)
 
-			test.thenPodsStatesShouldBe(1, 1)
+			test.thenPodsStatesShouldBe(1, 2) // should deploy replica WITH replication slot first
+			test.thenReplicationSlotShouldBeActive()
 
+			test.thenPodsStatesShouldBe(1, 1) // should end up with one replica with replication slot
 			test.thenReplicationSlotShouldBeActive()
 
 			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
@@ -154,7 +183,7 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), func() {
 			test.keepCreatedResourcesForNextTest = true
 		})
 
-		It("THEN existing Kubegres is with replicationSlots enabled decreased to 0 replicas", func() {
+		It("THEN existing Kubegres is updated with replicationSlots enabled decreased to 0 replicas", func() {
 
 			test.givenExistingKubegresSpecIsSetTo(1)
 
@@ -162,43 +191,40 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), func() {
 
 			test.thenPodsStatesShouldBe(1, 0)
 
-			Eventually(func() bool {
-				runningReplicationSlots := test.dbQueryTestCases.GetReplicationSlots()
-				if len(runningReplicationSlots) == 0 {
-					log.Println("no replication slots found")
-					return true
-				}
-				log.Println("Replication slots found: ", runningReplicationSlots)
-				return false
-			}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+			test.thenReplicationSlotsShouldBeCleanedUp()
 
 			test.keepCreatedResourcesForNextTest = true
 		})
 
-		It("THEN existing Kubegres is updated with wrong replicationSlots settings", func() {
-			kubegres, err := test.resourceRetriever.GetKubegres()
-			Expect(err).ToNot(HaveOccurred())
+		It("THEN existing Kubegres is updated back to settings with 1 replicas", func() {
+			test.givenExistingKubegresSpecIsSetTo(2)
 
-			dbSize := resource.MustParse(kubegres.Spec.Database.Size)
-			parsedSize := resource.MustParse("1Gi")
-			parsedSize.Add(dbSize)
+			test.whenKubernetesIsUpdated()
 
+			test.thenPodsStatesShouldBe(1, 1)
+
+			test.thenReplicationSlotShouldBeActive()
+
+			test.keepCreatedResourcesForNextTest = true
+		})
+
+		It("THEN existing Kubegres is updated with replicationSlots disabled", func() {
 			test.givenExistingKubegresReplicationSlotsIsSetTo(postgresv1.ReplicationSlots{
-				Enabled:        true,
-				MaxWalKeepSize: parsedSize,
+				Enabled: false,
 			})
 
 			test.whenKubernetesIsUpdated()
 
-			test.thenErrorEventShouldBeLogged(fmt.Sprintf("In the Resources Spec the value of 'spec.replicationSlots.maxWalKeepSize' (%s) must be less than 'spec.database.size' (%s).",
-				parsedSize.String(), dbSize.String()))
+			test.thenPodsStatesShouldBe(1, 2) // should deploy replica WITHOUT replication slot first
+
+			test.thenReplicationSlotsShouldBeCleanedUp()
+
+			test.thenPodsStatesShouldBe(1, 1) // should have only ONE replica WITHOUT replication slots
+
+			test.keepCreatedResourcesForNextTest = true
 
 			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'replica' set to 1'")
-
 		})
-
-		// TODO(piotrkpc): missing tests:
-		// - start with replication slot enabled and at least one replica - disable replication slots and the old replicas with replication slots should be recreated
 
 	})
 
@@ -590,4 +616,16 @@ func (r *SpecReplicaTest) thenReplicationSlotShouldBeActive() {
 		Active: true,
 	})
 
+}
+
+func (r *SpecReplicaTest) thenReplicationSlotsShouldBeCleanedUp() {
+	Eventually(func() bool {
+		for _, slot := range r.dbQueryTestCases.GetReplicationSlots() {
+			if slot.Active {
+				log.Printf("replication slot should NOT be active: %v", slot)
+				return false
+			}
+		}
+		return true
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
 }
