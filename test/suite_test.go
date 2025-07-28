@@ -92,7 +92,7 @@ var _ = BeforeSuite(func() {
 
 	// +kubebuilder:scaffold:scheme
 
-	k8sClientTest, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
+	k8sClientTest, err = client.NewWithWatch(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).ToNot(HaveOccurred())
 	Expect(k8sClientTest).ToNot(BeNil())
 
@@ -162,7 +162,6 @@ var _ = BeforeSuite(func() {
 
 	log.Println("Waiting for Kubernetes to start")
 
-	k8sClientTest = k8sManager.GetClient()
 	Expect(k8sClientTest).ToNot(BeNil())
 
 	// Wait for Kubernetes envtest to start
