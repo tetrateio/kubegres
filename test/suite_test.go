@@ -110,6 +110,12 @@ var _ = BeforeSuite(func() {
 	kubegresName := resourceConfigs.LoadKubegresYaml().GetName()
 
 	err = (&controllers.KubegresReconciler{
+		Client:              k8sManager.GetClient(),
+		Logger:              mockLogger,
+		Scheme:              k8sManager.GetScheme(),
+		Recorder:            record.EventRecorder(&eventRecorderTest),
+		ClusterName:         TestClusterName})
+	err = (&controllers.KubegresReconciler{
 		Client:          k8sManager.GetClient(),
 		Logger:          util.CreateMockLogger().WithName("kubegres-reconciler"),
 		Scheme:          k8sManager.GetScheme(),

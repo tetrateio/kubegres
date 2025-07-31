@@ -27,11 +27,11 @@ import (
 	"github.com/go-logr/logr"
 	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctx2 "reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/controllers/ctx/resources"
 
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -41,11 +41,12 @@ import (
 // KubegresReconciler reconciles a Kubegres object
 type KubegresReconciler struct {
 	client.Client
-	Logger             logr.Logger
-	Scheme             *runtime.Scheme
-	Recorder           record.EventRecorder
+	Logger              logr.Logger
+	Scheme              *runtime.Scheme
+	Recorder            record.EventRecorder
 	ConnectionStore    *sql.ConnectionStore
-	ClusterName        string
+	ClusterName         string
+	PrimarySvcRetriever func() (svcName string, port int32, err error) // should be used only in tests
 }
 
 //+kubebuilder:rbac:groups=kubegres.reactive-tech.io,resources=kubegres,verbs=get;list;watch;create;update;patch;delete
@@ -77,7 +78,7 @@ func (r *KubegresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
-	resourcesContext, err := resources.CreateResourcesContext(kubegres, ctx, r.Logger, r.Client, r.Recorder, r.ConnectionStore, r.ClusterName, r.PrimarySvcProvider)
+	resourcesContext, err := resources.CreateResourcesContext(kubegres, ctx, r.Logger, r.Client, r.Recorder, r.ConnectionStore, r.ClusterName, r.PrimarySvcRetriever)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
