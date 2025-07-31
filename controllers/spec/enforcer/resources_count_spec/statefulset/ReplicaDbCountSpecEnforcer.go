@@ -21,18 +21,13 @@ limitations under the License.
 package statefulset
 
 import (
-	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/stdlib"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -44,6 +39,7 @@ import (
 	"reactive-tech.io/kubegres/controllers/states"
 	"reactive-tech.io/kubegres/controllers/states/statefulset"
 	replicationSlotRepo "reactive-tech.io/kubegres/internal/replicationslot/repo"
+	"reactive-tech.io/kubegres/internal/sql"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -73,7 +69,7 @@ func CreateReplicaDbCountSpecEnforcer(
 	resourcesCreator template.ResourcesCreatorFromTemplate,
 	blockingOperation *operation.BlockingOperation,
 	clusterName string,
-	optionalPrimarySvcProvider func() (svcName string, port int32, err error),
+	primaryDbSvcRetriever func() (svcName string, port int32, err error),
 ) (ReplicaDbCountSpecEnforcer, error) {
 
 	enforcer := ReplicaDbCountSpecEnforcer{
@@ -87,24 +83,16 @@ func CreateReplicaDbCountSpecEnforcer(
 	// TODO(piotrkpc): should this be here ? not testable code really
 	if kubegresContext.Kubegres.Spec.ReplicationSlots.Enabled {
 
-		primaryDbServiceResolver := func() (svcName string, port int32, err error) {
-			primarySvcName := kubegresContext.GetServiceResourceName(true)
-			if len(resourcesStates.Services.Primary.Service.Spec.Ports) == 0 {
-				return "", 0, fmt.Errorf("primary service '%s' has no ports defined", primarySvcName)
-			}
-			port = resourcesStates.Services.Primary.Service.Spec.Ports[0].Port
-			return primarySvcName, port, nil
-		}
-		if optionalPrimarySvcProvider != nil {
-			primaryDbServiceResolver = optionalPrimarySvcProvider
-		}
-
-		connConfig, err := newConnectorConfig(kubegresContext.Ctx, primaryDbServiceResolver, kubegresContext.Kubegres.Spec.Env, kubegresContext.Client, kubegresContext.Kubegres.GetNamespace())
+		db, err := sql.NewDBFrom(kubegresContext, resourcesStates, primaryDbSvcRetriever)
 		if err != nil {
-			return ReplicaDbCountSpecEnforcer{}, fmt.Errorf("create connector config: %w", err)
+			return ReplicaDbCountSpecEnforcer{}, fmt.Errorf("create db from kubegres context and states: %w", err)
 		}
-		db := sql.OpenDB(stdlib.GetConnector(*connConfig))
-		enforcer.replicationSlotsCreateDeleter = newSimpleReplicationSlotsCreateDeleter(kubegresContext, resourcesStates, replicationSlotRepo.New(db), clusterName)
+		enforcer.replicationSlotsCreateDeleter = newSimpleReplicationSlotsCreateDeleter(
+			kubegresContext,
+			resourcesStates,
+			replicationSlotRepo.New(db),
+			clusterName,
+		)
 	}
 
 	return enforcer, nil
@@ -196,64 +184,6 @@ func newSimpleReplicationSlotsCreateDeleter(kubegresContext kubegresCtx.Kubegres
 		kubegresContext: kubegresContext,
 		clusterName:     clusterName,
 	}
-}
-
-// TODO(piotrkpc): @Sergi, this is likely to be changed to something more sophisticated that would enable ssl enabled connections
-func newConnectorConfig(
-	ctx context.Context,
-	primarySvcProvider func() (string, int32, error),
-	env []corev1.EnvVar,
-	client ctrlclient.Client,
-	namespace string,
-) (*pgx.ConnConfig, error) {
-
-	primarySvcName, port, err := primarySvcProvider()
-	if err != nil {
-		return nil, fmt.Errorf("get primary service name and port: %w", err)
-	}
-
-	user := "replication"
-
-	idx := slices.IndexFunc(env, func(envVar corev1.EnvVar) bool {
-		return envVar.Name == kubegresCtx.EnvVarNameOfPostgresReplicationUserPsw
-	})
-	if idx == -1 {
-		return nil, fmt.Errorf("replication user password environment variable '%s' not found", kubegresCtx.EnvVarNameOfPostgresReplicationUserPsw)
-	}
-	envWithReplicationCreds := env[idx]
-	password := envWithReplicationCreds.Value
-
-	if envWithReplicationCreds.ValueFrom != nil {
-		if envWithReplicationCreds.ValueFrom.SecretKeyRef != nil {
-			var secret corev1.Secret
-			objectKey := ctrlclient.ObjectKey{
-				Name:      envWithReplicationCreds.ValueFrom.SecretKeyRef.Name,
-				Namespace: namespace,
-			}
-			err := client.Get(ctx, objectKey, &secret)
-			if err != nil {
-				return nil, fmt.Errorf("get replication user password secret '%v': %w", objectKey, err)
-			}
-			password = string(secret.Data[envWithReplicationCreds.ValueFrom.SecretKeyRef.Key])
-		}
-		if envWithReplicationCreds.ValueFrom.ConfigMapKeyRef != nil {
-			var configMap corev1.ConfigMap
-			objectKey := ctrlclient.ObjectKey{
-				Name:      envWithReplicationCreds.ValueFrom.ConfigMapKeyRef.Name,
-				Namespace: namespace,
-			}
-			err := client.Get(ctx, objectKey, &configMap)
-			if err != nil {
-				return nil, fmt.Errorf("get replication user password config map '%v': %w", objectKey, err)
-			}
-			password = configMap.Data[envWithReplicationCreds.ValueFrom.ConfigMapKeyRef.Key]
-		}
-		if envWithReplicationCreds.ValueFrom.FieldRef != nil || envWithReplicationCreds.ValueFrom.ResourceFieldRef != nil {
-			return nil, fmt.Errorf("replication user password environment variable '%s' cannot be set from field or resource reference", kubegresCtx.EnvVarNameOfPostgresReplicationUserPsw)
-		}
-	}
-
-	return pgx.ParseConfig("postgresql://" + user + ":" + password + "@" + primarySvcName + ":" + strconv.Itoa(int(port)) + "/postgres?sslmode=disable")
 }
 
 func (r *ReplicaDbCountSpecEnforcer) CreateOperationConfigForReplicaDbDeploying() operation.BlockingOperationConfig {

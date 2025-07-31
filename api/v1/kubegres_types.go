@@ -72,7 +72,7 @@ type ReplicationSlots struct {
 	Enabled                 bool              `json:"enabled,omitempty"`
 	DisableCleanup          bool              `json:"disableCleanup,omitempty"`
 	MaxWalKeepSize          resource.Quantity `json:"maxWalKeepSize,omitempty"`
-	InactiveSlotGracePeriod time.Duration     `json:"inactiveSlotGracePeriod,omitempty"`
+	InactiveSlotGracePeriod *time.Duration    `json:"inactiveSlotGracePeriod,omitempty"`
 	HealthCheckInterval     time.Duration     `json:"healthCheckInterval,omitempty"`
 }
 

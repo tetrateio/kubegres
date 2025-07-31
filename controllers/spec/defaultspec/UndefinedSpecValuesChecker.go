@@ -91,8 +91,9 @@ func (r *UndefinedSpecValuesChecker) apply() error {
 			r.createLog("spec.replicationSlots.maxWalKeepSize", kubegresSpec.ReplicationSlots.MaxWalKeepSize.String())
 		}
 
-		if kubegresSpec.ReplicationSlots.InactiveSlotGracePeriod == 0 {
-			kubegresSpec.ReplicationSlots.InactiveSlotGracePeriod = ctx.DefaultReplicationSlotsInactiveSlotGracePeriod
+		if kubegresSpec.ReplicationSlots.InactiveSlotGracePeriod == nil {
+			defaultGracePeriod := ctx.DefaultReplicationSlotsInactiveSlotGracePeriod
+			kubegresSpec.ReplicationSlots.InactiveSlotGracePeriod = &defaultGracePeriod
 			wasSpecChanged = true
 			r.createLog("spec.replicationSlots.inactiveSlotGracePeriod", kubegresSpec.ReplicationSlots.InactiveSlotGracePeriod.String())
 		}

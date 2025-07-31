@@ -108,48 +108,57 @@ var _ = BeforeSuite(func() {
 	primaryDbSvcNamespace := serviceToSqlQueryPrimaryDb.GetNamespace()
 	kubegresName := resourceConfigs.LoadKubegresYaml().GetName()
 
+	testPrimarySvcRetriever := func() (svcName string, port int32, err error) {
+		// during tests the controller is running outside the k8s test cluster, hence we need
+		// a function that will use a NodePort service created as part of test setup rather than
+		// svc with ClusterIP that is managed by the operator itself.
+		testResourceRetriever := util.CreateTestResourceRetriever(k8sClientTest, primaryDbSvcNamespace)
+		var svc v1.Service
+		primaryDbSvc := testResourceRetriever.GetServiceNameAllowingToSqlQueryDb(kubegresName, true)
+		err = k8sClientTest.Get(context.Background(), client.ObjectKey{
+			Namespace: primaryDbSvcNamespace,
+			Name:      primaryDbSvc,
+		}, &svc)
+		if k8serrors.IsNotFound(err) {
+			return "", 0, fmt.Errorf("primary service '%s' not found: %w", primaryDbSvc, err)
+		}
+		var nodeList v1.NodeList
+		err = k8sClientTest.List(context.Background(), &nodeList)
+		if err != nil {
+			log.Println("ERROR: Unable to list nodes for test:", err)
+			return "", 0, err
+		}
+		if len(nodeList.Items) == 0 {
+			log.Println("ERROR: No nodes found for test")
+			return "", 0, nil
+		}
+		firstNode := nodeList.Items[0]
+		var nodeAddress string
+		for _, address := range firstNode.Status.Addresses {
+			if address.Type != v1.NodeInternalIP {
+				continue
+			}
+			nodeAddress = address.Address
+			break
+		}
+		return nodeAddress, resourceConfigs.ServiceToSqlQueryPrimaryDbNodePort, nil
+	}
 	err = (&controllers.KubegresReconciler{
-		Client:      k8sManager.GetClient(),
-		Logger:      mockLogger,
-		Scheme:      k8sManager.GetScheme(),
-		Recorder:    record.EventRecorder(&eventRecorderTest),
-		ClusterName: TestClusterName,
-		PrimarySvcProvider: func() (svcName string, port int32, err error) {
-			// during tests the controller is running outside the k8s test cluster, hence we need
-			// a function that will use a NodePort service created as part of test setup rather than
-			// svc with ClusterIP that is managed by the operator itself.
-			testResourceRetriever := util.CreateTestResourceRetriever(k8sClientTest, primaryDbSvcNamespace)
-			var svc v1.Service
-			primaryDbSvc := testResourceRetriever.GetServiceNameAllowingToSqlQueryDb(kubegresName, true)
-			err = k8sClientTest.Get(context.Background(), client.ObjectKey{
-				Namespace: primaryDbSvcNamespace,
-				Name:      primaryDbSvc,
-			}, &svc)
-			if k8serrors.IsNotFound(err) {
-				return "", 0, fmt.Errorf("primary service '%s' not found: %w", primaryDbSvc, err)
-			}
-			var nodeList v1.NodeList
-			err = k8sClientTest.List(context.Background(), &nodeList)
-			if err != nil {
-				log.Println("ERROR: Unable to list nodes for test:", err)
-				return "", 0, err
-			}
-			if len(nodeList.Items) == 0 {
-				log.Println("ERROR: No nodes found for test")
-				return "", 0, nil
-			}
-			firstNode := nodeList.Items[0]
-			var nodeAddress string
-			for _, address := range firstNode.Status.Addresses {
-				if address.Type != v1.NodeInternalIP {
-					continue
-				}
-				nodeAddress = address.Address
-				break
-			}
-			return nodeAddress, resourceConfigs.ServiceToSqlQueryPrimaryDbNodePort, nil
-		},
+		Client:              k8sManager.GetClient(),
+		Logger:              mockLogger,
+		Scheme:              k8sManager.GetScheme(),
+		Recorder:            record.EventRecorder(&eventRecorderTest),
+		ClusterName:         TestClusterName,
+		PrimarySvcRetriever: testPrimarySvcRetriever,
 	}).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred())
+
+	err = controllers.NewCleanupReplicationSlotsReconciler(
+		k8sClientTest,
+		mockLogger,
+		record.EventRecorder(&eventRecorderTest),
+		testPrimarySvcRetriever,
+	).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
 	go func() {
