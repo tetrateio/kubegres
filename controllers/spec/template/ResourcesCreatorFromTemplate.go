@@ -179,6 +179,7 @@ func (r *ResourcesCreatorFromTemplate) CreateBackUpCronJob(configMapNameForBackU
 	backUpCronJobContainer.Env[1].Value = postgres.Name
 	backUpCronJobContainer.Env[2].Value = backupSpec.VolumeMount
 	backUpCronJobContainer.Env = append(backUpCronJobContainer.Env, r.kubegresContext.Kubegres.Spec.Env...)
+	r.tlsConfigSpecHelper.ConfigureTLSEnvVarsToContainer(backUpCronJobContainer)
 
 	if tls.Enabled {
 		backUpCronJobContainer.VolumeMounts[1].SubPath = states.ConfigMapDataKeyTLSBackupDatabaseScript
@@ -308,36 +309,6 @@ func (r *ResourcesCreatorFromTemplate) initStatefulSet(
 		statefulSetTemplate.Spec.Template.Spec.ServiceAccountName = postgresSpec.ServiceAccountName
 	}
 
-	if postgresSpec.TLS.Enabled {
-		defaultMode := ctx.DefaultTLSVolumeMode
-		tlsVolume := core.Volume{
-			Name: ctx.TLSVolumeName,
-			VolumeSource: core.VolumeSource{
-				Secret: &core.SecretVolumeSource{
-					SecretName:  postgresSpec.TLS.SecretName,
-					DefaultMode: &defaultMode,
-				},
-			},
-		}
-		statefulSetTemplate.Spec.Template.Spec.Volumes = append(statefulSetTemplate.Spec.Template.Spec.Volumes, tlsVolume)
-
-		for i := range statefulSetTemplate.Spec.Template.Spec.Containers {
-			statefulSetTemplate.Spec.Template.Spec.Containers[i].VolumeMounts =
-				append(statefulSetTemplate.Spec.Template.Spec.Containers[i].VolumeMounts, core.VolumeMount{
-					Name:      ctx.TLSVolumeName,
-					MountPath: postgresSpec.TLS.MountPath,
-					ReadOnly:  true,
-				})
-		}
-		for i := range statefulSetTemplate.Spec.Template.Spec.InitContainers {
-			statefulSetTemplate.Spec.Template.Spec.InitContainers[i].VolumeMounts =
-				append(statefulSetTemplate.Spec.Template.Spec.InitContainers[i].VolumeMounts, core.VolumeMount{
-					Name:      ctx.TLSVolumeName,
-					MountPath: postgresSpec.TLS.MountPath,
-					ReadOnly:  true,
-				})
-		}
-	}
 }
 
 // Extract annotations set in Kubegres YAML by
@@ -374,34 +345,34 @@ func (r *ResourcesCreatorFromTemplate) doesCustomConfigExist() bool {
 		r.kubegresContext.Kubegres.Spec.CustomConfig != ctx.BaseConfigMapName
 }
 
-func (r *ResourcesCreatorFromTemplate) CreateTLSConfigMapKeyUpdates() (map[string][]byte, error) {
+func (r *ResourcesCreatorFromTemplate) CreateTLSConfigMapKeyUpdates() (map[string]string, error) {
 	tls := r.kubegresContext.Kubegres.Spec.TLS
 
-	tlsConfigMapKeyUpdates := make(map[string][]byte, 2)
+	tlsConfigMapKeyUpdates := make(map[string]string, 2)
 
 	b, err := LoadTLSPostgresConf(tls)
 	if err != nil {
 		return nil, err
 	}
-	tlsConfigMapKeyUpdates[states.ConfigMapDataKeyTLSPostgresConf] = b
+	tlsConfigMapKeyUpdates[states.ConfigMapDataKeyTLSPostgresConf] = string(b)
 
 	b, err = LoadTLSPgHbaConf()
 	if err != nil {
 		return nil, err
 	}
-	tlsConfigMapKeyUpdates[states.ConfigMapDataKeyTLSPgHbaConf] = b
+	tlsConfigMapKeyUpdates[states.ConfigMapDataKeyTLSPgHbaConf] = string(b)
 
 	b, err = LoadTLSCopyPrimaryDataScript(tls)
 	if err != nil {
 		return nil, err
 	}
-	tlsConfigMapKeyUpdates[states.ConfigMapDataKeyTLSCopyPrimaryDataToReplicaScript] = b
+	tlsConfigMapKeyUpdates[states.ConfigMapDataKeyTLSCopyPrimaryDataToReplicaScript] = string(b)
 
 	b, err = LoadTLSBackupScript(tls)
 	if err != nil {
 		return nil, err
 	}
-	tlsConfigMapKeyUpdates[states.ConfigMapDataKeyTLSBackupDatabaseScript] = b
+	tlsConfigMapKeyUpdates[states.ConfigMapDataKeyTLSBackupDatabaseScript] = string(b)
 
 	return tlsConfigMapKeyUpdates, nil
 }

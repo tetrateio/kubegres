@@ -14,7 +14,7 @@ spec:
   database:
     size: 200Mi
     storageClassName: standard
-    volumeMount: /var/lib/postgres/data
+    volumeMount: /var/lib/postgresql/data
 
   customConfig: base-kubegres-config
 

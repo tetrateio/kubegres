@@ -24,8 +24,6 @@ import (
 	apps "k8s.io/api/apps/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/controllers/spec/template"
-
-	"reflect"
 )
 
 type ReadinessProbeSpecEnforcer struct {
@@ -45,21 +43,14 @@ func (r *ReadinessProbeSpecEnforcer) GetSpecName() string {
 }
 
 func (r *ReadinessProbeSpecEnforcer) CheckForSpecDifference(statefulSet *apps.StatefulSet) StatefulSetSpecDifference {
-	current := statefulSet.Spec.Template.Spec.Containers[0].ReadinessProbe
-	expected := r.kubegresContext.Kubegres.Spec.Probe.ReadinessProbe
+	deepCopy := statefulSet.DeepCopy()
+	expected, current, updated := r.tlsConfigSpecHelper.ConfigureReadinessProbe(deepCopy)
 
-	if expected == nil {
-		// If the expected readiness probe is using the default value,
-		// let's create a copy of the current one with the TLS defaults applied to compare.
-		expected = current.DeepCopy()
-		r.tlsConfigSpecHelper.OverrideDefaultReadinessProbeWithTLS(expected)
-	}
-
-	if !reflect.DeepEqual(current, expected) {
+	if updated {
 		return StatefulSetSpecDifference{
 			SpecName: r.GetSpecName(),
-			Current:  current.String(),
-			Expected: expected.String(),
+			Current:  current,
+			Expected: expected,
 		}
 	}
 
@@ -67,9 +58,8 @@ func (r *ReadinessProbeSpecEnforcer) CheckForSpecDifference(statefulSet *apps.St
 }
 
 func (r *ReadinessProbeSpecEnforcer) EnforceSpec(statefulSet *apps.StatefulSet) (wasSpecUpdated bool, err error) {
-	statefulSet.Spec.Template.Spec.Containers[0].ReadinessProbe = r.kubegresContext.Kubegres.Spec.Probe.ReadinessProbe
-	r.tlsConfigSpecHelper.OverrideDefaultReadinessProbeWithTLS(statefulSet.Spec.Template.Spec.Containers[0].ReadinessProbe)
-	return true, nil
+	_, _, ok := r.tlsConfigSpecHelper.ConfigureReadinessProbe(statefulSet)
+	return ok, nil
 }
 
 func (r *ReadinessProbeSpecEnforcer) OnSpecEnforcedSuccessfully(statefulSet *apps.StatefulSet) error {

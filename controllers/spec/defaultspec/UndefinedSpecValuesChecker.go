@@ -21,6 +21,7 @@ limitations under the License.
 package defaultspec
 
 import (
+	"errors"
 	"strconv"
 
 	core "k8s.io/api/core/v1"
@@ -41,6 +42,8 @@ func SetDefaultForUndefinedSpecValues(kubegresContext ctx.KubegresContext, defau
 
 	return defaultSpec.apply()
 }
+
+var LastRequestedSSLMode string
 
 func (r *UndefinedSpecValuesChecker) apply() error {
 
@@ -84,15 +87,13 @@ func (r *UndefinedSpecValuesChecker) apply() error {
 	}
 
 	if kubegresSpec.TLS.Enabled {
+		if kubegresSpec.TLS.SSLMode == "" {
+			return errors.New("spec.TLS.SSLMode must be specified when spec.TLS.Enabled=true")
+		}
 		if kubegresSpec.TLS.MountPath == "" {
 			wasSpecChanged = true
 			kubegresSpec.TLS.MountPath = ctx.DefaultTLSMountPath
 			r.createLog("spec.TLS.MountPath", kubegresSpec.TLS.MountPath)
-		}
-		if kubegresSpec.TLS.Mode == "" {
-			wasSpecChanged = true
-			kubegresSpec.TLS.Mode = ctx.DefaultTLSMode
-			r.createLog("spec.TLS.Mode", kubegresSpec.TLS.Mode)
 		}
 		if kubegresSpec.TLS.RootCertPath == "" {
 			wasSpecChanged = true
@@ -120,18 +121,18 @@ func (r *UndefinedSpecValuesChecker) apply() error {
 			r.createLog("spec.TLS.ClientKeyPath", kubegresSpec.TLS.ClientKeyPath)
 		}
 
-		if kubegresSpec.SecurityContext == nil {
-			wasSpecChanged = true
-			var (
-				runAsUser    int64 = 70   // Default UID for PostgreSQL TODO: Check if this is the correct UID for your use case
-				runAsNonRoot bool  = true // Ensures the container runs as a non-root user
-			)
-			kubegresSpec.SecurityContext = &core.PodSecurityContext{
-				RunAsUser:    &runAsUser,
-				RunAsNonRoot: &runAsNonRoot,
-			}
-			r.createLog("spec.SecurityContext", "RunAsUser=70, RunAsNonRoot=true")
-		}
+		//if kubegresSpec.SecurityContext == nil {
+		//	wasSpecChanged = true
+		//	var (
+		//		runAsUser    int64 = 70   // Default UID for PostgreSQL TODO: Check if this is the correct UID for your use case
+		//		runAsNonRoot bool  = true // Ensures the container runs as a non-root user
+		//	)
+		//	kubegresSpec.SecurityContext = &core.PodSecurityContext{
+		//		RunAsUser:    &runAsUser,
+		//		RunAsNonRoot: &runAsNonRoot,
+		//	}
+		//	r.createLog("spec.SecurityContext", "RunAsUser=70, RunAsNonRoot=true")
+		//}
 	}
 
 	if wasSpecChanged {

@@ -27,16 +27,74 @@ import (
 
 // ----------------------- SPEC -------------------------------------------
 
+// SSLMode honors https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION.
+type SSLMode string
+
+const (
+	SSLModeDisable    SSLMode = "disable"
+	SSLModeAllow      SSLMode = "allow"
+	SSLModePrefer     SSLMode = "prefer"
+	SSLModeRequire    SSLMode = "require"
+	SSLModeVerifyCA   SSLMode = "verify-ca"
+	SSLModeVerifyFull SSLMode = "verify-full"
+)
+
+var (
+	sslModeTransitPriority = [][]SSLMode{
+		{SSLModeDisable},
+		{SSLModeAllow, SSLModePrefer},
+		{SSLModeRequire, SSLModeVerifyCA, SSLModeVerifyFull},
+	}
+)
+
+func (s SSLMode) String() string {
+	return string(s)
+}
+
+func (s SSLMode) Priority() int {
+	for i, modes := range sslModeTransitPriority {
+		for _, mode := range modes {
+			if mode == s {
+				return i
+			}
+		}
+	}
+	return 0 // Default to disable
+}
+
+func (s SSLMode) Higher() SSLMode {
+	if s.Priority() < len(sslModeTransitPriority)-1 {
+		return sslModeTransitPriority[s.Priority()+1][0]
+	}
+	return s
+}
+
+func (s SSLMode) Lower() SSLMode {
+	if s.Priority() > 0 {
+		return sslModeTransitPriority[s.Priority()-1][0]
+	}
+	return s
+}
+
 type TLS struct {
-	Enabled        bool   `json:"enabled,omitempty"`
-	SecretName     string `json:"secretName,omitempty"`
-	MountPath      string `json:"mountPath,omitempty"`  // Defaults to /var/lib/postgresql/data/tls
-	RootCertPath   string `json:"rootCert,omitempty"`   // Defaults to /var/lib/postgresql/data/tls/root.crt
-	ServerCertPath string `json:"serverCert,omitempty"` // Defaults to /var/lib/postgresql/data/tls/server.crt
-	ServerKeyPath  string `json:"serverKey,omitempty"`  // Defaults to /var/lib/postgresql/data/tls/server.key
-	ClientCertPath string `json:"clientCert,omitempty"` // Defaults to /var/lib/postgresql/data/tls/client.crt
-	ClientKeyPath  string `json:"clientKey,omitempty"`  // Defaults to /var/lib/postgresql/data/tls/client.key
-	Mode           string `json:"mode,omitempty"`       // see: https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION. Defaults to "verify-full"
+	// Enabled indicates whether TLS is enabled in Postgresql connections. Defaults to false.
+	Enabled bool `json:"enabled,omitempty"`
+	// SecretName is the name of the Kubernetes secret that contains the TLS certificates. Required if TLS is enabled.
+	SecretName string `json:"secretName,omitempty"`
+	// MountPath is the path where the TLS certificates will be mounted in the Pod. Defaults to /var/lib/postgresql/data/tls
+	MountPath string `json:"mountPath,omitempty"`
+	// RootCertPath is the path to the root certificate file. Defaults to /var/lib/postgresql/data/tls/root.crt
+	RootCertPath string `json:"rootCert,omitempty"`
+	// ServerCertPath is the path to the server certificate file. Defaults to /var/lib/postgresql/data/tls/server.crt
+	ServerCertPath string `json:"serverCert,omitempty"`
+	// ServerKeyPath is the path to the server key file. Defaults to /var/lib/postgresql/data/tls/server.key
+	ServerKeyPath string `json:"serverKey,omitempty"`
+	// ClientCertPath is the path to the client certificate file. Defaults to /var/lib/postgresql/data/tls/client.crt
+	ClientCertPath string `json:"clientCert,omitempty"`
+	// ClientKeyPath is the path to the client key file. Defaults to /var/lib/postgresql/data/tls/client.key
+	ClientKeyPath string `json:"clientKey,omitempty"`
+	// SSLMode honors https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION. Required if TLS is enabled.
+	SSLMode SSLMode `json:"mode,omitempty"`
 }
 type KubegresDatabase struct {
 	Size             string  `json:"size,omitempty"`
@@ -129,7 +187,25 @@ type KubegresStatus struct {
 	BlockingOperation         KubegresBlockingOperation `json:"blockingOperation,omitempty"`
 	PreviousBlockingOperation KubegresBlockingOperation `json:"previousBlockingOperation,omitempty"`
 	EnforcedReplicas          int32                     `json:"enforcedReplicas,omitempty"`
+	TLSTransition             TLSTransition             `json:"tlsTransition,omitempty"`
 }
+
+// TLSTransition is used to track the TLS mode transition state.
+type TLSTransition struct {
+	TransitionInProgress bool            `json:"transitionInProgress"`
+	CurrentTransitMode   SSLMode         `json:"currentTransitMode"`
+	TransitState         TLSTransitState `json:"transitState"`
+	SecureSpec           TLS             `json:"secureSpec,omitempty"`
+	InsecureSpec         TLS             `json:"insecureSpec,omitempty"`
+}
+
+type TLSTransitState string
+
+const (
+	TLSTransitStateNone       TLSTransitState = ""
+	TLSTransitStateToSecure   TLSTransitState = "to_secure"
+	TLSTransitStateToInsecure TLSTransitState = "to_insecure"
+)
 
 // ----------------------- RESOURCE ---------------------------------------
 

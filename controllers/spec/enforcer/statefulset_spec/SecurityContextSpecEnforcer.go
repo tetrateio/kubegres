@@ -21,19 +21,19 @@ limitations under the License.
 package statefulset_spec
 
 import (
-	v1 "k8s.io/api/core/v1"
-	"reflect"
+	"reactive-tech.io/kubegres/controllers/spec/template"
 
 	apps "k8s.io/api/apps/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
 )
 
 type SecurityContextSpecEnforcer struct {
-	kubegresContext ctx.KubegresContext
+	kubegresContext     ctx.KubegresContext
+	tlsConfigSpecHelper template.TLSConfigSpecHelper
 }
 
-func CreateSecurityContextSpecEnforcer(kubegresContext ctx.KubegresContext) SecurityContextSpecEnforcer {
-	return SecurityContextSpecEnforcer{kubegresContext: kubegresContext}
+func CreateSecurityContextSpecEnforcer(kubegresContext ctx.KubegresContext, tlsConfigSpecHelpers template.TLSConfigSpecHelper) SecurityContextSpecEnforcer {
+	return SecurityContextSpecEnforcer{kubegresContext: kubegresContext, tlsConfigSpecHelper: tlsConfigSpecHelpers}
 }
 
 func (r *SecurityContextSpecEnforcer) GetSpecName() string {
@@ -41,20 +41,14 @@ func (r *SecurityContextSpecEnforcer) GetSpecName() string {
 }
 
 func (r *SecurityContextSpecEnforcer) CheckForSpecDifference(statefulSet *apps.StatefulSet) StatefulSetSpecDifference {
+	deepCopy := statefulSet.DeepCopy()
+	exp, cur, updated := r.tlsConfigSpecHelper.ConfigureSecurityContext(deepCopy)
 
-	current := statefulSet.Spec.Template.Spec.SecurityContext
-	expected := r.kubegresContext.Kubegres.Spec.SecurityContext
-	emptySecurityContext := &v1.PodSecurityContext{}
-
-	if expected == nil && reflect.DeepEqual(current, emptySecurityContext) {
-		return StatefulSetSpecDifference{}
-	}
-
-	if !reflect.DeepEqual(current, expected) {
+	if updated {
 		return StatefulSetSpecDifference{
 			SpecName: r.GetSpecName(),
-			Current:  current.String(),
-			Expected: expected.String(),
+			Current:  cur,
+			Expected: exp,
 		}
 	}
 
@@ -62,8 +56,8 @@ func (r *SecurityContextSpecEnforcer) CheckForSpecDifference(statefulSet *apps.S
 }
 
 func (r *SecurityContextSpecEnforcer) EnforceSpec(statefulSet *apps.StatefulSet) (wasSpecUpdated bool, err error) {
-	statefulSet.Spec.Template.Spec.SecurityContext = r.kubegresContext.Kubegres.Spec.SecurityContext
-	return true, nil
+	_, _, ok := r.tlsConfigSpecHelper.ConfigureSecurityContext(statefulSet)
+	return ok, nil
 }
 
 func (r *SecurityContextSpecEnforcer) OnSpecEnforcedSuccessfully(statefulSet *apps.StatefulSet) error {

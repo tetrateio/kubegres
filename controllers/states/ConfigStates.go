@@ -24,6 +24,7 @@ import (
 	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	v1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -55,6 +56,9 @@ var TLSConfigKeyReplacements = []TLSConfigKeyReplacement{
 		ReplacementKey:   ConfigMapDataKeyTLSPgHbaConf,
 		AppliesInstance:  PrimaryAndReplicaInstance,
 		AppliesContainer: OnlyMainContainer,
+		matchCondition: func(spec v1.KubegresSpec) bool {
+			return spec.TLS.Enabled && spec.TLS.SSLMode != "" && spec.TLS.SSLMode != v1.SSLModeDisable
+		},
 	},
 	{
 		OriginalKey:      ConfigMapDataKeyCopyPrimaryDataToReplica,
@@ -76,6 +80,7 @@ type (
 		ReplacementKey   string
 		AppliesInstance  appliesInstance
 		AppliesContainer appliesContainer
+		matchCondition   func(spec v1.KubegresSpec) bool
 	}
 	appliesInstance  int
 	appliesContainer int
@@ -108,13 +113,19 @@ func (t TLSConfigKeyReplacement) DoesApplyStatefulSet(statefulSet *apps.Stateful
 	return t.AppliesInstance == ReplicaInstance || t.AppliesInstance == PrimaryAndReplicaInstance
 }
 
+func (t TLSConfigKeyReplacement) MatchCondition(spec v1.KubegresSpec) bool {
+	if t.matchCondition == nil {
+		return true
+	}
+	return t.matchCondition(spec)
+}
+
 type ConfigStates struct {
 	IsBaseConfigDeployed   bool
 	BaseConfigName         string
 	IsCustomConfigDeployed bool
 	CustomConfigName       string
 	ConfigLocations        ConfigLocations
-	IsTLSConfigDeployed    bool
 
 	kubegresContext ctx.KubegresContext
 }
@@ -178,7 +189,6 @@ func (r *ConfigStates) loadStates() (err error) {
 	}
 
 	if r.isBaseConfigAlsoCustomConfig() {
-		r.IsTLSConfigDeployed = r.isTLSConfigDeployed(baseConfigMap)
 		return nil
 	}
 
@@ -231,34 +241,9 @@ func (r *ConfigStates) loadStates() (err error) {
 			r.ConfigLocations.TLSCopyPrimaryDataToReplica = ctx.CustomConfigMapVolumeName
 		}
 
-		r.IsTLSConfigDeployed = r.isTLSConfigDeployed(baseConfigMap, customConfigMap)
 	}
-
-	r.IsTLSConfigDeployed = r.isTLSConfigDeployed(baseConfigMap)
 
 	return nil
-}
-
-func (r *ConfigStates) isTLSConfigDeployed(cms ...*core.ConfigMap) bool {
-	var requiredKeys = make([]string, 0, len(TLSConfigKeyReplacements))
-	for _, replacement := range TLSConfigKeyReplacements {
-		requiredKeys = append(requiredKeys, replacement.ReplacementKey)
-	}
-
-	for _, required := range requiredKeys {
-		keyFound := false
-		for _, cm := range cms {
-			if cm.Data[required] != "" {
-				keyFound = true
-				break
-			}
-		}
-		// If the key is not found in any of the provided ConfigMaps, early break with false
-		if !keyFound {
-			return false
-		}
-	}
-	return true
 }
 
 func (r *ConfigStates) isBaseConfigAlsoCustomConfig() bool {

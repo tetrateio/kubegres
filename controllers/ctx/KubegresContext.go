@@ -61,7 +61,7 @@ const (
 	DefaultTLSServerKeyPath                = "/var/lib/postgresql/data/tls/server.key"
 	DefaultTLSClientCertPath               = "/var/lib/postgresql/data/tls/client.crt"
 	DefaultTLSClientKeyPath                = "/var/lib/postgresql/data/tls/client.key"
-	DefaultTLSMode                         = "verify-full"
+	EnvVarNameTLSMode                      = "SSL_MODE"
 	TLSVolumeName                          = "tls-certs"
 	DefaultTLSVolumeMode                   = int32(0o640)
 )

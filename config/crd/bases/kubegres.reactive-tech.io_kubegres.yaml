@@ -2781,6 +2781,7 @@ spec:
                   enabled:
                     type: boolean
                   mode:
+                    description: SSLMode honors https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION.
                     type: string
                   mountPath:
                     type: string
@@ -4647,6 +4648,66 @@ spec:
                   timeOutEpocInSeconds:
                     format: int64
                     type: integer
+                type: object
+              tlsTransition:
+                description: TLSTransition is used to track the TLS mode transition
+                  state.
+                properties:
+                  currentTransitMode:
+                    description: SSLMode honors https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION.
+                    type: string
+                  insecureSpec:
+                    properties:
+                      clientCert:
+                        type: string
+                      clientKey:
+                        type: string
+                      enabled:
+                        type: boolean
+                      mode:
+                        description: SSLMode honors https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION.
+                        type: string
+                      mountPath:
+                        type: string
+                      rootCert:
+                        type: string
+                      secretName:
+                        type: string
+                      serverCert:
+                        type: string
+                      serverKey:
+                        type: string
+                    type: object
+                  secureSpec:
+                    properties:
+                      clientCert:
+                        type: string
+                      clientKey:
+                        type: string
+                      enabled:
+                        type: boolean
+                      mode:
+                        description: SSLMode honors https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION.
+                        type: string
+                      mountPath:
+                        type: string
+                      rootCert:
+                        type: string
+                      secretName:
+                        type: string
+                      serverCert:
+                        type: string
+                      serverKey:
+                        type: string
+                    type: object
+                  transitState:
+                    type: string
+                  transitionInProgress:
+                    type: boolean
+                required:
+                - currentTransitMode
+                - transitState
+                - transitionInProgress
                 type: object
             type: object
         type: object

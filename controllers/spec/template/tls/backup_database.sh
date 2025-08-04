@@ -10,8 +10,10 @@ ssl_ca_file="{{ .RootCertPath }}"
 ssl_cert_file="{{ .CertPath }}"
 ssl_key_file="{{ .KeyPath }}"
 
+SSL_MODE=${SSL_MODE:-verify-ca}
 POSTGRES_USER=${POSTGRES_USER:-postgres}
-connection_string="sslmode=verify-ca sslrootcert=$ssl_ca_file sslcert=$ssl_cert_file sslkey=$ssl_key_file host=$BACKUP_SOURCE_DB_HOST_NAME user=$POSTGRES_USER"
+
+connection_string="sslmode=${SSL_MODE} sslrootcert=$ssl_ca_file sslcert=$ssl_cert_file sslkey=$ssl_key_file host=$BACKUP_SOURCE_DB_HOST_NAME user=$POSTGRES_USER"
 
 echo "$dt - Starting DB backup of Kubegres resource $KUBEGRES_RESOURCE_NAME into file: $backUpFilePath";
 

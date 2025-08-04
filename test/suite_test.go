@@ -96,7 +96,7 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).ToNot(HaveOccurred())
 
-	mockLogger := util.CreateMockLogger()
+	mockLogger := util.CreateMockLogger(nil)
 	eventRecorderTest = util.MockEventRecorderTestUtil{}
 
 	err = (&controllers.KubegresReconciler{

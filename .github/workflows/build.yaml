@@ -16,6 +16,17 @@ env:
   GOPROXY: https://proxy.golang.org
 
 jobs:
+
+  # Unit tests are run in parallel to the matrix tests.
+  test-unit:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+    - run: make test-unit
+
   # All test running sequentially take around ~2h.
   # Splitting them in groups that take more or less the same time makes PR's readiness faster
   test-group:
@@ -56,3 +67,4 @@ jobs:
             }}" == "false" ] || exit 1
     needs:
       - test-group
+      - test-unit

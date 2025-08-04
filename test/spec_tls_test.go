@@ -33,17 +33,18 @@ var _ = Describe("Kubegres TLS Spec", Label("tls"), func() {
 		certsSecret := test.resourceCreator.CreateTLSSecretWithValidCerts()
 		rootCertPath, clientCertPath, clientKeyPath := test.storeClientTLSCerts(certsSecret)
 
-		test.dbQueryTestCases = testcases.InitDbQueryTestCasesWithConnections(
-			util.InitDbConnectionDbUtil(
-				k8sClientTest,
-				util.WithBaseConfig(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryPrimaryDbNodePort, true),
-				util.WithSSLConfig("verify-ca", rootCertPath, clientCertPath, clientKeyPath),
-			),
-			util.InitDbConnectionDbUtil(
-				k8sClientTest,
-				util.WithBaseConfig(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort, false),
-				util.WithSSLConfig("verify-ca", rootCertPath, clientCertPath, clientKeyPath),
-			),
+		primaryBaseConfig := util.WithBaseConfig(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryPrimaryDbNodePort, true)
+		replicaBaseConfig := util.WithBaseConfig(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort, false)
+		tlsConfig := util.WithSSLConfig("verify-ca", rootCertPath, clientCertPath, clientKeyPath)
+
+		test.secureDBQueryTestCases = testcases.InitDbQueryTestCasesWithConnections(
+			util.InitDbConnectionDbUtil(k8sClientTest, primaryBaseConfig, tlsConfig),
+			util.InitDbConnectionDbUtil(k8sClientTest, replicaBaseConfig, tlsConfig),
+		)
+
+		test.insecureDBQueryTestCases = testcases.InitDbQueryTestCasesWithConnections(
+			util.InitDbConnectionDbUtil(k8sClientTest, primaryBaseConfig),
+			util.InitDbConnectionDbUtil(k8sClientTest, replicaBaseConfig),
 		)
 
 	})
@@ -110,16 +111,17 @@ var _ = Describe("Kubegres TLS Spec", Label("tls"), func() {
 
 			test.whenKubegresIsCreated()
 
-			test.thenDeployedKubegresSpecShouldHaveTLS()
+			test.thenDeployedKubegresSpecShouldHaveTLS(apiv1.SSLModeVerifyCA)
 
 			test.thenPodsShouldHaveReadyState(1, 0)
 
 			test.thenPodsShouldHaveTLSVolumeMounts()
 			test.thenBaseConfigMapShouldHaveTLSKeysAdded()
 			test.thenPodsShouldUseTLSConfigMapKeysInVolumeMounts()
-			test.thenPodsShouldUseTLSProbes()
+			test.thenPodsShouldUseTLSProbes(apiv1.SSLModeVerifyCA)
+			test.thenPodsMustUseTLSSecurityContext()
 
-			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.secureDBQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 
 			log.Println("END OF: Test 'GIVEN new Kubegres is created with TLS enabled with 1 replica'")
 		})
@@ -138,36 +140,113 @@ var _ = Describe("Kubegres TLS Spec", Label("tls"), func() {
 
 			test.whenKubegresIsCreated()
 
-			test.thenDeployedKubegresSpecShouldHaveTLS()
+			test.thenDeployedKubegresSpecShouldHaveTLS(apiv1.SSLModeVerifyCA)
+			test.thenNoBlockingOperationShouldBeActive()
 
 			test.thenPodsShouldHaveReadyState(1, 2)
 
 			test.thenPodsShouldHaveTLSVolumeMounts()
 			test.thenBaseConfigMapShouldHaveTLSKeysAdded()
 			test.thenPodsShouldUseTLSConfigMapKeysInVolumeMounts()
-			test.thenPodsShouldUseTLSProbes()
+			test.thenPodsShouldUseTLSProbes(apiv1.SSLModeVerifyCA)
+			test.thenPodsMustUseTLSSecurityContext()
 
-			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
-			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
+			test.secureDBQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.secureDBQueryTestCases.ThenWeCanSqlQueryReplicaDb()
 
 			test.thenCronJobExistsWithTLSConfig(resourceConfigs.BackUpPvcResourceName, "/tmp/my-backup", scheduleBackupEveryMin)
 			test.thenCronJobSucceedsAtLeastOnce()
-			// TODO (sergicastro): test backup restore
 
-			log.Println("START OF: Test 'GIVEN new Kubegres is created with TLS enabled with 3 replicas and backup configured'")
+			test.thenNoBlockingOperationShouldBeActive()
+
+			test.keepCreatedResourcesForNextTest = true
+
+			log.Println("END OF: Test 'GIVEN new Kubegres is created with TLS enabled with 3 replicas and backup configured'")
 
 		})
 
 	})
 
-	// TODO (sergicastro) Add test that disables TLS and so everything keeps working
-	// TODO (sergicastro) Add test that re-enables TLS and so everything keeps working
+	Context("GIVEN existing Kubegres TLS enabled, 3 replicas and backup configured, AND it is updated to disable TLS", func() {
+
+		It("THEN it should keep working without TLS and backup still working", func() {
+
+			log.Println()
+			log.Println()
+			log.Println()
+			log.Println("START OF: Test 'GIVEN existing Kubegres TLS enabled, 3 replicas and backup configured, AND it is updated to disable TLS'")
+
+			test.givenKubegresIsUpdatedToSetTLS(false)
+
+			test.whenKubegresIsUpdated()
+
+			test.thenDeployedKubegresSpecShouldNOTHaveTLS()
+			test.thenNoBlockingOperationShouldBeActive()
+
+			test.thenPodsShouldHaveReadyState(1, 2)
+
+			test.thenPodsShouldNOTHaveTLSVolumeMounts()
+			//test.thenBaseConfigMapShouldNOTHaveTLSKeysAdded()
+			test.thenPodsShouldNOTUseTLSConfigMapKeysInVolumeMounts()
+			test.thenPodsShouldNOTUseTLSProbes()
+
+			test.insecureDBQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.insecureDBQueryTestCases.ThenWeCanSqlQueryReplicaDb()
+
+			test.thenCronJobExistsWithoutTLSConfig(resourceConfigs.BackUpPvcResourceName, "/tmp/my-backup", scheduleBackupEveryMin)
+			test.thenCronJobSucceedsAtLeastOnce()
+
+			test.thenNoBlockingOperationShouldBeActive()
+
+			test.keepCreatedResourcesForNextTest = true
+
+			log.Println("END OF: Test 'GIVEN existing Kubegres TLS enabled, 3 replicas and backup configured, AND it is updated to disable TLS'")
+
+		})
+	})
+
+	Context("GIVEN existing Kubegres NO TLS enabled, 3 replicas and backup configured, AND it is updated to re-enable TLS", func() {
+
+		It("THEN it should keep working using TLS again and backup still working", func() {
+
+			log.Println("START OF: Test 'GIVEN existing Kubegres NO TLS enabled, 3 replicas and backup configured, AND it is updated to re-enable TLS'")
+
+			test.givenKubegresIsUpdatedToSetTLS(true)
+
+			test.whenKubegresIsUpdated()
+
+			test.thenDeployedKubegresSpecShouldHaveTLS(apiv1.SSLModeVerifyCA)
+			test.thenNoBlockingOperationShouldBeActive()
+
+			test.thenPodsShouldHaveReadyState(1, 2)
+
+			test.thenPodsShouldHaveTLSVolumeMounts()
+			test.thenBaseConfigMapShouldHaveTLSKeysAdded()
+			test.thenPodsShouldUseTLSConfigMapKeysInVolumeMounts()
+			test.thenPodsShouldUseTLSProbes(apiv1.SSLModeVerifyCA)
+			test.thenPodsMustUseTLSSecurityContext()
+
+			test.secureDBQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.secureDBQueryTestCases.ThenWeCanSqlQueryReplicaDb()
+
+			test.thenCronJobExistsWithTLSConfig(resourceConfigs.BackUpPvcResourceName, "/tmp/my-backup", scheduleBackupEveryMin)
+			test.thenCronJobSucceedsAtLeastOnce()
+
+			test.thenNoBlockingOperationShouldBeActive()
+
+			log.Println("END OF: Test 'GIVEN existing Kubegres NO TLS enabled, 3 replicas and backup configured, AND it is updated to re-enable TLS'")
+
+		})
+
+	})
+
 })
 
 type TLSTest struct {
 	keepCreatedResourcesForNextTest bool
 	kubegresResource                *apiv1.Kubegres
-	dbQueryTestCases                testcases.DbQueryTestCases
+	secureDBQueryTestCases          testcases.DbQueryTestCases
+	insecureDBQueryTestCases        testcases.DbQueryTestCases
 	resourceCreator                 util.TestResourceCreator
 	resourceRetriever               util.TestResourceRetriever
 	tmpDir                          string
@@ -179,6 +258,7 @@ func (t *TLSTest) givenNewKubegresIsCreatedWithTLS(secretName string, replicas i
 	t.kubegresResource.Spec.TLS = apiv1.TLS{
 		Enabled:    true,
 		SecretName: secretName,
+		SSLMode:    apiv1.SSLModeVerifyCA,
 	}
 }
 
@@ -194,11 +274,26 @@ func (t *TLSTest) givenKubegresIsUpdatedWithBackupEnabled(backupPvcName, volumeM
 	}
 }
 
+func (t *TLSTest) givenKubegresIsUpdatedToSetTLS(enable bool) {
+	if t.kubegresResource == nil {
+		t.kubegresResource = resourceConfigs.LoadKubegresYaml()
+	}
+
+	t.kubegresResource.Spec.TLS.Enabled = enable
+}
+
 func (t *TLSTest) whenKubegresIsCreated() {
 	t.resourceCreator.CreateKubegres(t.kubegresResource)
 }
 
-func (t *TLSTest) thenDeployedKubegresSpecShouldHaveTLS() {
+func (t *TLSTest) whenKubegresIsUpdated() {
+	kubegres, err := t.resourceRetriever.GetKubegresByName(t.kubegresResource.Name)
+	Expect(err).To(Succeed(), "Failed to retrieve Kubegres resource for update")
+	t.kubegresResource.ResourceVersion = kubegres.ResourceVersion
+	t.resourceCreator.UpdateResource(t.kubegresResource, t.kubegresResource.Name)
+}
+
+func (t *TLSTest) thenDeployedKubegresSpecShouldHaveTLS(sslMode apiv1.SSLMode) {
 	Eventually(func() bool {
 		kubegres, err := t.resourceRetriever.GetKubegres()
 		if err != nil {
@@ -215,11 +310,27 @@ func (t *TLSTest) thenDeployedKubegresSpecShouldHaveTLS() {
 			ClientCertPath: ctx.DefaultTLSClientCertPath,
 			ClientKeyPath:  ctx.DefaultTLSClientKeyPath,
 			MountPath:      ctx.DefaultTLSMountPath,
-			Mode:           ctx.DefaultTLSMode,
+			SSLMode:        sslMode,
 		}
 
 		if kubegres.Spec.TLS != wantTLS {
 			log.Println("Kubegres TLS spec does not match expected:", kubegres.Spec.TLS)
+			return false
+		}
+		return true
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+}
+
+func (t *TLSTest) thenDeployedKubegresSpecShouldNOTHaveTLS() {
+	Eventually(func() bool {
+		kubegres, err := t.resourceRetriever.GetKubegres()
+		if err != nil {
+			log.Println("Error retrieving Kubegres resource:", err)
+			return false
+		}
+
+		if kubegres.Spec.TLS.Enabled {
+			log.Println("Kubegres TLS spec should not be enabled, but it is:", kubegres.Spec.TLS)
 			return false
 		}
 		return true
@@ -306,6 +417,47 @@ func (t *TLSTest) thenPodsShouldHaveTLSVolumeMounts() {
 	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
 }
 
+func (t *TLSTest) thenPodsShouldNOTHaveTLSVolumeMounts() {
+	Eventually(func() bool {
+		resources, err := t.resourceRetriever.GetKubegresResources()
+		if err != nil {
+			log.Println("Error retrieving primary StatefulSet:", err)
+			return false
+		}
+
+		for _, r := range resources.Resources {
+			for _, v := range r.Pod.Spec.Volumes {
+				if v.Name == ctx.TLSVolumeName {
+					log.Println("TLS volume found in pod spec for resource:", r.Pod.Name, "but it should not be present")
+					return false
+				}
+			}
+
+			for _, c := range r.Pod.Spec.Containers {
+				for _, vm := range c.VolumeMounts {
+					if vm.Name == ctx.TLSVolumeName {
+						log.Println("TLS volume mount found in container spec for pod:", r.Pod.Name, "container name:", c.Name,
+							"but it should not be present")
+						return false
+					}
+				}
+			}
+
+			for _, c := range r.Pod.Spec.InitContainers {
+				for _, vm := range c.VolumeMounts {
+					if vm.Name == ctx.TLSVolumeName {
+						log.Println("TLS volume mount found in init container spec for pod:", r.Pod.Name, "init container name:", c.Name,
+							"but it should not be present")
+						return false
+					}
+				}
+			}
+		}
+
+		return true
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+}
+
 func (t *TLSTest) thenBaseConfigMapShouldHaveTLSKeysAdded() {
 	Eventually(func() bool {
 		resources, err := t.resourceRetriever.GetKubegresResources()
@@ -317,6 +469,25 @@ func (t *TLSTest) thenBaseConfigMapShouldHaveTLSKeysAdded() {
 		for _, key := range states.TLSConfigKeyReplacements {
 			if _, ok := resources.BaseConfigMap.Data[key.ReplacementKey]; !ok {
 				log.Printf("TLS config map key %s not found in base config map", key.ReplacementKey)
+				return false
+			}
+		}
+
+		return true
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+}
+
+func (t *TLSTest) thenBaseConfigMapShouldNOTHaveTLSKeysAdded() {
+	Eventually(func() bool {
+		resources, err := t.resourceRetriever.GetKubegresResources()
+		if err != nil {
+			log.Println("Error retrieving kubegres resources:", err)
+			return false
+		}
+
+		for _, key := range states.TLSConfigKeyReplacements {
+			if _, ok := resources.BaseConfigMap.Data[key.ReplacementKey]; ok {
+				log.Printf("TLS config map key %s should not be present in base config map", key.ReplacementKey)
 				return false
 			}
 		}
@@ -381,14 +552,60 @@ func (t *TLSTest) thenPodsShouldUseTLSConfigMapKeysInVolumeMounts() {
 	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
 }
 
-func (t *TLSTest) thenPodsShouldUseTLSProbes() {
+func (t *TLSTest) thenPodsShouldNOTUseTLSConfigMapKeysInVolumeMounts() {
+	volumeMountsContainsAnyKey := func(volumeMounts []corev1.VolumeMount) (bool, string) {
+		for _, notWant := range []string{
+			states.ConfigMapDataKeyTLSPostgresConf,
+			states.ConfigMapDataKeyTLSPgHbaConf,
+			states.ConfigMapDataKeyTLSCopyPrimaryDataToReplicaScript,
+		} {
+			for _, vm := range volumeMounts {
+				if vm.Name == ctx.BaseConfigMapVolumeName && vm.SubPath == notWant {
+					return true, notWant
+				}
+			}
+		}
+		return false, ""
+	}
+
+	Eventually(func() bool {
+		resources, err := t.resourceRetriever.GetKubegresResources()
+		if err != nil {
+			log.Println("Error retrieving kubegres resources:", err)
+			return false
+		}
+
+		for _, r := range resources.Resources {
+			c := r.Pod.Spec.Containers[0]
+			if ok, key := volumeMountsContainsAnyKey(c.VolumeMounts); ok {
+				fmt.Printf("TLS config map key %s should not be found in volume mounts for pod: %s, container: %s\n", key, r.Pod.Name, c.Name)
+				return false
+			}
+
+			if r.IsPrimary {
+				continue // we don't expect the primary init container to have any TLS config map keys
+			}
+
+			for _, c := range r.Pod.Spec.InitContainers {
+				if ok, key := volumeMountsContainsAnyKey(c.VolumeMounts); ok {
+					fmt.Printf("TLS config map key %s should not be found in volume mounts for pod: %s, init container: %s\n", key, r.Pod.Name, c.Name)
+					return false
+				}
+			}
+		}
+
+		return true
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+}
+
+func (t *TLSTest) thenPodsShouldUseTLSProbes(sslMode apiv1.SSLMode) {
 	wantCommand := []string{
 		"sh",
 		"-c",
-		fmt.Sprintf("PGPASSWORD=$POSTGRES_PASSWORD psql \"sslmode=verify-ca "+
+		fmt.Sprintf("PGPASSWORD=$POSTGRES_PASSWORD psql \"sslmode=%[4]s "+
 			"sslrootcert=%[1]s sslcert=%[2]s sslkey=%[3]s "+
 			"host=$POD_IP user=postgres\" -c \"SELECT 1\"",
-			ctx.DefaultTLSRootCertPath, ctx.DefaultTLSClientCertPath, ctx.DefaultTLSClientKeyPath),
+			ctx.DefaultTLSRootCertPath, ctx.DefaultTLSClientCertPath, ctx.DefaultTLSClientKeyPath, sslMode),
 	}
 	Eventually(func() bool {
 		resources, err := t.resourceRetriever.GetKubegresResources()
@@ -413,6 +630,43 @@ func (t *TLSTest) thenPodsShouldUseTLSProbes() {
 			if !slices.Equal(c.ReadinessProbe.Exec.Command, wantCommand) {
 				log.Printf("Readiness probe command not matching for pod: %s, container: %s.\nwant: %v, got: %v"+r.Pod.Name, c.Name, c.ReadinessProbe.Exec.Command,
 					wantCommand, c.ReadinessProbe.Exec.Command)
+				return false
+			}
+		}
+
+		return true
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+}
+
+func (t *TLSTest) thenPodsShouldNOTUseTLSProbes() {
+	wantCommand := []string{
+		"sh",
+		"-c",
+		"exec pg_isready -U postgres -h $POD_IP",
+	}
+	Eventually(func() bool {
+		resources, err := t.resourceRetriever.GetKubegresResources()
+		if err != nil {
+			log.Println("Error retrieving kubegres resources:", err)
+			return false
+		}
+
+		for _, r := range resources.Resources {
+			c := r.Pod.Spec.Containers[0]
+			if c.LivenessProbe == nil || c.ReadinessProbe == nil {
+				log.Printf("Liveness or Readiness probe not set for pod: %s, container: %s", r.Pod.Name, c.Name)
+				return false
+			}
+
+			if !slices.Equal(c.LivenessProbe.Exec.Command, wantCommand) {
+				log.Printf("Liveness probe command should match for pod: %s, container: %s.\nwant: %v, got: %v",
+					r.Pod.Name, c.Name, wantCommand, c.LivenessProbe.Exec.Command)
+				return false
+			}
+
+			if !slices.Equal(c.ReadinessProbe.Exec.Command, wantCommand) {
+				log.Printf("Readiness probe command should match for pod: %s, container: %s.\nwant: %v, got: %v",
+					r.Pod.Name, c.Name, wantCommand, c.ReadinessProbe.Exec.Command)
 				return false
 			}
 		}
@@ -487,6 +741,89 @@ func (t *TLSTest) thenCronJobExistsWithTLSConfig(wantBackupPvcName, wantVolumeMo
 	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
 }
 
+func (t *TLSTest) thenCronJobExistsWithoutTLSConfig(wantBackupPvcName, wantVolumeMount, wantSchedule string) {
+	Eventually(func() bool {
+		kubegresResources, err := t.resourceRetriever.GetKubegresResources()
+		if err != nil && !apierrors.IsNotFound(err) {
+			log.Println("ERROR while retrieving Kubegres resources")
+			return false
+		}
+
+		backUpCronJob := kubegresResources.BackUpCronJob
+		if backUpCronJob.Name == "" {
+			return false
+		}
+
+		if wantSchedule != backUpCronJob.Spec.Schedule {
+			log.Println("CronJob '" + backUpCronJob.Name + "' doesn't have the expected schedule: '" + wantSchedule + "'. Waiting...")
+			return false
+		}
+
+		if wantBackupPvcName != backUpCronJob.Spec.JobTemplate.Spec.Template.Spec.Volumes[0].PersistentVolumeClaim.ClaimName {
+			log.Println("CronJob '" + backUpCronJob.Name + "' doesn't have the expected PVC with name: '" + wantBackupPvcName + "'. Waiting...")
+			return false
+		}
+
+		if wantVolumeMount != backUpCronJob.Spec.JobTemplate.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath {
+			log.Println("CronJob '" + backUpCronJob.Name + "' doesn't have the expected volume mount: '" + wantVolumeMount + "'. Waiting...")
+			return false
+		}
+
+		if states.ConfigMapDataKeyBackUpScript != backUpCronJob.Spec.JobTemplate.Spec.Template.Spec.Containers[0].VolumeMounts[1].SubPath {
+			log.Println("CronJob '" + backUpCronJob.Name + "' doesn't have the expected volume mount: '" + states.ConfigMapDataKeyBackUpScript + "'. Waiting...")
+			return false
+		}
+
+		for _, volume := range backUpCronJob.Spec.JobTemplate.Spec.Template.Spec.Volumes {
+			if volume.Name == ctx.TLSVolumeName {
+				log.Println("CronJob '" + backUpCronJob.Name + "' must not have the TLS volume. Waiting...")
+				return false
+			}
+		}
+
+		for _, vm := range backUpCronJob.Spec.JobTemplate.Spec.Template.Spec.Containers[0].VolumeMounts {
+			if vm.Name == ctx.TLSVolumeName {
+				log.Println("CronJob '" + backUpCronJob.Name + "' must not have the TLS volume mount. Waiting...")
+				return false
+			}
+		}
+
+		return true
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+}
+
+func (t *TLSTest) thenPodsMustUseTLSSecurityContext() {
+	var (
+		wantRunAsNonRoot = true
+		wantRunAsUser    = int64(999) // PostgreSQL default user ID
+		wantFSGroup      = int64(999) // PostgreSQL default group ID
+	)
+
+	Eventually(func() bool {
+		resources, err := t.resourceRetriever.GetKubegresResources()
+		if err != nil {
+			log.Println("Error retrieving kubegres resources:", err)
+			return false
+		}
+
+		for _, r := range resources.Resources {
+			got := r.Pod.Spec.SecurityContext
+			if got == nil ||
+				got.RunAsNonRoot == nil || *got.RunAsNonRoot != wantRunAsNonRoot ||
+				got.RunAsUser == nil || *got.RunAsUser != wantRunAsUser ||
+				got.FSGroup == nil || *got.FSGroup != wantFSGroup {
+				log.Printf("Security context for pod %s does not match expected:\n"+
+					"want: RunAsNonRoot=%t, RunAsUser=%d, FSGroup=%d\n"+
+					"got: %+v",
+					r.Pod.Name, wantRunAsNonRoot, wantRunAsUser, wantFSGroup, got)
+				return false
+			}
+		}
+
+		return true
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+}
+
 func (t *TLSTest) thenCronJobSucceedsAtLeastOnce() {
 	Eventually(func() bool {
 		kubegresResources, err := t.resourceRetriever.GetKubegresResources()
@@ -557,6 +894,31 @@ func (t *TLSTest) thenMissingKeysErrorEventShouldBeLogged() {
 	}
 
 	t.eventuallyErrorEventShouldBeLogged(expectedErrorEvent)
+}
+
+func (t *TLSTest) thenNoBlockingOperationShouldBeActive() {
+	// we want consecutive successes to ensure we are not considering transitions between blocking operations
+	var successes int
+	Eventually(func() bool {
+		kubegres, err := t.resourceRetriever.GetKubegres()
+		if err != nil {
+			log.Println("Error retrieving Kubegres resource:", err)
+			successes = 0
+			return false
+		}
+
+		op := kubegres.Status.BlockingOperation
+		if op.OperationId != "" {
+			log.Printf("Blocking operation is still active: %s (%s)", op.OperationId, op.StepId)
+			successes = 0
+			return false
+		}
+
+		successes++
+		return successes >= 3
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+	log.Println("No blocking operation is active, checked 3 times in a row successfully")
+
 }
 
 func (t *TLSTest) storeClientTLSCerts(secret *corev1.Secret) (string, string, string) {

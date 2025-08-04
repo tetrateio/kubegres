@@ -21,8 +21,6 @@ limitations under the License.
 package statefulset_spec
 
 import (
-	"reflect"
-
 	apps "k8s.io/api/apps/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/controllers/spec/template"
@@ -45,21 +43,14 @@ func (r *LivenessProbeSpecEnforcer) GetSpecName() string {
 }
 
 func (r *LivenessProbeSpecEnforcer) CheckForSpecDifference(statefulSet *apps.StatefulSet) StatefulSetSpecDifference {
-	current := statefulSet.Spec.Template.Spec.Containers[0].LivenessProbe
-	expected := r.kubegresContext.Kubegres.Spec.Probe.LivenessProbe
+	deepCopy := statefulSet.DeepCopy()
+	expected, current, updated := r.tlsConfigSpecHelper.ConfigureLivenessProbe(deepCopy)
 
-	if expected == nil {
-		// If the expected liveness probe is using the default value,
-		// let's create a copy of the current one with the TLS defaults applied to compare.
-		expected = current.DeepCopy()
-		r.tlsConfigSpecHelper.OverrideDefaultLivenessProbeWithTLS(expected)
-	}
-
-	if !reflect.DeepEqual(current, expected) {
+	if updated {
 		return StatefulSetSpecDifference{
 			SpecName: r.GetSpecName(),
-			Current:  current.String(),
-			Expected: expected.String(),
+			Current:  current,
+			Expected: expected,
 		}
 	}
 
@@ -67,9 +58,8 @@ func (r *LivenessProbeSpecEnforcer) CheckForSpecDifference(statefulSet *apps.Sta
 }
 
 func (r *LivenessProbeSpecEnforcer) EnforceSpec(statefulSet *apps.StatefulSet) (wasSpecUpdated bool, err error) {
-	statefulSet.Spec.Template.Spec.Containers[0].LivenessProbe = r.kubegresContext.Kubegres.Spec.Probe.LivenessProbe
-	r.tlsConfigSpecHelper.OverrideDefaultLivenessProbeWithTLS(statefulSet.Spec.Template.Spec.Containers[0].LivenessProbe)
-	return true, nil
+	_, _, ok := r.tlsConfigSpecHelper.ConfigureLivenessProbe(statefulSet)
+	return ok, nil
 }
 
 func (r *LivenessProbeSpecEnforcer) OnSpecEnforcedSuccessfully(statefulSet *apps.StatefulSet) error {

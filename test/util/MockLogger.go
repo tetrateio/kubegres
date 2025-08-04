@@ -21,18 +21,21 @@ limitations under the License.
 package util
 
 import (
-	"github.com/go-logr/logr"
+	"io"
 	"log"
-	log2 "reactive-tech.io/kubegres/controllers/ctx/log"
 	"strings"
+
+	"github.com/go-logr/logr"
+	log2 "reactive-tech.io/kubegres/controllers/ctx/log"
 )
 
 type MockLogSink struct {
-	name string
+	name   string
+	output io.Writer
 }
 
-func CreateMockLogger() logr.Logger {
-	logSink := &MockLogSink{}
+func CreateMockLogger(output io.Writer) logr.Logger {
+	logSink := &MockLogSink{output: output}
 	logger := logr.New(logSink)
 	return logger
 }
@@ -45,11 +48,19 @@ func (r *MockLogSink) Enabled(level int) bool {
 }
 
 func (r *MockLogSink) Info(level int, msg string, keysAndValues ...interface{}) {
-	log.Println(r.constructFullMsg(msg, keysAndValues))
+	m := r.constructFullMsg(msg, keysAndValues)
+	if r.output != nil {
+		_, _ = r.output.Write([]byte(m + "\n"))
+	}
+	log.Println(m)
 }
 
 func (r *MockLogSink) Error(err error, msg string, keysAndValues ...interface{}) {
-	log.Println(r.constructFullErrMsg(err, msg, keysAndValues))
+	m := r.constructFullErrMsg(err, msg, keysAndValues)
+	if r.output != nil {
+		_, _ = r.output.Write([]byte(m + "\n"))
+	}
+	log.Println(m)
 }
 
 func (r *MockLogSink) WithValues(keysAndValues ...interface{}) logr.LogSink {

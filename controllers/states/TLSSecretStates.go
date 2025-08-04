@@ -21,10 +21,6 @@ func loadTLSSecretStates(kubegresContext ctx.KubegresContext) (TLSSecretStates, 
 }
 
 func (r *TLSSecretStates) loadStates() (err error) {
-	if !r.kubegresContext.Kubegres.Spec.TLS.Enabled {
-		return nil
-	}
-
 	secret, err := r.getDeployedSecret()
 	if err != nil {
 		return err
