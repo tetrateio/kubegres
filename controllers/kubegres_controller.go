@@ -101,7 +101,6 @@ func (r *KubegresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		r.Logger.Error(err, "Failed to enforce TLS mode transition")
 		return r.returnn(ctrl.Result{}, err, resourcesContext)
 	}
-	//r.Logger.Info("TLSModeTransitEnforcer: enforcement done ==>", "spec", kubegres.Spec.TLS)
 
 	specCheckResult, err := resourcesContext.SpecChecker.CheckSpec()
 	if err != nil {

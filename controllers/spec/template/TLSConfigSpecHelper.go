@@ -70,6 +70,13 @@ func (t *TLSConfigSpecHelper) ConfigureStatefulSet(statefulSet *apps.StatefulSet
 }
 
 func (t *TLSConfigSpecHelper) ConfigureVolumeMounts(statefulSet *apps.StatefulSet) (string, string, bool) {
+	return t.ConfigureVolumeMountsToPodSpec(&statefulSet.Spec.Template.Spec,
+		func(replacement states.TLSConfigKeyReplacement) bool {
+			return replacement.DoesApplyStatefulSet(statefulSet)
+		})
+}
+
+func (t *TLSConfigSpecHelper) ConfigureVolumeMountsToPodSpec(podSpec *corev1.PodSpec, applyToCurrentSpec func(replacement states.TLSConfigKeyReplacement) bool) (string, string, bool) {
 	tlsEnabled := t.kubegresContext.Kubegres.Spec.TLS.Enabled
 
 	applyCorrespondingSubpath := func(c *corev1.Container, replacement states.TLSConfigKeyReplacement) (string, string, bool) {
@@ -115,11 +122,11 @@ func (t *TLSConfigSpecHelper) ConfigureVolumeMounts(statefulSet *apps.StatefulSe
 
 	var expected, current []string
 	for _, replacement := range states.TLSConfigKeyReplacements {
-		if replacement.DoesApplyStatefulSet(statefulSet) {
+		if applyToCurrentSpec(replacement) {
 
 			if replacement.DoesApplyContainer() {
-				for i := 0; i < len(statefulSet.Spec.Template.Spec.Containers); i++ {
-					c := &statefulSet.Spec.Template.Spec.Containers[i]
+				for i := 0; i < len(podSpec.Containers); i++ {
+					c := &podSpec.Containers[i]
 					if vmExp, vmCur, ok := applyCorrespondingSubpath(c, replacement); ok {
 						expected = append(expected, fmt.Sprintf("container[%s] %s", c.Name, vmExp))
 						current = append(current, fmt.Sprintf("container[%s] %s", c.Name, vmCur))
@@ -128,8 +135,8 @@ func (t *TLSConfigSpecHelper) ConfigureVolumeMounts(statefulSet *apps.StatefulSe
 			}
 
 			if replacement.DoesApplyInitContainer() {
-				for i := 0; i < len(statefulSet.Spec.Template.Spec.InitContainers); i++ {
-					c := &statefulSet.Spec.Template.Spec.InitContainers[i]
+				for i := 0; i < len(podSpec.InitContainers); i++ {
+					c := &podSpec.InitContainers[i]
 					if vmExp, vmCur, ok := applyCorrespondingSubpath(c, replacement); ok {
 						expected = append(expected, fmt.Sprintf("initContainer[%s] %s", c.Name, vmExp))
 						current = append(current, fmt.Sprintf("initContainer[%s] %s", c.Name, vmCur))
@@ -146,24 +153,28 @@ func (t *TLSConfigSpecHelper) ConfigureVolumeMounts(statefulSet *apps.StatefulSe
 }
 
 func (t *TLSConfigSpecHelper) ConfigureTLSCertsVolume(statefulSet *apps.StatefulSet) (string, string, bool) {
+	return t.ConfigureTLSCertsVolumeToPodSpec(&statefulSet.Spec.Template.Spec)
+}
+
+func (t *TLSConfigSpecHelper) ConfigureTLSCertsVolumeToPodSpec(podSpec *corev1.PodSpec) (string, string, bool) {
 	var (
 		expected, current []string
 		modified          bool
 	)
 
 	if !t.kubegresContext.Kubegres.Spec.TLS.Enabled {
-		for i := 0; i < len(statefulSet.Spec.Template.Spec.Volumes); i++ {
-			volume := statefulSet.Spec.Template.Spec.Volumes[i]
+		for i := 0; i < len(podSpec.Volumes); i++ {
+			volume := podSpec.Volumes[i]
 			if volume.Name == ctx.TLSVolumeName {
 				expected = append(expected, fmt.Sprintf("volume[%d] %s must not exist", i, ctx.TLSVolumeName))
 				current = append(current, fmt.Sprintf("volume[%d] %s exists", i, ctx.TLSVolumeName))
 				modified = true
-				statefulSet.Spec.Template.Spec.Volumes = append(statefulSet.Spec.Template.Spec.Volumes[:i], statefulSet.Spec.Template.Spec.Volumes[i+1:]...)
+				podSpec.Volumes = append(podSpec.Volumes[:i], podSpec.Volumes[i+1:]...)
 			}
 		}
 
-		for i := 0; i < len(statefulSet.Spec.Template.Spec.Containers); i++ {
-			container := &statefulSet.Spec.Template.Spec.Containers[i]
+		for i := 0; i < len(podSpec.Containers); i++ {
+			container := &podSpec.Containers[i]
 			for j := 0; j < len(container.VolumeMounts); j++ {
 				volumeMount := &container.VolumeMounts[j]
 				if volumeMount.Name == ctx.TLSVolumeName {
@@ -175,8 +186,8 @@ func (t *TLSConfigSpecHelper) ConfigureTLSCertsVolume(statefulSet *apps.Stateful
 			}
 		}
 
-		for i := 0; i < len(statefulSet.Spec.Template.Spec.InitContainers); i++ {
-			initContainer := &statefulSet.Spec.Template.Spec.InitContainers[i]
+		for i := 0; i < len(podSpec.InitContainers); i++ {
+			initContainer := &podSpec.InitContainers[i]
 			for j := 0; j < len(initContainer.VolumeMounts); j++ {
 				volumeMount := &initContainer.VolumeMounts[j]
 				if volumeMount.Name == ctx.TLSVolumeName {
@@ -198,8 +209,8 @@ func (t *TLSConfigSpecHelper) ConfigureTLSCertsVolume(statefulSet *apps.Stateful
 	tlsVolumeMount := TLSVolumeMount(t.kubegresContext.Kubegres.Spec.TLS)
 
 	var tlsVolumeFound bool
-	for i := 0; i < len(statefulSet.Spec.Template.Spec.Volumes); i++ {
-		volume := &statefulSet.Spec.Template.Spec.Volumes[i]
+	for i := 0; i < len(podSpec.Volumes); i++ {
+		volume := &podSpec.Volumes[i]
 		if volume.Name == ctx.TLSVolumeName {
 			tlsVolumeFound = true
 			if volume.Secret == nil || volume.Secret.SecretName != tlsVolume.Secret.SecretName ||
@@ -216,11 +227,11 @@ func (t *TLSConfigSpecHelper) ConfigureTLSCertsVolume(statefulSet *apps.Stateful
 		expected = append(expected, fmt.Sprintf("volume %s must exist", ctx.TLSVolumeName))
 		current = append(current, fmt.Sprintf("volume %s does not exist", ctx.TLSVolumeName))
 		modified = true
-		statefulSet.Spec.Template.Spec.Volumes = append(statefulSet.Spec.Template.Spec.Volumes, tlsVolume)
+		podSpec.Volumes = append(podSpec.Volumes, tlsVolume)
 	}
 
-	for i := 0; i < len(statefulSet.Spec.Template.Spec.Containers); i++ {
-		container := &statefulSet.Spec.Template.Spec.Containers[i]
+	for i := 0; i < len(podSpec.Containers); i++ {
+		container := &podSpec.Containers[i]
 		var tlsVolumeMountFound bool
 		for j := 0; j < len(container.VolumeMounts); j++ {
 			volumeMount := &container.VolumeMounts[j]
@@ -244,8 +255,8 @@ func (t *TLSConfigSpecHelper) ConfigureTLSCertsVolume(statefulSet *apps.Stateful
 		}
 	}
 
-	for i := 0; i < len(statefulSet.Spec.Template.Spec.InitContainers); i++ {
-		initContainer := &statefulSet.Spec.Template.Spec.InitContainers[i]
+	for i := 0; i < len(podSpec.InitContainers); i++ {
+		initContainer := &podSpec.InitContainers[i]
 		var tlsVolumeMountFound bool
 		for j := 0; j < len(initContainer.VolumeMounts); j++ {
 			volumeMount := &initContainer.VolumeMounts[j]

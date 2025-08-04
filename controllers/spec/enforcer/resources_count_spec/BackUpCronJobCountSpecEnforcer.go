@@ -21,8 +21,6 @@ limitations under the License.
 package resources_count_spec
 
 import (
-	"fmt"
-
 	batch "k8s.io/api/batch/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/controllers/spec/template"
@@ -30,19 +28,22 @@ import (
 )
 
 type BackUpCronJobCountSpecEnforcer struct {
-	kubegresContext  ctx.KubegresContext
-	resourcesStates  states.ResourcesStates
-	resourcesCreator template.ResourcesCreatorFromTemplate
+	kubegresContext     ctx.KubegresContext
+	resourcesStates     states.ResourcesStates
+	resourcesCreator    template.ResourcesCreatorFromTemplate
+	tlsConfigSpecHelper template.TLSConfigSpecHelper
 }
 
 func CreateBackUpCronJobCountSpecEnforcer(kubegresContext ctx.KubegresContext,
 	resourcesStates states.ResourcesStates,
-	resourcesCreator template.ResourcesCreatorFromTemplate) BackUpCronJobCountSpecEnforcer {
+	resourcesCreator template.ResourcesCreatorFromTemplate,
+	tlsConfigSpecHelper template.TLSConfigSpecHelper) BackUpCronJobCountSpecEnforcer {
 
 	return BackUpCronJobCountSpecEnforcer{
-		kubegresContext:  kubegresContext,
-		resourcesStates:  resourcesStates,
-		resourcesCreator: resourcesCreator,
+		kubegresContext:     kubegresContext,
+		resourcesStates:     resourcesStates,
+		resourcesCreator:    resourcesCreator,
+		tlsConfigSpecHelper: tlsConfigSpecHelper,
 	}
 }
 
@@ -157,43 +158,19 @@ func (r *BackUpCronJobCountSpecEnforcer) hasSpecChanged() (hasSpecChanged bool) 
 		r.logSpecChange("spec.backup.dbSource")
 	}
 
-	if r.kubegresContext.Kubegres.Spec.TLS.Enabled {
-		if len(cronJobTemplateSpec.Volumes) < 3 {
-			hasSpecChanged = true
-			r.logSpecChange("spec.tls.enabled (missing TLS volumes)")
-		} else {
-			currentTLSVolume := cronJobTemplateSpec.Volumes[2]
-			expectedTLSVolume := template.TLSVolume(r.kubegresContext.Kubegres.Spec.TLS)
-			if currentTLSVolume.Name != expectedTLSVolume.Name ||
-				currentTLSVolume.Secret == nil || currentTLSVolume.Secret.SecretName != expectedTLSVolume.Secret.SecretName ||
-				currentTLSVolume.Secret.DefaultMode == nil || *currentTLSVolume.Secret.DefaultMode != *expectedTLSVolume.Secret.DefaultMode {
-				hasSpecChanged = true
-				fmt.Println("currentTLSVolume:", currentTLSVolume)
-				r.logSpecChange("spec.tls.enabled (volume)")
-			}
-		}
+	_, _, updated := r.tlsConfigSpecHelper.ConfigureTLSCertsVolumeToPodSpec(&cronJobTemplateSpec)
+	if updated {
+		hasSpecChanged = true
+		r.logSpecChange("spec.tls.enabled (TLS certs volume)")
+	}
 
-		if len(cronJobTemplateSpec.Containers[0].VolumeMounts) < 3 {
-			hasSpecChanged = true
-			r.logSpecChange("spec.tls.enabled (missing TLS volumeMounts)")
-		} else {
-			currentTLSVolumeMount := cronJobTemplateSpec.Containers[0].VolumeMounts[2]
-			expectedTLSVolumeMount := template.TLSVolumeMount(r.kubegresContext.Kubegres.Spec.TLS)
-			if currentTLSVolumeMount != expectedTLSVolumeMount {
-				hasSpecChanged = true
-				r.logSpecChange("spec.tls.enabled (volumeMount)")
-			}
-		}
-	} else {
-		if len(cronJobTemplateSpec.Volumes) > 2 {
-			hasSpecChanged = true
-			r.logSpecChange("spec.tls.enabled (unexpected TLS volumes)")
-		}
-
-		if len(cronJobTemplateSpec.Containers[0].VolumeMounts) > 2 {
-			hasSpecChanged = true
-			r.logSpecChange("spec.tls.enabled (unexpected TLS volumeMounts)")
-		}
+	_, _, updated = r.tlsConfigSpecHelper.ConfigureVolumeMountsToPodSpec(&cronJobTemplateSpec,
+		func(replacement states.TLSConfigKeyReplacement) bool {
+			return replacement.DoesApplyToBackupCronJob()
+		})
+	if updated {
+		hasSpecChanged = true
+		r.logSpecChange("spec.tls.enabled (TLS volumeMounts)")
 	}
 
 	return hasSpecChanged

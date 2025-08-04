@@ -113,6 +113,10 @@ func (t TLSConfigKeyReplacement) DoesApplyStatefulSet(statefulSet *apps.Stateful
 	return t.AppliesInstance == ReplicaInstance || t.AppliesInstance == PrimaryAndReplicaInstance
 }
 
+func (t TLSConfigKeyReplacement) DoesApplyToBackupCronJob() bool {
+	return t.AppliesInstance == BackupJob
+}
+
 func (t TLSConfigKeyReplacement) MatchCondition(spec v1.KubegresSpec) bool {
 	if t.matchCondition == nil {
 		return true

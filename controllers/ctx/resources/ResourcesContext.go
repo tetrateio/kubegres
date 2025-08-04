@@ -69,8 +69,7 @@ type ResourcesContext struct {
 	StatefulSetCountSpecEnforcer   resources_count_spec.StatefulSetCountSpecEnforcer
 	ServicesCountSpecEnforcer      resources_count_spec.ServicesCountSpecEnforcer
 	BackUpCronJobCountSpecEnforcer resources_count_spec.BackUpCronJobCountSpecEnforcer
-	//TLSConfigMapCountSpecEnforcer  resources_count_spec.TLSConfigMapCountSpecEnforcer
-	TLSConfigSpecHelper template.TLSConfigSpecHelper
+	TLSConfigSpecHelper            template.TLSConfigSpecHelper
 }
 
 func tryToJson(obj interface{}) string {
@@ -164,13 +163,11 @@ func addResourcesCountSpecEnforcers(rc *ResourcesContext) {
 	rc.StatefulSetCountSpecEnforcer = resources_count_spec.CreateStatefulSetCountSpecEnforcer(rc.PrimaryDbCountSpecEnforcer, rc.ReplicaDbCountSpecEnforcer)
 
 	rc.BaseConfigMapCountSpecEnforcer = resources_count_spec.CreateBaseConfigMapCountSpecEnforcer(rc.KubegresContext, rc.ResourcesStates, rc.ResourcesCreatorFromTemplate, rc.BlockingOperation)
-	//rc.TLSConfigMapCountSpecEnforcer = resources_count_spec.CreateTLSConfigMapCountSpecEnforcer(rc.KubegresContext, rc.ResourcesStates, rc.ResourcesCreatorFromTemplate, rc.BlockingOperation)
 	rc.ServicesCountSpecEnforcer = resources_count_spec.CreateServicesCountSpecEnforcer(rc.KubegresContext, rc.ResourcesStates, rc.ResourcesCreatorFromTemplate)
-	rc.BackUpCronJobCountSpecEnforcer = resources_count_spec.CreateBackUpCronJobCountSpecEnforcer(rc.KubegresContext, rc.ResourcesStates, rc.ResourcesCreatorFromTemplate)
+	rc.BackUpCronJobCountSpecEnforcer = resources_count_spec.CreateBackUpCronJobCountSpecEnforcer(rc.KubegresContext, rc.ResourcesStates, rc.ResourcesCreatorFromTemplate, rc.TLSConfigSpecHelper)
 
 	rc.ResourcesCountSpecEnforcer = resources_count_spec.ResourcesCountSpecEnforcer{}
 	rc.ResourcesCountSpecEnforcer.AddSpecEnforcer(&rc.BaseConfigMapCountSpecEnforcer)
-	//rc.ResourcesCountSpecEnforcer.AddSpecEnforcer(&rc.TLSConfigMapCountSpecEnforcer)
 	rc.ResourcesCountSpecEnforcer.AddSpecEnforcer(&rc.StatefulSetCountSpecEnforcer)
 	rc.ResourcesCountSpecEnforcer.AddSpecEnforcer(&rc.ServicesCountSpecEnforcer)
 	rc.ResourcesCountSpecEnforcer.AddSpecEnforcer(&rc.BackUpCronJobCountSpecEnforcer)
@@ -218,7 +215,6 @@ func addStatefulSetSpecEnforcers(rc *ResourcesContext) {
 func addBlockingOperationConfigs(rc *ResourcesContext) {
 
 	rc.BlockingOperation.AddConfig(rc.BaseConfigMapCountSpecEnforcer.CreateOperationConfig())
-	//rc.BlockingOperation.AddConfig(rc.TLSConfigMapCountSpecEnforcer.CreateOperationConfig())
 
 	rc.BlockingOperation.AddConfig(rc.PrimaryDbCountSpecEnforcer.CreateOperationConfigForPrimaryDbDeploying())
 	rc.BlockingOperation.AddConfig(rc.PrimaryDbCountSpecEnforcer.CreateOperationConfigForPrimaryDbUndeploying())

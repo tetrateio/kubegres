@@ -43,8 +43,6 @@ func SetDefaultForUndefinedSpecValues(kubegresContext ctx.KubegresContext, defau
 	return defaultSpec.apply()
 }
 
-var LastRequestedSSLMode string
-
 func (r *UndefinedSpecValuesChecker) apply() error {
 
 	wasSpecChanged := false
@@ -121,18 +119,6 @@ func (r *UndefinedSpecValuesChecker) apply() error {
 			r.createLog("spec.TLS.ClientKeyPath", kubegresSpec.TLS.ClientKeyPath)
 		}
 
-		//if kubegresSpec.SecurityContext == nil {
-		//	wasSpecChanged = true
-		//	var (
-		//		runAsUser    int64 = 70   // Default UID for PostgreSQL TODO: Check if this is the correct UID for your use case
-		//		runAsNonRoot bool  = true // Ensures the container runs as a non-root user
-		//	)
-		//	kubegresSpec.SecurityContext = &core.PodSecurityContext{
-		//		RunAsUser:    &runAsUser,
-		//		RunAsNonRoot: &runAsNonRoot,
-		//	}
-		//	r.createLog("spec.SecurityContext", "RunAsUser=70, RunAsNonRoot=true")
-		//}
 	}
 
 	if wasSpecChanged {
