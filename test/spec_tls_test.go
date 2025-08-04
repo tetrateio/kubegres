@@ -54,6 +54,8 @@ var _ = Describe("Kubegres TLS Spec", Label("tls"), func() {
 			test.resourceCreator.DeleteAllTestResources()
 			_ = os.Remove(test.tmpDir)
 		}
+		// Reset the field state to ensure each test defines its own state
+		test.keepCreatedResourcesForNextTest = false
 	})
 
 	Context("GIVEN new Kubegres is created with TLS enabled but no secret defined", func() {
