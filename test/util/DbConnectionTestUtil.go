@@ -56,17 +56,18 @@ type (
 )
 
 func WithBaseConfig(resourceCreator TestResourceCreator, kubegresName string, nodePort int, isPrimaryDb bool) DBConnectionOption {
+
+	serviceToQueryDb, err := resourceCreator.CreateServiceToSqlQueryDb(kubegresName, nodePort, isPrimaryDb)
+	if err != nil {
+		log.Fatal("Unable to create a Service on port '"+strconv.Itoa(nodePort)+"' to query DB.", err)
+	}
+
+	logLabel := "Primary " + kubegresName
+	if !isPrimaryDb {
+		logLabel = "Replica " + kubegresName
+	}
+
 	return func(dbConnection *DbConnectionDbUtil) *DbConnectionDbUtil {
-		serviceToQueryDb, err := resourceCreator.CreateServiceToSqlQueryDb(kubegresName, nodePort, isPrimaryDb)
-		if err != nil {
-			log.Fatal("Unable to create a Service on port '"+strconv.Itoa(nodePort)+"' to query DB.", err)
-		}
-
-		logLabel := "Primary " + kubegresName
-		if !isPrimaryDb {
-			logLabel = "Replica " + kubegresName
-		}
-
 		dbConnection.Port = nodePort
 		dbConnection.IsPrimaryDb = isPrimaryDb
 		dbConnection.LogLabel = logLabel
