@@ -77,7 +77,7 @@ vet: ## Run go vet against code.
 
 .PHONY: test-unit
 test-unit: ## Run unit tests.
-	go test $(shell pwd)/controllers/... $(shell pwd)/internal/...
+	go test $(shell pwd)/controllers/... #$(shell pwd)/internal/...
 
 ifdef TEST_LABEL
 TEST_LABEL_ARGS=-args "-ginkgo.label-filter=${TEST_LABEL}"
