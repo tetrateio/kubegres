@@ -188,7 +188,6 @@ var _ = Describe("Kubegres TLS Spec", Label("tls"), func() {
 			test.thenPodsShouldHaveReadyState(1, 2)
 
 			test.thenPodsShouldNOTHaveTLSVolumeMounts()
-			//test.thenBaseConfigMapShouldNOTHaveTLSKeysAdded()
 			test.thenPodsShouldNOTUseTLSConfigMapKeysInVolumeMounts()
 			test.thenPodsShouldNOTUseTLSProbes()
 
@@ -471,25 +470,6 @@ func (t *TLSTest) thenBaseConfigMapShouldHaveTLSKeysAdded() {
 		for _, key := range states.TLSConfigKeyReplacements {
 			if _, ok := resources.BaseConfigMap.Data[key.ReplacementKey]; !ok {
 				log.Printf("TLS config map key %s not found in base config map", key.ReplacementKey)
-				return false
-			}
-		}
-
-		return true
-	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
-}
-
-func (t *TLSTest) thenBaseConfigMapShouldNOTHaveTLSKeysAdded() {
-	Eventually(func() bool {
-		resources, err := t.resourceRetriever.GetKubegresResources()
-		if err != nil {
-			log.Println("Error retrieving kubegres resources:", err)
-			return false
-		}
-
-		for _, key := range states.TLSConfigKeyReplacements {
-			if _, ok := resources.BaseConfigMap.Data[key.ReplacementKey]; ok {
-				log.Printf("TLS config map key %s should not be present in base config map", key.ReplacementKey)
 				return false
 			}
 		}

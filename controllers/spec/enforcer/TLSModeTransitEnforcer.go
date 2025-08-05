@@ -37,9 +37,6 @@ func (t TLSModeTransitEnforcer) LoadCurrentState() {
 			t.kubegresContext.Kubegres.Spec.TLS = tlsTransition.InsecureSpec
 			t.kubegresContext.Kubegres.Spec.TLS.SSLMode = tlsTransition.CurrentTransitMode
 		}
-		//t.kubegresContext.Kubegres.Spec.TLS = tlsTransition.OriginalState
-		//t.kubegresContext.Kubegres.Spec.TLS.SSLMode = tlsTransition.CurrentTransitMode
-		//t.kubegresContext.Kubegres.Spec.TLS.Enabled = tlsTransition.DesiredState.Enabled
 	}
 }
 
@@ -62,11 +59,6 @@ func (t TLSModeTransitEnforcer) EnforceSpec() error {
 
 	if t.resourceContext.ResourcesStates.StatefulSets.NbreDeployed == 0 {
 		t.kubegresContext.Log.Info("TLSModeTransitEnforcer: No StatefulSets deployed, assuming first time deploy. No TLS mode transition needed.")
-		//t.kubegresContext.Status.SetTLSTransition(apiv1.TLSTransition{
-		//	OriginalState:      t.kubegresContext.Kubegres.Spec.TLS,
-		//	DesiredState:       t.kubegresContext.Kubegres.Spec.TLS,
-		//	CurrentTransitMode: t.kubegresContext.Kubegres.Spec.TLS.SSLMode,
-		//})
 		tlsTransition := apiv1.TLSTransition{
 			TransitionInProgress: false,
 			CurrentTransitMode:   t.kubegresContext.Kubegres.Spec.TLS.SSLMode,
@@ -105,23 +97,6 @@ func (t TLSModeTransitEnforcer) EnforceSpec() error {
 		}
 	}
 
-	//if tlsTransition.TransitionInProgress {
-	//	t.kubegresContext.Log.Info("TLSModeTransitEnforcer: TLS transition is in progress, let's transit to the next mode.")
-	//} else {
-	//	diff := cmp.Diff(tlsTransition.OriginalState, t.kubegresContext.Kubegres.Spec.TLS)
-	//	t.kubegresContext.Log.Info("TLSModeTransitEnforcer: Diff (-original,+current): " + diff)
-	//	if tlsTransition.OriginalState == t.kubegresContext.Kubegres.Spec.TLS {
-	//		t.kubegresContext.Log.Info("TLSModeTransitEnforcer: Original TLS matches the current TLS spec, no transition needed.")
-	//		return nil
-	//	}
-	//	t.kubegresContext.Log.Info("TLSModeTransitEnforcer: Original TLS state has changed, checking for TLS mode transition.")
-	//	tlsTransition.OriginalState = tlsTransition.DesiredState
-	//	tlsTransition.CurrentTransitMode = tlsTransition.DesiredState.SSLMode
-	//	tlsTransition.DesiredState = t.kubegresContext.Kubegres.Spec.TLS
-	//	tlsTransition.TransitionInProgress = true
-	//	t.kubegresContext.Status.SetTLSTransition(tlsTransition)
-	//}
-
 	switch tlsTransition.TransitState {
 	case apiv1.TLSTransitStateNone:
 		if t.kubegresContext.Kubegres.Spec.TLS.Enabled {
@@ -156,11 +131,9 @@ func (t TLSModeTransitEnforcer) EnforceSpec() error {
 	}
 
 	opInProgress := t.resourceContext.BlockingOperation.GetActiveOperation().OperationId != ""
-	t.kubegresContext.Log.Info("TLSModeTransitEnforcer: TLS transition matches the desired state: "+newSSLMode.String(), "operationInProgress", opInProgress)
-	//tlsTransition.OriginalState = tlsTransition.DesiredState
-	//tlsTransition.OriginalState.SSLMode = tlsTransition.CurrentTransitMode // Ensure the original state matches the current transit mode.
-
 	tlsTransition.TransitionInProgress = opInProgress
+	t.kubegresContext.Log.Info("TLSModeTransitEnforcer: TLS transition matches the desired state: "+newSSLMode.String(), "operationInProgress", opInProgress)
+
 	// reset the transition state to none if the transition is not in progress.
 	if !opInProgress {
 		tlsTransition.TransitState = apiv1.TLSTransitStateNone
@@ -173,58 +146,12 @@ func (t TLSModeTransitEnforcer) EnforceSpec() error {
 	return nil
 }
 
-//	func (t TLSModeTransitEnforcer) transitSSLMode() (apiv1.SSLMode, apiv1.TLSTransitState, bool) {
-//		currentSSLMode := t.kubegresContext.Status.GetTLSTransition().CurrentTransitMode
-//		desiredSSLMode := t.kubegresContext.Status.GetTLSTransition().DesiredState.SSLMode
-//		originalSSLMode := t.kubegresContext.Status.GetTLSTransition().OriginalState.SSLMode
-//
-//		// If the desired TLS is disabled, set the desired SSL mode to "disable" regardless of the original state.
-//		if !t.kubegresContext.Status.GetTLSTransition().DesiredState.Enabled {
-//			desiredSSLMode = apiv1.SSLModeDisable
-//		}
-//
-//		switch {
-//		case currentSSLMode == desiredSSLMode:
-//			t.kubegresContext.Log.Info("TLSModeTransitEnforcer: Current SSL mode is the same as desired SSL mode, no transition needed.")
-//			return desiredSSLMode, false
-//
-//		//case currentSSLMode == "":
-//		//	t.kubegresContext.Log.Info(fmt.Sprintf("TLSModeTransitEnforcer: No current SSL mode set, no transition needed, using desired SSL mode: %s.", desiredSSLMode.String()))
-//		//	return desiredSSLMode, true
-//
-//		case currentSSLMode.Priority() == desiredSSLMode.Priority():
-//			t.kubegresContext.Log.Info("TLSModeTransitEnforcer: Current SSL mode has the same priority as desired SSL mode, no transition needed.")
-//			return desiredSSLMode, true
-//
-//		case currentSSLMode.Priority() < desiredSSLMode.Priority():
-//			t.kubegresContext.Log.Info("TLSModeTransitEnforcer: A higher SSL mode is requested, running smooth transition.")
-//			currentSSLMode = currentSSLMode.Higher()
-//
-//		case currentSSLMode.Priority() > desiredSSLMode.Priority():
-//			t.kubegresContext.Log.Info("TLSModeTransitEnforcer: A lower SSL mode is requested, running smooth transition.")
-//			currentSSLMode = currentSSLMode.Lower()
-//		}
-//
-//		// If it is transitioning to the same desired priority, return the desired SSL mode.
-//		// For example, if current is "require" and desired is "verify-ca", return the "verify-ca" mode.
-//		if currentSSLMode.Priority() == desiredSSLMode.Priority() {
-//			t.logTransitionMode(originalSSLMode, desiredSSLMode, desiredSSLMode)
-//			return desiredSSLMode, true
-//		}
-//
-//		t.logTransitionMode(originalSSLMode, desiredSSLMode, currentSSLMode)
-//		return currentSSLMode, true
-//	}
 func (t TLSModeTransitEnforcer) transitSSLMode(tlsTransition apiv1.TLSTransition) (apiv1.SSLMode, apiv1.TLSTransitState, bool) {
 	transitState := tlsTransition.TransitState
 	secureSSLMode := tlsTransition.SecureSpec.SSLMode
 	insecureSSLMode := tlsTransition.InsecureSpec.SSLMode
 	currentSSLMode := tlsTransition.CurrentTransitMode
 	transitSSLMode := currentSSLMode
-
-	//if currentSSLMode == "" {
-	//	currentSSLMode = t.kubegresContext.Kubegres.Spec.TLS.SSLMode
-	//}
 
 	if transitState == apiv1.TLSTransitStateNone {
 		if t.kubegresContext.Kubegres.Spec.TLS.Enabled {
@@ -273,8 +200,6 @@ func (t TLSModeTransitEnforcer) transitSSLMode(tlsTransition apiv1.TLSTransition
 		transitSSLMode = currentSSLMode.Higher()
 	}
 
-	//defer t.logTransitionMode(insecureSSLMode, secureSSLMode, currentSSLMode, transitSSLMode, transitState)
-
 	// If it is transitioning to the same secure priority, return the secure SSL mode.
 	// For example, if current is "require" and secure is "verify-ca", return the "verify-ca" mode.
 	switch {
@@ -303,84 +228,3 @@ func (t TLSModeTransitEnforcer) logTransitionMode(from, to apiv1.SSLMode) {
 		t.kubegresContext.Log.Info(fmt.Sprintf("TLSModeTransitEnforcer: %s < %s", from, to))
 	}
 }
-
-//func (t TLSModeTransitEnforcer) logTransitionMode(insecure, secure, current, transit apiv1.SSLMode, transitState apiv1.TLSTransitState) {
-//
-//	if transitState == apiv1.TLSTransitStateToSecure && transit.Priority() == insecure.Priority() ||
-//		transitState == apiv1.TLSTransitStateToInsecure && transit.Priority() == secure.Priority() {
-//		t.kubegresContext.Log.Info(fmt.Sprintf("TLSModeTransitEnforcer: %s == %s ", current, secure))
-//		return
-//	}
-//
-//	insecureStr := insecure.String()
-//	secureStr := secure.String()
-//	middleStr := insecure.Higher().String()
-//	switch transit.Priority() {
-//	case insecure.Priority():
-//		insecureStr = fmt.Sprintf("[%s]", insecure)
-//	case secure.Priority():
-//		secureStr = fmt.Sprintf("[%s]", secure)
-//	default:
-//		middleStr = fmt.Sprintf("[%s]", middleStr)
-//	}
-//
-//	hops := secure.Priority() - insecure.Priority()
-//	switch {
-//	case transitState == apiv1.TLSTransitStateToSecure && hops == 1:
-//		t.kubegresContext.Log.Info(fmt.Sprintf("TLSModeTransitEnforcer: %s < %s", insecureStr, secureStr))
-//
-//	case transitState == apiv1.TLSTransitStateToSecure && hops == 2:
-//		t.kubegresContext.Log.Info(fmt.Sprintf("TLSModeTransitEnforcer: %s < %s < %s", insecureStr, middleStr, secureStr))
-//
-//	case transitState == apiv1.TLSTransitStateToInsecure && hops == 1:
-//		t.kubegresContext.Log.Info(fmt.Sprintf("TLSModeTransitEnforcer: %s > %s", secureStr, insecureStr))
-//
-//	case transitState == apiv1.TLSTransitStateToInsecure && hops == 2:
-//		t.kubegresContext.Log.Info(fmt.Sprintf("TLSModeTransitEnforcer: %s > %s > %s", secureStr, middleStr, insecureStr))
-//	}
-//
-//}
-
-//func (t TLSModeTransitEnforcer) logTransitionMode(original, desired, current apiv1.SSLMode) {
-//	var (
-//		conn    string
-//		transit apiv1.SSLMode
-//	)
-//	switch {
-//	case original.Priority() == desired.Priority():
-//		t.kubegresContext.Log.Info(fmt.Sprintf("TLSModeTransitEnforcer: %s == %s ", original, desired))
-//		return
-//
-//	case original.Priority() < desired.Priority():
-//		conn = "<"
-//		transit = original.Higher()
-//
-//	case original.Priority() > desired.Priority():
-//		conn = ">"
-//		transit = original.Lower()
-//	}
-//
-//	originalStr := original.String()
-//	desiredStr := desired.String()
-//	transitStr := transit.String()
-//
-//	switch current.Priority() {
-//	case original.Priority():
-//		originalStr = fmt.Sprintf("[%s]", original)
-//	case transit.Priority():
-//		transitStr = fmt.Sprintf("[%s]", transit)
-//	case desired.Priority():
-//		desiredStr = fmt.Sprintf("[%s]", desired)
-//	}
-//
-//	switch original.Priority() - desired.Priority() {
-//	case 1, -1:
-//		// Print the transition in a readable format. Example: disable < [allow]
-//		t.kubegresContext.Log.Info(fmt.Sprintf("TLSModeTransitEnforcer: %[1]s %[3]s %[2]s",
-//			originalStr, transitStr, conn))
-//	case 2, -2:
-//		// Print the transition in a readable format. Example: disable < [allow] < require
-//		t.kubegresContext.Log.Info(fmt.Sprintf("TLSModeTransitEnforcer: %[1]s %[4]s %[2]s %[4]s %[3]s",
-//			originalStr, transitStr, desiredStr, conn))
-//	}
-//}
