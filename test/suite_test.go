@@ -30,6 +30,8 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 	"reactive-tech.io/kubegres/controllers"
+	"reactive-tech.io/kubegres/controllers/connection"
+	"reactive-tech.io/kubegres/internal/sql"
 	"reactive-tech.io/kubegres/test/util"
 	"reactive-tech.io/kubegres/test/util/kindcluster"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -96,15 +98,24 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).ToNot(HaveOccurred())
 
-	mockLogger := util.CreateMockLogger()
 	eventRecorderTest = util.MockEventRecorderTestUtil{}
 
+	connectionStore := sql.NewConnectionStore()
+
 	err = (&controllers.KubegresReconciler{
-		Client:   k8sManager.GetClient(),
-		Logger:   mockLogger,
-		Scheme:   k8sManager.GetScheme(),
-		Recorder: record.EventRecorder(&eventRecorderTest),
+		Client:          k8sManager.GetClient(),
+		Logger:          util.CreateMockLogger().WithName("kubegres-reconciler"),
+		Scheme:          k8sManager.GetScheme(),
+		Recorder:        record.EventRecorder(&eventRecorderTest),
+		ConnectionStore: connectionStore,
 	}).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred())
+
+	err = connection.NewDBConnectionReconciler(
+		k8sManager.GetClient(),
+		util.CreateMockLogger().WithName("db-conn-reconciler"),
+		connectionStore,
+	).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
 	go func() {

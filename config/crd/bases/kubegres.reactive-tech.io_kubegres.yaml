@@ -2772,6 +2772,34 @@ spec:
                   primaryEndpoint:
                     type: string
                 type: object
+              tls:
+                properties:
+                  clientCert:
+                    description: ClientCertPath is the path to the client certificate
+                      file.
+                    type: string
+                  clientKey:
+                    description: ClientKeyPath is the path to the client key file.
+                    type: string
+                  mode:
+                    description: SSLMode honors https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION.
+                    type: string
+                  rootCert:
+                    description: RootCertPath is the path to the root certificate
+                      file.
+                    type: string
+                  secretName:
+                    description: SecretName is the name of the Kubernetes secret that
+                      contains the TLS certificates.
+                    type: string
+                  serverCert:
+                    description: ServerCertPath is the path to the server certificate
+                      file.
+                    type: string
+                  serverKey:
+                    description: ServerKeyPath is the path to the server key file.
+                    type: string
+                type: object
               volume:
                 properties:
                   volumeClaimTemplates:

@@ -65,6 +65,23 @@ type Probe struct {
 	ReadinessProbe *v1.Probe `json:"readinessProbe,omitempty"`
 }
 
+type TLS struct {
+	// SecretName is the name of the Kubernetes secret that contains the TLS certificates.
+	SecretName string `json:"secretName,omitempty"`
+	// RootCertPath is the path to the root certificate file.
+	RootCertPath string `json:"rootCert,omitempty"`
+	// ServerCertPath is the path to the server certificate file.
+	ServerCertPath string `json:"serverCert,omitempty"`
+	// ServerKeyPath is the path to the server key file.
+	ServerKeyPath string `json:"serverKey,omitempty"`
+	// ClientCertPath is the path to the client certificate file.
+	ClientCertPath string `json:"clientCert,omitempty"`
+	// ClientKeyPath is the path to the client key file.
+	ClientKeyPath string `json:"clientKey,omitempty"`
+	// SSLMode honors https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION.
+	SSLMode string `json:"mode,omitempty"`
+}
+
 type KubegresSpec struct {
 	Replicas           *int32                    `json:"replicas,omitempty"`
 	Image              string                    `json:"image,omitempty"`
@@ -83,6 +100,7 @@ type KubegresSpec struct {
 	ServiceAccountName string                    `json:"serviceAccountName,omitempty"`
 	Standby            Standby                   `json:"standby,omitempty"`
 	SidecarContainers  []v1.Container            `json:"sidecarContainers,omitempty"`
+	TLS                TLS                       `json:"tls,omitempty"`
 }
 
 type Standby struct {

@@ -25,6 +25,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 
 	_ "github.com/lib/pq"
@@ -63,7 +64,7 @@ func InitDbConnectionDbUtil(resourceCreator TestResourceCreator, kubegresName st
 		logLabel = "Replica " + kubegresName
 	}
 
-	return DbConnectionDbUtil{
+	db := DbConnectionDbUtil{
 		Port:             nodePort,
 		LogLabel:         logLabel,
 		IsPrimaryDb:      isPrimaryDb,
@@ -72,6 +73,10 @@ func InitDbConnectionDbUtil(resourceCreator TestResourceCreator, kubegresName st
 		resourceCreator:  resourceCreator,
 		k8sClient:        k8sClient,
 	}
+
+	db.exportNodeAddressAndPort()
+
+	return db
 }
 
 func InitExternalDbConnectionDbUtil(resourceCreator TestResourceCreator, nodePort int, k8sClient client.Client) DbConnectionDbUtil {
@@ -127,15 +132,16 @@ func (r *DbConnectionDbUtil) InsertUser() bool {
 	return true
 }
 
-func (r *DbConnectionDbUtil) connect() bool {
-
+func (r *DbConnectionDbUtil) exportNodeAddressAndPort() (string, int, bool) {
 	var nodeList v1.NodeList
 	err := r.k8sClient.List(context.Background(), &nodeList)
 	if err != nil {
-		return false
+		r.logError("Unable to list nodes in the cluster", err)
+		return "", 0, false
 	}
 	if len(nodeList.Items) == 0 {
-		return false
+		r.logError("No nodes found in the cluster", nil)
+		return "", 0, false
 	}
 	node := nodeList.Items[0]
 	var nodeAddress string
@@ -147,14 +153,37 @@ func (r *DbConnectionDbUtil) connect() bool {
 		break
 	}
 
+	if nodeAddress == "" {
+		r.logError("No internal IP address found for the node", nil)
+		return "", 0, false
+	}
+
+	if r.IsPrimaryDb {
+		_ = os.Setenv("TEST_PRIMARY_HOSTNAME", nodeAddress)
+		_ = os.Setenv("TEST_PRIMARY_PORT", strconv.Itoa(r.Port))
+	}
+
+	return nodeAddress, r.Port, true
+
+}
+
+func (r *DbConnectionDbUtil) connect() bool {
+
+	nodeAddress, port, ok := r.exportNodeAddressAndPort()
+	if !ok {
+		r.logError("Failed to export node address and port", nil)
+		return false
+	}
+
 	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s "+
 		"password=%s dbname=%s sslmode=disable",
-		nodeAddress, r.Port, resourceConfigs.DbUser, resourceConfigs.DbPassword, resourceConfigs.DbName)
+		nodeAddress, port, resourceConfigs.DbUser, resourceConfigs.DbPassword, resourceConfigs.DbName)
 
 	if r.ping(psqlInfo) {
 		return true
 	}
 
+	var err error
 	r.db, err = sql.Open("postgres", psqlInfo)
 	if err != nil {
 		r.logError("Unable to connect to: "+psqlInfo, err)
@@ -170,7 +199,7 @@ func (r *DbConnectionDbUtil) connect() bool {
 		return false
 	}
 
-	r.logInfo("Successfully connected to PostgreSql with port: '" + strconv.Itoa(r.Port) + "'")
+	r.logInfo("Successfully connected to PostgreSql with port: '" + strconv.Itoa(port) + "'")
 
 	users := r.GetUsers()
 	r.NbreInsertedUsers = len(users)

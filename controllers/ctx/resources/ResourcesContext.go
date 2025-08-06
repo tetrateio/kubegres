@@ -40,6 +40,7 @@ import (
 	"reactive-tech.io/kubegres/controllers/spec/template"
 	"reactive-tech.io/kubegres/controllers/states"
 	log2 "reactive-tech.io/kubegres/controllers/states/log"
+	"reactive-tech.io/kubegres/internal/sql"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -73,7 +74,8 @@ func CreateResourcesContext(kubegres *postgresV1.Kubegres,
 	ctx context.Context,
 	logger logr.Logger,
 	client client.Client,
-	recorder record.EventRecorder) (rc *ResourcesContext, err error) {
+	recorder record.EventRecorder,
+	connectionStore *sql.ConnectionStore) (rc *ResourcesContext, err error) {
 
 	setReplicaFieldToZeroIfNil(kubegres)
 
@@ -92,11 +94,12 @@ func CreateResourcesContext(kubegres *postgresV1.Kubegres,
 	}
 
 	rc.KubegresContext = ctx2.KubegresContext{
-		Kubegres: kubegres,
-		Status:   rc.KubegresStatusWrapper,
-		Ctx:      ctx,
-		Log:      rc.LogWrapper,
-		Client:   client,
+		Kubegres:        kubegres,
+		Status:          rc.KubegresStatusWrapper,
+		Ctx:             ctx,
+		Log:             rc.LogWrapper,
+		Client:          client,
+		ConnectionStore: connectionStore,
 	}
 
 	rc.DefaultStorageClass = defaultspec.CreateDefaultStorageClass(rc.KubegresContext)

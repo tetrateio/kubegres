@@ -28,15 +28,17 @@ import (
 	"reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx/log"
 	"reactive-tech.io/kubegres/controllers/ctx/status"
+	"reactive-tech.io/kubegres/internal/sql"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type KubegresContext struct {
-	Kubegres *v1.Kubegres
-	Status   *status.KubegresStatusWrapper
-	Ctx      context.Context
-	Log      log.LogWrapper
-	Client   client.Client
+	Kubegres        *v1.Kubegres
+	Status          *status.KubegresStatusWrapper
+	Ctx             context.Context
+	Log             log.LogWrapper
+	Client          client.Client
+	ConnectionStore *sql.ConnectionStore
 }
 
 const (
@@ -73,4 +75,12 @@ func (r *KubegresContext) IsReservedVolumeName(volumeName string) bool {
 		volumeName == BaseConfigMapVolumeName ||
 		volumeName == CustomConfigMapVolumeName ||
 		strings.Contains(volumeName, "kube-api")
+}
+
+func (r *KubegresContext) GetSQLConnection() (sql.ConnectionSupplier, bool) {
+	if r.ConnectionStore == nil {
+		r.Log.Error(nil, "Cannot get an SQL connection from the store")
+	}
+
+	return r.ConnectionStore.Get(sql.ConnectionID{Name: r.Kubegres.Name, Namespace: r.Kubegres.Namespace})
 }
