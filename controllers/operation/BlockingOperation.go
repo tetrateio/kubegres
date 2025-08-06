@@ -21,9 +21,10 @@ limitations under the License.
 package operation
 
 import (
+	"time"
+
 	v1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
-	"time"
 )
 
 type BlockingOperation struct {

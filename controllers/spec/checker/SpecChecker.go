@@ -22,10 +22,12 @@ package checker
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	postgresV1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/controllers/states"
@@ -129,6 +131,23 @@ func (r *SpecChecker) CheckSpec() (SpecCheckResult, error) {
 	if spec.Database.Size == emptyStr {
 		specCheckResult.HasSpecFatalError = true
 		specCheckResult.FatalErrorMessage = r.createErrMsgSpecUndefined("spec.database.size")
+	}
+
+	dbSize, err := resource.ParseQuantity(spec.Database.Size)
+	if err != nil {
+		specCheckResult.HasSpecFatalError = true
+		msg := fmt.Sprintf("In the Resources Spec the value of 'spec.database.size' is not a valid resource quantity. %s", err.Error())
+		specCheckResult.FatalErrorMessage = r.logSpecErrMsg(msg)
+		return specCheckResult, err
+	}
+
+	if spec.ReplicationSlots.Enabled {
+		if dbSize.Cmp(spec.ReplicationSlots.MaxWalKeepSize) <= 0 {
+			specCheckResult.HasSpecFatalError = true
+			msg := fmt.Sprintf("In the Resources Spec the value of 'spec.replicationSlots.maxWalKeepSize' (%s) must be less than 'spec.database.size' (%s).",
+				spec.ReplicationSlots.MaxWalKeepSize.String(), dbSize.String())
+			specCheckResult.FatalErrorMessage = r.logSpecErrMsg(msg)
+		}
 	}
 
 	if r.isCustomConfigNotDeployed(spec) {

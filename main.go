@@ -60,11 +60,15 @@ func init() {
 }
 
 func main() {
-	var metricsAddr string
+	var (
+		metricsAddr string
+		probeAddr   string
+		clusterName string
+	)
 	var enableLeaderElection bool
-	var probeAddr string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flag.StringVar(&clusterName, "cluster-name", "kubegres", "The name of the cluster. This is used to identify the cluster in case of multi-cluster deployments.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -109,6 +113,7 @@ func main() {
 		Scheme:          mgr.GetScheme(),
 		Recorder:        mgr.GetEventRecorderFor("Kubegres-controller"),
 		ConnectionStore: connectionStore,
+		ClusterName:     clusterName,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", ctx2.KindKubegres)
 		os.Exit(1)

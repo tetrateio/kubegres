@@ -24,6 +24,7 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"time"
 
 	"reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx/log"
@@ -42,21 +43,25 @@ type KubegresContext struct {
 }
 
 const (
-	PrimaryRoleName                        = "primary"
-	KindKubegres                           = "Kubegres"
-	DeploymentOwnerKey                     = ".metadata.controller"
-	DatabaseVolumeName                     = "postgres-db"
-	BaseConfigMapVolumeName                = "base-config"
-	CustomConfigMapVolumeName              = "custom-config"
-	BaseConfigMapName                      = "base-kubegres-config"
-	CronJobNamePrefix                      = "backup-"
-	DefaultContainerPortNumber             = 5432
-	DefaultPodServiceAccountName           = "default"
-	DefaultDatabaseVolumeMount             = "/var/lib/postgresql/data"
-	DefaultDatabaseFolder                  = "pgdata"
-	EnvVarNamePgData                       = "PGDATA"
-	EnvVarNameOfPostgresSuperUserPsw       = "POSTGRES_PASSWORD"
-	EnvVarNameOfPostgresReplicationUserPsw = "POSTGRES_REPLICATION_PASSWORD"
+	PrimaryRoleName                                = "primary"
+	KindKubegres                                   = "Kubegres"
+	DeploymentOwnerKey                             = ".metadata.controller"
+	DatabaseVolumeName                             = "postgres-db"
+	BaseConfigMapVolumeName                        = "base-config"
+	CustomConfigMapVolumeName                      = "custom-config"
+	BaseConfigMapName                              = "base-kubegres-config"
+	CronJobNamePrefix                              = "backup-"
+	DefaultContainerPortNumber                     = 5432
+	DefaultPodServiceAccountName                   = "default"
+	DefaultDatabaseVolumeMount                     = "/var/lib/postgresql/data"
+	DefaultDatabaseFolder                          = "pgdata"
+	EnvVarNamePgData                               = "PGDATA"
+	EnvVarNameOfPostgresSuperUserPsw               = "POSTGRES_PASSWORD"
+	EnvVarNameOfPostgresReplicationUserPsw         = "POSTGRES_REPLICATION_PASSWORD"
+	EnvVarReplicationSlotName                      = "POSTGRES_REPLICATION_SLOT"
+	DefaultReplicationSlotsMaxWalKeepSize          = "1Gi"
+	DefaultReplicationSlotsInactiveSlotGracePeriod = 2 * time.Minute
+	DefaultReplicationSlotsHealthCheckInterval     = 30 * time.Second
 )
 
 func (r *KubegresContext) GetServiceResourceName(isPrimary bool) string {
@@ -83,4 +88,18 @@ func (r *KubegresContext) GetSQLConnection() (sql.ConnectionSupplier, bool) {
 	}
 
 	return r.ConnectionStore.Get(sql.ConnectionID{Name: r.Kubegres.Name, Namespace: r.Kubegres.Namespace})
+}
+
+type ClusterRole string
+
+const (
+	ActiveRoleName  ClusterRole = "active"
+	StandbyRoleName ClusterRole = "standby"
+)
+
+func (r *KubegresContext) ClusterRole() ClusterRole {
+	if r.Kubegres.Spec.Standby.Enabled {
+		return StandbyRoleName
+	}
+	return ActiveRoleName
 }

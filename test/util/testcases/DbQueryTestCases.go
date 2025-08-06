@@ -24,6 +24,7 @@ import (
 	"log"
 
 	. "github.com/onsi/gomega"
+	"reactive-tech.io/kubegres/internal/replicationslot"
 	"reactive-tech.io/kubegres/test/resourceConfigs"
 	"reactive-tech.io/kubegres/test/util"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -92,4 +93,8 @@ func (r *DbQueryTestCases) isLastInsertedUserInDb(users []util.AccountUser) bool
 		}
 	}
 	return false
+}
+
+func (r *DbQueryTestCases) GetReplicationSlots() []replicationslot.ReplicationSlot {
+	return r.connectionPrimaryDb.GetReplicationSlots()
 }

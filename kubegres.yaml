@@ -493,6 +493,33 @@ spec:
               replicas:
                 format: int32
                 type: integer
+              replicationSlots:
+                properties:
+                  disableCleanup:
+                    type: boolean
+                  enabled:
+                    type: boolean
+                  healthCheckInterval:
+                    description: |-
+                      A Duration represents the elapsed time between two instants
+                      as an int64 nanosecond count. The representation limits the
+                      largest representable duration to approximately 290 years.
+                    format: int64
+                    type: integer
+                  inactiveSlotGracePeriod:
+                    description: |-
+                      A Duration represents the elapsed time between two instants
+                      as an int64 nanosecond count. The representation limits the
+                      largest representable duration to approximately 290 years.
+                    format: int64
+                    type: integer
+                  maxWalKeepSize:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                type: object
               resources:
                 description: ResourceRequirements describes the compute resource requirements.
                 properties:
