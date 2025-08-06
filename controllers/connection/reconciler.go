@@ -287,15 +287,13 @@ func updateDSNData(dsnData *sql.DSNData, kubegres *apiv1.Kubegres) map[types.Nam
 
 	if tls := kubegres.Spec.TLS; tls.SecretName != "" {
 
-		if tls.SecretName != "" {
-			secretRef[types.NamespacedName{
-				Namespace: kubegres.Namespace,
-				Name:      tls.SecretName,
-			}] = secretReference{
-				connID:    connID,
-				appliesTo: appliesToTLS,
-				key:       "",
-			}
+		secretRef[types.NamespacedName{
+			Namespace: kubegres.Namespace,
+			Name:      tls.SecretName,
+		}] = secretReference{
+			connID:    connID,
+			appliesTo: appliesToTLS,
+			key:       "",
 		}
 
 		if tls.SSLMode != "" {

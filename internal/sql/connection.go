@@ -66,6 +66,8 @@ func (c *Connection) DSN() string {
 }
 
 func (c *Connection) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.db != nil {
 		return c.db.Close()
 	}
@@ -129,7 +131,7 @@ func (d *DynamicDSNConnection) DB() *sql.DB {
 		if err := d.Reconnect(newDsn); err != nil {
 			return nil
 		}
-		d.dsn = newDsn
+		// DSN is updated by Reconnect; no need to assign directly.
 	}
 	return d.Connection.DB()
 }

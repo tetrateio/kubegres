@@ -85,6 +85,7 @@ func (r *KubegresContext) IsReservedVolumeName(volumeName string) bool {
 func (r *KubegresContext) GetSQLConnection() (sql.ConnectionSupplier, bool) {
 	if r.ConnectionStore == nil {
 		r.Log.Error(nil, "Cannot get an SQL connection from the store")
+		return nil, false
 	}
 
 	return r.ConnectionStore.Get(sql.ConnectionID{Name: r.Kubegres.Name, Namespace: r.Kubegres.Namespace})
