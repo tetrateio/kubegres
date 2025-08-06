@@ -36,13 +36,9 @@ const (
 )
 
 type (
-	secretReference struct {
-		connID    sql.ConnectionID
-		appliesTo appliesTo
-		key       string
-	}
-	appliesTo int
-
+	// DBConnectionReconciler is responsible for reconciling the database connection state
+	// based on the Kubegres resource and the associated secrets.
+	// It manages the connections in the given connection store and updates the DSN data accordingly.
 	DBConnectionReconciler struct {
 		client client.Client
 		logger logr.Logger
@@ -50,8 +46,6 @@ type (
 		connStore *sql.ConnectionStore
 		dsnStore  *SyncMap[sql.ConnectionID, *sql.DSNData]
 		secrets   *SyncMap[types.NamespacedName, secretReference]
-		//dsnStore  map[sql.ConnectionID]*sql.DSNData
-		//secrets   map[types.NamespacedName]secretReference
 	}
 
 	kubegresReconciler struct {
@@ -63,8 +57,16 @@ type (
 		*DBConnectionReconciler
 		logger logr.Logger
 	}
+
+	secretReference struct {
+		connID    sql.ConnectionID
+		appliesTo appliesTo
+		key       string
+	}
+	appliesTo int
 )
 
+// NewDBConnectionReconciler is a constructor.
 func NewDBConnectionReconciler(c client.Client, logger logr.Logger, connStore *sql.ConnectionStore) *DBConnectionReconciler {
 	return &DBConnectionReconciler{
 		client:    c,
