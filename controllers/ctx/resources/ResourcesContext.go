@@ -41,6 +41,7 @@ import (
 	"reactive-tech.io/kubegres/controllers/spec/template"
 	"reactive-tech.io/kubegres/controllers/states"
 	log2 "reactive-tech.io/kubegres/controllers/states/log"
+	"reactive-tech.io/kubegres/internal/sql"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -76,6 +77,7 @@ func CreateResourcesContext(
 	logger logr.Logger,
 	client client.Client,
 	recorder record.EventRecorder,
+	connectionStore *sql.ConnectionStore,
 	clusterName string,
 	primarySvcProvider func() (svcName string, port int32, err error),
 ) (rc *ResourcesContext, err error) {
@@ -97,11 +99,12 @@ func CreateResourcesContext(
 	}
 
 	rc.KubegresContext = ctx2.KubegresContext{
-		Kubegres: kubegres,
-		Status:   rc.KubegresStatusWrapper,
-		Ctx:      ctx,
-		Log:      rc.LogWrapper,
-		Client:   client,
+		Kubegres:        kubegres,
+		Status:          rc.KubegresStatusWrapper,
+		Ctx:             ctx,
+		Log:             rc.LogWrapper,
+		Client:          client,
+		ConnectionStore: connectionStore,
 	}
 
 	rc.DefaultStorageClass = defaultspec.CreateDefaultStorageClass(rc.KubegresContext)
