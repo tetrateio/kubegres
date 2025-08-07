@@ -21,10 +21,12 @@ limitations under the License.
 package util
 
 import (
-	"github.com/go-logr/logr"
+	"fmt"
 	"log"
-	log2 "reactive-tech.io/kubegres/controllers/ctx/log"
 	"strings"
+
+	"github.com/go-logr/logr"
+	log2 "reactive-tech.io/kubegres/controllers/ctx/log"
 )
 
 type MockLogSink struct {
@@ -57,10 +59,16 @@ func (r *MockLogSink) WithValues(keysAndValues ...interface{}) logr.LogSink {
 }
 
 func (r *MockLogSink) WithName(name string) logr.LogSink {
-	if !strings.Contains(r.name, name) {
-		r.name += name + " - "
+	if strings.Contains(r.name, name) {
+		return r
 	}
-	return r
+
+	if r.name == "" {
+		r.name = fmt.Sprintf(" %s ", name)
+		return r
+	}
+
+	return &MockLogSink{name: fmt.Sprintf(" %s/%s ", strings.TrimSpace(r.name), name)}
 }
 
 func (r *MockLogSink) constructFullErrMsg(err error, msg string, keysAndValues ...interface{}) string {

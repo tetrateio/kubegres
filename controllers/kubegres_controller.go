@@ -30,6 +30,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctx2 "reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/controllers/ctx/resources"
+	"reactive-tech.io/kubegres/internal/sql"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -44,6 +45,7 @@ type KubegresReconciler struct {
 	Logger             logr.Logger
 	Scheme             *runtime.Scheme
 	Recorder           record.EventRecorder
+	ConnectionStore    *sql.ConnectionStore
 	ClusterName        string
 	PrimarySvcProvider func() (svcName string, port int32, err error) // should be used only in tests
 }
@@ -55,6 +57,7 @@ type KubegresReconciler struct {
 // +kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="apps",resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
@@ -76,7 +79,7 @@ func (r *KubegresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
-	resourcesContext, err := resources.CreateResourcesContext(kubegres, ctx, r.Logger, r.Client, r.Recorder, r.ClusterName, r.PrimarySvcProvider)
+	resourcesContext, err := resources.CreateResourcesContext(kubegres, ctx, r.Logger, r.Client, r.Recorder, r.ConnectionStore, r.ClusterName, r.PrimarySvcProvider)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

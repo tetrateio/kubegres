@@ -32,6 +32,8 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/tools/record"
 	"reactive-tech.io/kubegres/controllers"
+	"reactive-tech.io/kubegres/controllers/connection"
+	"reactive-tech.io/kubegres/internal/sql"
 	"reactive-tech.io/kubegres/test/resourceConfigs"
 	"reactive-tech.io/kubegres/test/util"
 	"reactive-tech.io/kubegres/test/util/kindcluster"
@@ -101,19 +103,21 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).ToNot(HaveOccurred())
 
-	mockLogger := util.CreateMockLogger()
 	eventRecorderTest = util.MockEventRecorderTestUtil{}
+
+	connectionStore := sql.NewConnectionStore()
 
 	serviceToSqlQueryPrimaryDb := resourceConfigs.LoadYamlServiceToSqlQueryPrimaryDb()
 	primaryDbSvcNamespace := serviceToSqlQueryPrimaryDb.GetNamespace()
 	kubegresName := resourceConfigs.LoadKubegresYaml().GetName()
 
 	err = (&controllers.KubegresReconciler{
-		Client:      k8sManager.GetClient(),
-		Logger:      mockLogger,
-		Scheme:      k8sManager.GetScheme(),
-		Recorder:    record.EventRecorder(&eventRecorderTest),
-		ClusterName: TestClusterName,
+		Client:          k8sManager.GetClient(),
+		Logger:          util.CreateMockLogger().WithName("kubegres-reconciler"),
+		Scheme:          k8sManager.GetScheme(),
+		Recorder:        record.EventRecorder(&eventRecorderTest),
+		ConnectionStore: connectionStore,
+		ClusterName:     TestClusterName,
 		PrimarySvcProvider: func() (svcName string, port int32, err error) {
 			// during tests the controller is running outside the k8s test cluster, hence we need
 			// a function that will use a NodePort service created as part of test setup rather than
@@ -150,6 +154,13 @@ var _ = BeforeSuite(func() {
 			return nodeAddress, resourceConfigs.ServiceToSqlQueryPrimaryDbNodePort, nil
 		},
 	}).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred())
+
+	err = connection.NewDBConnectionReconciler(
+		k8sManager.GetClient(),
+		util.CreateMockLogger().WithName("db-conn-reconciler"),
+		connectionStore,
+	).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
 	go func() {
