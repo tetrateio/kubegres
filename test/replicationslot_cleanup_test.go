@@ -122,6 +122,8 @@ var _ = Describe("Setting Kubegres replication slots cleanup settings", func() {
 			Active: false,
 		}))
 
+		time.Sleep(5 * time.Minute)
+
 		test.keepCreatedResourcesForNextTest = true
 	})
 

@@ -1,0 +1,196 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  creationTimestamp: "2025-07-31T13:30:13Z"
+  generation: 1
+  labels:
+    app: my-kubegres
+    index: "2"
+    kubegres.reactive-tech.io/mode: active
+    replicationRole: replica
+  name: my-kubegres-2
+  namespace: default
+  ownerReferences:
+  - apiVersion: kubegres.reactive-tech.io/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Kubegres
+    name: my-kubegres
+    uid: c0656701-dae4-489f-a9bd-1c9d226bc794
+  resourceVersion: "864"
+  uid: 7551cba1-a155-4cf4-8be5-d55839b6f25b
+spec:
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  podManagementPolicy: OrderedReady
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: my-kubegres
+      index: "2"
+  serviceName: my-kubegres-replica
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: my-kubegres
+        index: "2"
+        kubegres.reactive-tech.io/mode: active
+        replicationRole: replica
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - my-kubegres
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+      containers:
+      - args:
+        - -c
+        - config_file=/etc/postgres.conf
+        - -c
+        - hba_file=/etc/pg_hba.conf
+        - -c
+        - promote_trigger_file=$(PGDATA)/promote_replica_to_primary.log
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
+        - name: PGDATA
+          value: /var/lib/postgres/data/pgdata
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: superUserPassword
+              name: my-kubegres-secret
+        - name: POSTGRES_REPLICATION_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: replicationUserPassword
+              name: my-kubegres-secret
+        - name: POSTGRES_MYAPP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: myAppUserPassword
+              name: my-kubegres-secret
+        - name: POSTGRES_REPLICATION_SLOT
+          value: my_kubegres_testcluster_active_my_kubegres_2
+        image: postgres:14.5
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - exec pg_isready -U postgres -h $POD_IP
+          failureThreshold: 10
+          initialDelaySeconds: 60
+          periodSeconds: 20
+          successThreshold: 1
+          timeoutSeconds: 15
+        name: my-kubegres-2
+        ports:
+        - containerPort: 5432
+          protocol: TCP
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - exec pg_isready -U postgres -h $POD_IP
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 3
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/lib/postgres/data
+          name: postgres-db
+        - mountPath: /etc/postgres.conf
+          name: base-config
+          subPath: postgres.conf
+        - mountPath: /etc/pg_hba.conf
+          name: base-config
+          subPath: pg_hba.conf
+      dnsPolicy: ClusterFirst
+      initContainers:
+      - command:
+        - sh
+        - -c
+        - /tmp/copy_primary_data_to_replica.sh
+        env:
+        - name: PRIMARY_HOST_NAME
+          value: my-kubegres
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: replicationUserPassword
+              name: my-kubegres-secret
+        - name: PGDATA
+          value: /var/lib/postgres/data/pgdata
+        - name: POSTGRES_REPLICATION_SLOT
+          value: my_kubegres_testcluster_active_my_kubegres_2
+        image: postgres:14.5
+        imagePullPolicy: IfNotPresent
+        name: setup-replica-data-directory
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/lib/postgres/data
+          name: postgres-db
+        - mountPath: /tmp/copy_primary_data_to_replica.sh
+          name: base-config
+          subPath: copy_primary_data_to_replica.sh
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - configMap:
+          defaultMode: 511
+          name: base-kubegres-config
+        name: base-config
+  updateStrategy:
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      creationTimestamp: null
+      name: postgres-db
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 200Mi
+      storageClassName: standard
+      volumeMode: Filesystem
+    status:
+      phase: Pending
+status:
+  availableReplicas: 1
+  collisionCount: 0
+  currentReplicas: 1
+  currentRevision: my-kubegres-2-bfb6588d8
+  observedGeneration: 1
+  readyReplicas: 1
+  replicas: 1
+  updateRevision: my-kubegres-2-bfb6588d8
+  updatedReplicas: 1

@@ -1,12 +1,15 @@
 package controllers
 
 import (
+	_ "embed"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	v1 "k8s.io/api/apps/v1"
 	"k8s.io/client-go/tools/record"
 	"reactive-tech.io/kubegres/test/util"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -23,6 +26,11 @@ func TestCleanupReplicationSlotsReconciler_Reconcile(t *testing.T) {
 	}{
 		{
 			name: "",
+			clientSetupFn: func() client.Client {
+				return fake.NewClientBuilder().
+					WithObjects(
+						primaryStatefulSet()).Build()
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -49,4 +57,14 @@ func TestCleanupReplicationSlotsReconciler_Reconcile(t *testing.T) {
 			tt.assertClient(t, c)
 		})
 	}
+}
+
+//go:embed testdata/statefulset-primary.yaml
+var primaryStatefulSetYaml string
+
+//go:embed testdata/statefulset-replica.yaml
+var replicaStatefulSetYaml string
+
+func primaryStatefulSet() *v1.StatefulSet {
+	return nil
 }
