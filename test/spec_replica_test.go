@@ -192,6 +192,8 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), func() {
 
 			test.thenReplicationSlotsShouldBeCleanedUp()
 
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+
 			test.keepCreatedResourcesForNextTest = true
 		})
 
@@ -204,6 +206,9 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), func() {
 			test.thenRunningIndexesShouldBe([]int{1, 4})
 
 			test.thenReplicationSlotShouldBeActive()
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
 
 			test.keepCreatedResourcesForNextTest = true
 		})
@@ -219,6 +224,9 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), func() {
 
 			test.thenPodsStatesShouldBe(1, 1)
 			test.thenRunningIndexesShouldBe([]int{1, 5})
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
 
 			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'replica' set to 1'")
 		})
