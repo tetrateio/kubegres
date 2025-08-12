@@ -5,52 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"reactive-tech.io/kubegres/controllers/ctx"
-	"reactive-tech.io/kubegres/controllers/operation"
-	"reactive-tech.io/kubegres/controllers/spec/template"
-	"reactive-tech.io/kubegres/controllers/states"
 )
-
-func TestCreateReplicaDbCountSpecEnforcer(t *testing.T) {
-
-	t.Skip("not sure if i want to test here or at the `resources.CreateResourcesContext` level.")
-
-	tests := []struct {
-		name              string
-		kubegresContext   ctx.KubegresContext
-		resourcesStates   states.ResourcesStates
-		resourcesCreator  template.ResourcesCreatorFromTemplate
-		blockingOperation *operation.BlockingOperation
-		clusterName       string
-		wantErr           error
-		wantEnforceErr    error
-	}{
-		{},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			enforcer, err := CreateReplicaDbCountSpecEnforcer(
-				tt.kubegresContext,
-				tt.resourcesStates,
-				tt.resourcesCreator,
-				tt.blockingOperation,
-				tt.clusterName,
-			)
-			if tt.wantErr != nil {
-				require.ErrorIs(t, err, tt.wantErr)
-				return
-			}
-			require.NoError(t, err)
-			require.NotNil(t, enforcer)
-			err = enforcer.Enforce()
-			if tt.wantEnforceErr != nil {
-				require.ErrorIs(t, err, tt.wantEnforceErr)
-				return
-			}
-		})
-	}
-
-}
 
 func Test_createReplicationSlotName(t *testing.T) {
 	tests := []struct {
