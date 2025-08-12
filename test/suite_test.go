@@ -22,19 +22,16 @@ package test
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"path/filepath"
 	"testing"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/tools/record"
 	"reactive-tech.io/kubegres/controllers"
 	"reactive-tech.io/kubegres/controllers/connection"
 	"reactive-tech.io/kubegres/internal/sql"
-	"reactive-tech.io/kubegres/test/resourceConfigs"
 	"reactive-tech.io/kubegres/test/util"
 	"reactive-tech.io/kubegres/test/util/kindcluster"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -107,10 +104,6 @@ var _ = BeforeSuite(func() {
 
 	connectionStore := sql.NewConnectionStore()
 
-	serviceToSqlQueryPrimaryDb := resourceConfigs.LoadYamlServiceToSqlQueryPrimaryDb()
-	primaryDbSvcNamespace := serviceToSqlQueryPrimaryDb.GetNamespace()
-	kubegresName := resourceConfigs.LoadKubegresYaml().GetName()
-
 	err = (&controllers.KubegresReconciler{
 		Client:          k8sManager.GetClient(),
 		Logger:          util.CreateMockLogger().WithName("kubegres-reconciler"),
@@ -118,41 +111,6 @@ var _ = BeforeSuite(func() {
 		Recorder:        record.EventRecorder(&eventRecorderTest),
 		ConnectionStore: connectionStore,
 		ClusterName:     TestClusterName,
-		PrimarySvcProvider: func() (svcName string, port int32, err error) {
-			// during tests the controller is running outside the k8s test cluster, hence we need
-			// a function that will use a NodePort service created as part of test setup rather than
-			// svc with ClusterIP that is managed by the operator itself.
-			testResourceRetriever := util.CreateTestResourceRetriever(k8sClientTest, primaryDbSvcNamespace)
-			var svc v1.Service
-			primaryDbSvc := testResourceRetriever.GetServiceNameAllowingToSqlQueryDb(kubegresName, true)
-			err = k8sClientTest.Get(context.Background(), client.ObjectKey{
-				Namespace: primaryDbSvcNamespace,
-				Name:      primaryDbSvc,
-			}, &svc)
-			if k8serrors.IsNotFound(err) {
-				return "", 0, fmt.Errorf("primary service '%s' not found: %w", primaryDbSvc, err)
-			}
-			var nodeList v1.NodeList
-			err = k8sClientTest.List(context.Background(), &nodeList)
-			if err != nil {
-				log.Println("ERROR: Unable to list nodes for test:", err)
-				return "", 0, err
-			}
-			if len(nodeList.Items) == 0 {
-				log.Println("ERROR: No nodes found for test")
-				return "", 0, nil
-			}
-			firstNode := nodeList.Items[0]
-			var nodeAddress string
-			for _, address := range firstNode.Status.Addresses {
-				if address.Type != v1.NodeInternalIP {
-					continue
-				}
-				nodeAddress = address.Address
-				break
-			}
-			return nodeAddress, resourceConfigs.ServiceToSqlQueryPrimaryDbNodePort, nil
-		},
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 

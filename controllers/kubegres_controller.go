@@ -42,12 +42,11 @@ import (
 // KubegresReconciler reconciles a Kubegres object
 type KubegresReconciler struct {
 	client.Client
-	Logger             logr.Logger
-	Scheme             *runtime.Scheme
-	Recorder           record.EventRecorder
-	ConnectionStore    *sql.ConnectionStore
-	ClusterName        string
-	PrimarySvcProvider func() (svcName string, port int32, err error) // should be used only in tests
+	Logger          logr.Logger
+	Scheme          *runtime.Scheme
+	Recorder        record.EventRecorder
+	ConnectionStore *sql.ConnectionStore
+	ClusterName     string
 }
 
 //+kubebuilder:rbac:groups=kubegres.reactive-tech.io,resources=kubegres,verbs=get;list;watch;create;update;patch;delete
@@ -79,7 +78,7 @@ func (r *KubegresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
-	resourcesContext, err := resources.CreateResourcesContext(kubegres, ctx, r.Logger, r.Client, r.Recorder, r.ConnectionStore, r.ClusterName, r.PrimarySvcProvider)
+	resourcesContext, err := resources.CreateResourcesContext(kubegres, ctx, r.Logger, r.Client, r.Recorder, r.ConnectionStore, r.ClusterName)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

@@ -24,7 +24,7 @@ import (
 	"context"
 	"log"
 	"strconv"
-	"sync"
+	"time"
 
 	"github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
@@ -288,19 +288,11 @@ func (r *TestResourceCreator) DeleteAllTestResources(resourceNamesToNotDelete ..
 
 	log.Println("Deleting all resources created during tests")
 
-	watchEventsChannels := make([]<-chan watch.Event, 0)
-	var stopWatchers []func()
-	var objectDeleteCount int
 	configMapsList := &v1.ConfigMapList{}
 	r.searchList(configMapsList)
 	for _, resourceToDelete := range configMapsList.Items {
 		if !r.doesArrayContain(resourceToDelete.Name, resourceNamesToNotDelete...) {
-			withWatch, stopWatcher := r.DeleteResourceWithWatch(&resourceToDelete, resourceToDelete.Name, configMapsList)
-			if withWatch != nil {
-				objectDeleteCount++
-				watchEventsChannels = append(watchEventsChannels, withWatch)
-				stopWatchers = append(stopWatchers, stopWatcher)
-			}
+			r.DeleteResource(&resourceToDelete, resourceToDelete.Name)
 		}
 	}
 
@@ -308,12 +300,7 @@ func (r *TestResourceCreator) DeleteAllTestResources(resourceNamesToNotDelete ..
 	r.searchList(servicesList)
 	for _, resourceToDelete := range servicesList.Items {
 		if !r.doesArrayContain(resourceToDelete.Name, resourceNamesToNotDelete...) {
-			withWatch, stopWatcher := r.DeleteResourceWithWatch(&resourceToDelete, resourceToDelete.Name, servicesList)
-			if withWatch != nil {
-				objectDeleteCount++
-				watchEventsChannels = append(watchEventsChannels, withWatch)
-				stopWatchers = append(stopWatchers, stopWatcher)
-			}
+			r.DeleteResource(&resourceToDelete, resourceToDelete.Name)
 		}
 	}
 
@@ -321,12 +308,7 @@ func (r *TestResourceCreator) DeleteAllTestResources(resourceNamesToNotDelete ..
 	r.searchList(pvcList)
 	for _, resourceToDelete := range pvcList.Items {
 		if !r.doesArrayContain(resourceToDelete.Name, resourceNamesToNotDelete...) {
-			withWatch, stopWatcher := r.DeleteResourceWithWatch(&resourceToDelete, resourceToDelete.Name, pvcList)
-			if withWatch != nil {
-				objectDeleteCount++
-				watchEventsChannels = append(watchEventsChannels, withWatch)
-				stopWatchers = append(stopWatchers, stopWatcher)
-			}
+			r.DeleteResource(&resourceToDelete, resourceToDelete.Name)
 		}
 	}
 
@@ -335,21 +317,11 @@ func (r *TestResourceCreator) DeleteAllTestResources(resourceNamesToNotDelete ..
 	for _, resourceToDelete := range kubegresList.Items {
 
 		kubegresPvcList, err := r.resourceRetriever.GetKubegresPvcByKubegresName(resourceToDelete.Name)
-		withWatch, stopWatcher := r.DeleteResourceWithWatch(&resourceToDelete, resourceToDelete.Name, kubegresList)
-		if withWatch != nil {
-			objectDeleteCount++
-			watchEventsChannels = append(watchEventsChannels, withWatch)
-			stopWatchers = append(stopWatchers, stopWatcher)
-		}
+		r.DeleteResource(&resourceToDelete, resourceToDelete.Name)
 
 		if err == nil {
 			for _, pvcToDelete := range kubegresPvcList.Items {
-				resourceWithWatch, stopWatcher := r.DeleteResourceWithWatch(&pvcToDelete, pvcToDelete.Name, pvcList)
-				if resourceWithWatch != nil {
-					objectDeleteCount++
-					watchEventsChannels = append(watchEventsChannels, resourceWithWatch)
-					stopWatchers = append(stopWatchers, stopWatcher)
-				}
+				r.DeleteResource(&pvcToDelete, pvcToDelete.Name)
 			}
 		} else {
 			log.Println("No PVC found for kubegres resource '" + resourceToDelete.Name + "'")
@@ -357,49 +329,10 @@ func (r *TestResourceCreator) DeleteAllTestResources(resourceNamesToNotDelete ..
 		}
 	}
 
-	fanIn := func(done <-chan struct{}, channels ...<-chan watch.Event) <-chan watch.Event {
-		var wg sync.WaitGroup
-		out := make(chan watch.Event)
-		multiplexFunc := func(c <-chan watch.Event) {
-			defer wg.Done()
-			for event := range c {
-				select {
-				case <-done:
-					return
-				case out <- event:
-				}
-			}
-		}
-		wg.Add(len(channels))
-		for _, ch := range channels {
-			go multiplexFunc(ch)
-		}
-		go func() {
-			wg.Wait()
-			close(out)
-		}()
-		return out
-	}
+	log.Println("Deleted all resources created during tests. Waiting for 30 seconds...")
+	time.Sleep(10 * time.Second)
 
-	doneCh := make(chan struct{})
-	multiplexedCh := fanIn(doneCh, watchEventsChannels...)
-	// Wait for all delete events to be received
-	for event := range multiplexedCh {
-		if event.Type == watch.Deleted {
-			log.Println("Resource deleted: ", event.Object.(interface{ GetName() string }).GetName())
-			objectDeleteCount--
-			if objectDeleteCount == 0 {
-				log.Println("All resources created during tests have been deleted")
-				break
-			}
-		}
-	}
-	for _, stopWatcher := range stopWatchers {
-		if stopWatcher != nil {
-			stopWatcher()
-		}
-	}
-	doneCh <- struct{}{}
+	log.Println("Deleting all resources created during tests")
 }
 
 func (r *TestResourceCreator) doesArrayContain(valueToSearch string, resourceNamesToNotDelete ...string) bool {

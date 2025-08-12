@@ -35,7 +35,6 @@ func TestCreateReplicaDbCountSpecEnforcer(t *testing.T) {
 				tt.resourcesCreator,
 				tt.blockingOperation,
 				tt.clusterName,
-				nil,
 			)
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
