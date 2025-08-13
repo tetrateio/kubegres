@@ -69,7 +69,6 @@ func CreateReplicaDbCountSpecEnforcer(
 	resourcesCreator template.ResourcesCreatorFromTemplate,
 	blockingOperation *operation.BlockingOperation,
 	clusterName string,
-	primaryDbSvcRetriever func() (svcName string, port int32, err error),
 ) (ReplicaDbCountSpecEnforcer, error) {
 
 	enforcer := ReplicaDbCountSpecEnforcer{
@@ -82,15 +81,14 @@ func CreateReplicaDbCountSpecEnforcer(
 
 	// TODO(piotrkpc): should this be here ? not testable code really
 	if kubegresContext.Kubegres.Spec.ReplicationSlots.Enabled {
-
-		db, err := sql.NewDBFrom(kubegresContext, resourcesStates, primaryDbSvcRetriever)
-		if err != nil {
-			return ReplicaDbCountSpecEnforcer{}, fmt.Errorf("create db from kubegres context and states: %w", err)
+		sqlConn, ok := kubegresContext.GetSQLConnection()
+		if !ok {
+			return ReplicaDbCountSpecEnforcer{}, errors.New("get SQL connection from kubegresContext")
 		}
 		enforcer.replicationSlotsCreateDeleter = newSimpleReplicationSlotsCreateDeleter(
 			kubegresContext,
 			resourcesStates,
-			replicationSlotRepo.New(db),
+			replicationSlotRepo.New(sqlConn.DB()),
 			clusterName,
 		)
 	}
@@ -553,9 +551,6 @@ func (r *ReplicaDbCountSpecEnforcer) replicationSlotsEnabled() bool {
 }
 
 func (r *ReplicaDbCountSpecEnforcer) hasReplicationSlotsEnabled(statefulSet statefulset.StatefulSetWrapper) bool {
-	if !statefulSet.IsDeployed || !statefulSet.IsReady {
-		return false
-	}
 	for _, container := range statefulSet.StatefulSet.Spec.Template.Spec.Containers {
 		for _, envVar := range container.Env {
 			if envVar.Name == kubegresCtx.EnvVarReplicationSlotName && envVar.Value != "" {

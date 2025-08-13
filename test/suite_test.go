@@ -22,17 +22,16 @@ package test
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"path/filepath"
 	"testing"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/tools/record"
 	"reactive-tech.io/kubegres/controllers"
-	"reactive-tech.io/kubegres/test/resourceConfigs"
+	"reactive-tech.io/kubegres/controllers/connection"
+	"reactive-tech.io/kubegres/internal/sql"
 	"reactive-tech.io/kubegres/test/util"
 	"reactive-tech.io/kubegres/test/util/kindcluster"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -105,16 +104,6 @@ var _ = BeforeSuite(func() {
 
 	connectionStore := sql.NewConnectionStore()
 
-	serviceToSqlQueryPrimaryDb := resourceConfigs.LoadYamlServiceToSqlQueryPrimaryDb()
-	primaryDbSvcNamespace := serviceToSqlQueryPrimaryDb.GetNamespace()
-	kubegresName := resourceConfigs.LoadKubegresYaml().GetName()
-
-	err = (&controllers.KubegresReconciler{
-		Client:              k8sManager.GetClient(),
-		Logger:              mockLogger,
-		Scheme:              k8sManager.GetScheme(),
-		Recorder:            record.EventRecorder(&eventRecorderTest),
-		ClusterName:         TestClusterName})
 	err = (&controllers.KubegresReconciler{
 		Client:          k8sManager.GetClient(),
 		Logger:          util.CreateMockLogger().WithName("kubegres-reconciler"),

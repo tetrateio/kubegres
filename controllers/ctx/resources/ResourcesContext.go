@@ -79,7 +79,6 @@ func CreateResourcesContext(
 	recorder record.EventRecorder,
 	connectionStore *sql.ConnectionStore,
 	clusterName string,
-	primarySvcProvider func() (svcName string, port int32, err error),
 ) (rc *ResourcesContext, err error) {
 
 	setReplicaFieldToZeroIfNil(kubegres)
@@ -129,7 +128,7 @@ func CreateResourcesContext(
 	resourceTemplateLoader := template.ResourceTemplateLoader{}
 	rc.ResourcesCreatorFromTemplate = template.CreateResourcesCreatorFromTemplate(rc.KubegresContext, rc.CustomConfigSpecHelper, resourceTemplateLoader)
 
-	err = addResourcesCountSpecEnforcers(rc, clusterName, primarySvcProvider)
+	err = addResourcesCountSpecEnforcers(rc, clusterName)
 	if err != nil {
 		return nil, fmt.Errorf("add resources count spec enforcers: %w", err)
 	}
@@ -148,14 +147,13 @@ func setReplicaFieldToZeroIfNil(kubegres *postgresV1.Kubegres) {
 	kubegres.Spec.Replicas = &replica
 }
 
-func addResourcesCountSpecEnforcers(rc *ResourcesContext, clusterName string, primarySvcProvider func() (svcName string, port int32, err error)) error {
+func addResourcesCountSpecEnforcers(rc *ResourcesContext, clusterName string) error {
 	replicaDbCountSpecEnforcer, err := statefulset.CreateReplicaDbCountSpecEnforcer(
 		rc.KubegresContext,
 		rc.ResourcesStates,
 		rc.ResourcesCreatorFromTemplate,
 		rc.BlockingOperation,
 		clusterName,
-		primarySvcProvider,
 	)
 	if err != nil {
 		return fmt.Errorf("create replica db count spec enforcer: %w", err)
