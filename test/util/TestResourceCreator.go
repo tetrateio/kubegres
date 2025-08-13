@@ -32,7 +32,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/watch"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
 	resourceConfigs2 "reactive-tech.io/kubegres/test/resourceConfigs"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -260,28 +259,6 @@ func (r *TestResourceCreator) DeleteResource(resourceToDelete client.Object, res
 	}
 	log.Println("Deleted resource with name: '" + resourceName + "'")
 	return true
-}
-
-func (r *TestResourceCreator) DeleteResourceWithWatch(resourceToDelete client.Object, resourceName string, listObject client.ObjectList) (<-chan watch.Event, func()) {
-	watcher, canWatch := r.client.(client.WithWatch)
-	if !canWatch {
-		log.Println("Deleted resource with name: '" + resourceName + "'")
-		return nil, nil
-	}
-
-	cmWatch, err := watcher.Watch(context.Background(), listObject)
-	if err != nil {
-		log.Println("Error while watching for delete event of resource with name: '"+resourceName+"' ", err)
-		return nil, nil
-	}
-
-	deleted := r.DeleteResource(resourceToDelete, resourceName)
-	if !deleted {
-		log.Println("Failed to delete resource with name: '" + resourceName + "'")
-		return nil, nil
-	}
-
-	return cmWatch.ResultChan(), cmWatch.Stop
 }
 
 func (r *TestResourceCreator) DeleteAllTestResources(resourceNamesToNotDelete ...string) {
