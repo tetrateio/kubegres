@@ -262,7 +262,7 @@ data:
   #
   copy_primary_data_to_replica.sh: |
     #!/bin/bash
-    set -e
+    set -ex
 
     dt=$(date '+%d/%m/%Y %H:%M:%S');
     echo "$dt - Attempting to copy Primary DB to Replica DB...";
@@ -288,17 +288,19 @@ data:
         host_args="host=$PRIMARY_HOST_NAME"
         auth_args="user=replication password=$PGPASSWORD"
   
-        primary_already_set=$(grep "$host_args" $PGDATA/postgresql.auto.conf | grep "$auth_args" > /dev/null; echo $?)
+        # Check if the primary_conninfo already exists in postgresql.auto.conf, excluding SSL connections.
+        primary_already_set=$(grep "$host_args" $PGDATA/postgresql.auto.conf | grep "$auth_args" | grep -v ssl > /dev/null; echo $?)
   
         if [ $primary_already_set -ne 0 ]; then
           echo "$dt - Updating primary_conninfo in postgresql.auto.conf to connect to $PRIMARY_HOST_NAME";
           primary_conninfo="$host_args $auth_args"
+          echo "$dt - primary_conninfo: $primary_conninfo";
           echo "primary_conninfo = '$primary_conninfo'" > $PGDATA/postgresql.auto.conf
         fi
   
         echo "$dt - Skipping copy from Primary DB because Replica DB already exists";
     fi
-
+    
 
   # This script promotes a Replica to a Primary by creating a trigger-file signaling PostgreSql to start the promotion process.
   # It is executed once, when a Replica is set to become a Primary.

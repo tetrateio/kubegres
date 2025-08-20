@@ -30,12 +30,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	postgresV1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
+	"reactive-tech.io/kubegres/controllers/states"
 )
 
 type ResourcesCreatorFromTemplate struct {
 	kubegresContext        ctx.KubegresContext
-	customConfigSpecHelper CustomConfigSpecHelper
 	templateFromFiles      ResourceTemplateLoader
+	customConfigSpecHelper CustomConfigSpecHelper
+	tlsConfigSpecHelper    TLSConfigSpecHelper
 }
 
 const (
@@ -46,13 +48,15 @@ const (
 )
 
 func CreateResourcesCreatorFromTemplate(kubegresContext ctx.KubegresContext,
+	resourceTemplateLoader ResourceTemplateLoader,
 	customConfigSpecHelper CustomConfigSpecHelper,
-	resourceTemplateLoader ResourceTemplateLoader) ResourcesCreatorFromTemplate {
+	tlsConfigSpecHelper TLSConfigSpecHelper) ResourcesCreatorFromTemplate {
 
 	return ResourcesCreatorFromTemplate{
 		kubegresContext:        kubegresContext,
-		customConfigSpecHelper: customConfigSpecHelper,
 		templateFromFiles:      resourceTemplateLoader,
+		customConfigSpecHelper: customConfigSpecHelper,
+		tlsConfigSpecHelper:    tlsConfigSpecHelper,
 	}
 }
 
@@ -107,6 +111,7 @@ func (r *ResourcesCreatorFromTemplate) CreatePrimaryStatefulSet(statefulSetInsta
 	primaryServiceName := r.kubegresContext.GetServiceResourceName(true)
 	r.initStatefulSet(primaryServiceName, &statefulSetTemplate, statefulSetInstanceIndex)
 	r.customConfigSpecHelper.ConfigureStatefulSet(&statefulSetTemplate)
+	r.tlsConfigSpecHelper.ConfigureStatefulSet(&statefulSetTemplate)
 
 	return statefulSetTemplate, nil
 }
@@ -128,6 +133,7 @@ func (r *ResourcesCreatorFromTemplate) CreateReplicaStatefulSet(statefulSetInsta
 
 	r.initStatefulSet(replicaServiceName, &statefulSetTemplate, statefulSetInstanceIndex)
 	r.customConfigSpecHelper.ConfigureStatefulSet(&statefulSetTemplate)
+	r.tlsConfigSpecHelper.ConfigureStatefulSet(&statefulSetTemplate)
 
 	initContainer := &statefulSetTemplate.Spec.Template.Spec.InitContainers[0]
 	postgresSpec := r.kubegresContext.Kubegres.Spec
@@ -149,6 +155,7 @@ func (r *ResourcesCreatorFromTemplate) CreateBackUpCronJob(configMapNameForBackU
 	}
 
 	postgres := r.kubegresContext.Kubegres
+	tls := postgres.Spec.TLS
 	backupSpec := postgres.Spec.Backup
 	backUpName := ctx.CronJobNamePrefix + postgres.Name
 
@@ -172,6 +179,13 @@ func (r *ResourcesCreatorFromTemplate) CreateBackUpCronJob(configMapNameForBackU
 	backUpCronJobContainer.Env[1].Value = postgres.Name
 	backUpCronJobContainer.Env[2].Value = backupSpec.VolumeMount
 	backUpCronJobContainer.Env = append(backUpCronJobContainer.Env, r.kubegresContext.Kubegres.Spec.Env...)
+	r.tlsConfigSpecHelper.ConfigureTLSEnvVarsToContainer(backUpCronJobContainer)
+
+	if tls.Enabled {
+		backUpCronJobContainer.VolumeMounts[1].SubPath = states.ConfigMapDataKeyTLSBackupDatabaseScript
+		backUpCronJobSpec.Volumes = append(backUpCronJobSpec.Volumes, TLSVolume(tls))
+		backUpCronJobContainer.VolumeMounts = append(backUpCronJobContainer.VolumeMounts, TLSVolumeMount(tls))
+	}
 
 	backSourceDbHostName := r.kubegresContext.GetServiceResourceName(false)
 	if !postgres.Spec.Standby.Enabled && *postgres.Spec.Replicas == 1 {
@@ -294,6 +308,7 @@ func (r *ResourcesCreatorFromTemplate) initStatefulSet(
 	if postgresSpec.ServiceAccountName != "" {
 		statefulSetTemplate.Spec.Template.Spec.ServiceAccountName = postgresSpec.ServiceAccountName
 	}
+
 }
 
 // Extract annotations set in Kubegres YAML by
@@ -328,4 +343,36 @@ func (r *ResourcesCreatorFromTemplate) getEnvVar(envName string) core.EnvVar {
 func (r *ResourcesCreatorFromTemplate) doesCustomConfigExist() bool {
 	return r.kubegresContext.Kubegres.Spec.CustomConfig != "" &&
 		r.kubegresContext.Kubegres.Spec.CustomConfig != ctx.BaseConfigMapName
+}
+
+func (r *ResourcesCreatorFromTemplate) CreateTLSConfigMapKeyUpdates() (map[string]string, error) {
+	tls := r.kubegresContext.Kubegres.Spec.TLS
+
+	tlsConfigMapKeyUpdates := make(map[string]string, 2)
+
+	b, err := LoadTLSPostgresConf(tls)
+	if err != nil {
+		return nil, err
+	}
+	tlsConfigMapKeyUpdates[states.ConfigMapDataKeyTLSPostgresConf] = string(b)
+
+	b, err = LoadTLSPgHbaConf()
+	if err != nil {
+		return nil, err
+	}
+	tlsConfigMapKeyUpdates[states.ConfigMapDataKeyTLSPgHbaConf] = string(b)
+
+	b, err = LoadTLSCopyPrimaryDataScript(tls)
+	if err != nil {
+		return nil, err
+	}
+	tlsConfigMapKeyUpdates[states.ConfigMapDataKeyTLSCopyPrimaryDataToReplicaScript] = string(b)
+
+	b, err = LoadTLSBackupScript(tls)
+	if err != nil {
+		return nil, err
+	}
+	tlsConfigMapKeyUpdates[states.ConfigMapDataKeyTLSBackupDatabaseScript] = string(b)
+
+	return tlsConfigMapKeyUpdates, nil
 }

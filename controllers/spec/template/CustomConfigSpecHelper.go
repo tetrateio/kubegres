@@ -44,8 +44,8 @@ func (r *CustomConfigSpecHelper) ConfigureStatefulSet(statefulSet *v1.StatefulSe
 
 	configMap := r.resourcesStates.Config
 
-	if r.updateVolumeMountNameIfChanged(configMap.ConfigLocations.PostgreConf, states.ConfigMapDataKeyPostgresConf, statefulSet) {
-		differenceDetails += r.createDescriptionMsg(configMap.ConfigLocations.PostgreConf, states.ConfigMapDataKeyPostgresConf)
+	if r.updateVolumeMountNameIfChanged(configMap.ConfigLocations.PostgresConf, states.ConfigMapDataKeyPostgresConf, statefulSet) {
+		differenceDetails += r.createDescriptionMsg(configMap.ConfigLocations.PostgresConf, states.ConfigMapDataKeyPostgresConf)
 		hasStatefulSetChanged = true
 	}
 

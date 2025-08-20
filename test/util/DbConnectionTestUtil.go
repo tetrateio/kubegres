@@ -34,24 +34,28 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type DbConnectionDbUtil struct {
-	Port               int
-	LogLabel           string
-	IsPrimaryDb        bool
-	NbreInsertedUsers  int
-	LastInsertedUserId string
-	db                 *sql.DB
-	kubegresName       string
-	serviceToQueryDb   runtime.Object
-	resourceCreator    TestResourceCreator
-	k8sClient          client.Client
-}
+type (
+	DbConnectionDbUtil struct {
+		Port               int
+		SSLMode            string
+		SSLRootCertFile    string
+		SSLCertFile        string
+		SSLKeyFile         string
+		LogLabel           string
+		IsPrimaryDb        bool
+		NbreInsertedUsers  int
+		LastInsertedUserId string
+		db                 *sql.DB
+		kubegresName       string
+		serviceToQueryDb   runtime.Object
+		resourceCreator    TestResourceCreator
+		k8sClient          client.Client
+	}
 
-type AccountUser struct {
-	UserId, Username string
-}
+	DBConnectionOption func(dbConnection *DbConnectionDbUtil) *DbConnectionDbUtil
+)
 
-func InitDbConnectionDbUtil(resourceCreator TestResourceCreator, kubegresName string, nodePort int, isPrimaryDb bool, k8sClient client.Client) DbConnectionDbUtil {
+func WithBaseConfig(resourceCreator TestResourceCreator, kubegresName string, nodePort int, isPrimaryDb bool) DBConnectionOption {
 
 	serviceToQueryDb, err := resourceCreator.CreateServiceToSqlQueryDb(kubegresName, nodePort, isPrimaryDb)
 	if err != nil {
@@ -63,32 +67,54 @@ func InitDbConnectionDbUtil(resourceCreator TestResourceCreator, kubegresName st
 		logLabel = "Replica " + kubegresName
 	}
 
-	return DbConnectionDbUtil{
-		Port:             nodePort,
-		LogLabel:         logLabel,
-		IsPrimaryDb:      isPrimaryDb,
-		kubegresName:     kubegresName,
-		serviceToQueryDb: serviceToQueryDb,
-		resourceCreator:  resourceCreator,
-		k8sClient:        k8sClient,
+	return func(dbConnection *DbConnectionDbUtil) *DbConnectionDbUtil {
+		dbConnection.Port = nodePort
+		dbConnection.IsPrimaryDb = isPrimaryDb
+		dbConnection.LogLabel = logLabel
+		dbConnection.kubegresName = kubegresName
+		dbConnection.serviceToQueryDb = serviceToQueryDb
+		dbConnection.resourceCreator = resourceCreator
+		return dbConnection
 	}
 }
 
-func InitExternalDbConnectionDbUtil(resourceCreator TestResourceCreator, nodePort int, k8sClient client.Client) DbConnectionDbUtil {
-	serviceToQueryDb, err := resourceCreator.CreateServiceToSqlQueryExternalDb(nodePort)
-	if err != nil {
-		log.Fatal("Unable to create a Service on port '"+strconv.Itoa(nodePort)+"' to query external DB.", err)
+func WithExternalDbConfig(resourceCreator TestResourceCreator, nodePort int) DBConnectionOption {
+	return func(dbConnection *DbConnectionDbUtil) *DbConnectionDbUtil {
+		serviceToQueryDb, err := resourceCreator.CreateServiceToSqlQueryExternalDb(nodePort)
+		if err != nil {
+			log.Fatal("Unable to create a Service on port '"+strconv.Itoa(nodePort)+"' to query external DB.", err)
+		}
+
+		dbConnection.Port = nodePort
+		dbConnection.LogLabel = "External DB"
+		dbConnection.IsPrimaryDb = true
+		dbConnection.kubegresName = "External DB"
+		dbConnection.serviceToQueryDb = serviceToQueryDb
+		dbConnection.resourceCreator = resourceCreator
+		return dbConnection
+	}
+}
+
+func WithSSLConfig(sslMode, sslRootCertFile, sslCertFile, sslKeyFile string) DBConnectionOption {
+	return func(dbConnection *DbConnectionDbUtil) *DbConnectionDbUtil {
+		dbConnection.SSLMode = sslMode
+		dbConnection.SSLRootCertFile = sslRootCertFile
+		dbConnection.SSLCertFile = sslCertFile
+		dbConnection.SSLKeyFile = sslKeyFile
+		return dbConnection
+	}
+}
+
+func InitDbConnectionDbUtil(k8sClient client.Client, opts ...DBConnectionOption) DbConnectionDbUtil {
+	db := DbConnectionDbUtil{
+		k8sClient: k8sClient,
 	}
 
-	return DbConnectionDbUtil{
-		Port:             nodePort,
-		LogLabel:         "External DB",
-		IsPrimaryDb:      true,
-		kubegresName:     "External DB",
-		serviceToQueryDb: serviceToQueryDb,
-		resourceCreator:  resourceCreator,
-		k8sClient:        k8sClient,
+	for _, opt := range opts {
+		db = *opt(&db)
 	}
+
+	return db
 }
 
 func (r *DbConnectionDbUtil) Close() {
@@ -147,9 +173,17 @@ func (r *DbConnectionDbUtil) connect() bool {
 		break
 	}
 
-	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s "+
-		"password=%s dbname=%s sslmode=disable",
-		nodeAddress, r.Port, resourceConfigs.DbUser, resourceConfigs.DbPassword, resourceConfigs.DbName)
+	var psqlInfo string
+	switch r.SSLMode {
+	case "require", "verify-ca", "verify-full", "allow", "prefer":
+		psqlInfo = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s sslrootcert=%s sslcert=%s sslkey=%s",
+			nodeAddress, r.Port, resourceConfigs.DbUser, resourceConfigs.DbPassword, resourceConfigs.DbName,
+			r.SSLMode, r.SSLRootCertFile, r.SSLCertFile, r.SSLKeyFile)
+
+	default:
+		psqlInfo = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+			nodeAddress, r.Port, resourceConfigs.DbUser, resourceConfigs.DbPassword, resourceConfigs.DbName)
+	}
 
 	if r.ping(psqlInfo) {
 		return true
@@ -214,6 +248,10 @@ func (r *DbConnectionDbUtil) DeleteUser(userIdToDelete string) bool {
 	r.logInfo("Success of: " + sqlQuery)
 	r.NbreInsertedUsers--
 	return true
+}
+
+type AccountUser struct {
+	UserId, Username string
 }
 
 func (r *DbConnectionDbUtil) GetUsers() []AccountUser {

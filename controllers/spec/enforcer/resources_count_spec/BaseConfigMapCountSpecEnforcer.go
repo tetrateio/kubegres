@@ -22,13 +22,14 @@ package resources_count_spec
 
 import (
 	"errors"
+	"strconv"
+
 	core "k8s.io/api/core/v1"
 	v1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/controllers/operation"
 	"reactive-tech.io/kubegres/controllers/spec/template"
 	"reactive-tech.io/kubegres/controllers/states"
-	"strconv"
 )
 
 type BaseConfigMapCountSpecEnforcer struct {
@@ -89,6 +90,16 @@ func (r *BaseConfigMapCountSpecEnforcer) EnforceSpec() error {
 			"Unable to create a Base ConfigMap object from template.",
 			"Based ConfigMap name", ctx.BaseConfigMapName)
 		return err
+	}
+	tlsConfigs, err := r.resourcesCreator.CreateTLSConfigMapKeyUpdates()
+	if err != nil {
+		r.kubegresContext.Log.ErrorEvent("BaseConfigMapTLSConfigUpdateErr", err,
+			"Unable to create TLS ConfigMap key updates.",
+			"Based ConfigMap name", ctx.BaseConfigMapName)
+	}
+
+	for key, value := range tlsConfigs {
+		baseConfigMap.Data[key] = value
 	}
 
 	return r.deployBaseConfigMap(baseConfigMap)

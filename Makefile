@@ -74,6 +74,11 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
+
+.PHONY: test-unit
+test-unit: ## Run unit tests.
+	go test $(shell pwd)/controllers/... #$(shell pwd)/internal/...
+
 ifdef TEST_LABEL
 TEST_LABEL_ARGS=-args "-ginkgo.label-filter=${TEST_LABEL}"
 endif
@@ -83,6 +88,15 @@ endif
 .PHONY: test
 test: build envtest kind ## Run tests.
 	KIND_EXEC_PATH=$(KIND) go test $(shell pwd)/test -v -test.timeout 10000s $(TEST_LABEL_ARGS)
+
+.PHONY: cluster
+cluster: kind ## Create a kind cluster for testing.
+	$(KIND) get clusters | grep kubegres || $(KIND) create cluster --name kubegres --config test/util/kindcluster/kind-cluster-config.yaml
+	docker pull postgres:14.16
+	$(KIND) load docker-image --name kubegres postgres:14.16
+
+destroy-cluster: kind ## Destroy the kind cluster.
+	$(KIND) delete cluster --name kubegres
 
 ##@ Build
 

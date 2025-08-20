@@ -44,8 +44,10 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 		test.resourceRetriever = util.CreateTestResourceRetriever(k8sClientTest, namespace)
 		test.resourceCreator = util.CreateTestResourceCreator(k8sClientTest, test.resourceRetriever, namespace)
 		test.resourceCreator.CreateConfigMapWithPromoteReplicaScript()
-		test.connectionPrimaryDb = util.InitDbConnectionDbUtil(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryPrimaryDbNodePort, true, k8sClientTest)
-		test.connectionReplicaDb = util.InitDbConnectionDbUtil(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort, false, k8sClientTest)
+		test.connectionPrimaryDb = util.InitDbConnectionDbUtil(k8sClientTest,
+			util.WithBaseConfig(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryPrimaryDbNodePort, true))
+		test.connectionReplicaDb = util.InitDbConnectionDbUtil(k8sClientTest,
+			util.WithBaseConfig(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort, false))
 	})
 
 	AfterEach(func() {

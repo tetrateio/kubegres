@@ -21,11 +21,17 @@ limitations under the License.
 package template
 
 import (
+	"bytes"
+	"embed"
+	"fmt"
+	"text/template"
+
 	apps "k8s.io/api/apps/v1"
 	batch "k8s.io/api/batch/v1"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
+	v1 "reactive-tech.io/kubegres/api/v1"
 	log2 "reactive-tech.io/kubegres/controllers/ctx/log"
 	"reactive-tech.io/kubegres/controllers/spec/template/yaml"
 )
@@ -109,4 +115,72 @@ func (r *ResourceTemplateLoader) decodeYaml(yamlContents string) (runtime.Object
 	}
 
 	return obj, err
+}
+
+var (
+	//go:embed tls/postgres.conf
+	postgresConfTemplate embed.FS
+	//go:embed tls/pg_hba.conf
+	pgHbaConf embed.FS
+	//go:embed tls/copy_primary_data_to_replica.sh
+	copyPrimaryDataToReplicaScript embed.FS
+	//go:embed tls/backup_database.sh
+	backupDatabaseTemplate embed.FS
+)
+
+type templateData struct {
+	RootCertPath string
+	CertPath     string
+	KeyPath      string
+}
+
+func LoadTLSPgHbaConf() ([]byte, error) {
+	content, err := pgHbaConf.ReadFile("tls/pg_hba.conf")
+	if err != nil {
+		return nil, fmt.Errorf("read pg_hba.conf file: %w", err)
+	}
+	return content, nil
+}
+
+func LoadTLSPostgresConf(tls v1.TLS) ([]byte, error) {
+	return executeTemplate(postgresConfTemplate, "tls/postgres.conf", templateData{
+		RootCertPath: tls.RootCertPath,
+		CertPath:     tls.ServerCertPath,
+		KeyPath:      tls.ServerKeyPath,
+	})
+}
+
+func LoadTLSCopyPrimaryDataScript(tls v1.TLS) ([]byte, error) {
+	return executeTemplate(copyPrimaryDataToReplicaScript, "tls/copy_primary_data_to_replica.sh", templateData{
+		RootCertPath: tls.RootCertPath,
+		CertPath:     tls.ClientCertPath,
+		KeyPath:      tls.ClientKeyPath,
+	})
+}
+
+func LoadTLSBackupScript(tls v1.TLS) ([]byte, error) {
+	return executeTemplate(backupDatabaseTemplate, "tls/backup_database.sh", templateData{
+		RootCertPath: tls.RootCertPath,
+		CertPath:     tls.ClientCertPath,
+		KeyPath:      tls.ClientKeyPath,
+	})
+}
+
+func executeTemplate(fs embed.FS, path string, data interface{}) ([]byte, error) {
+	content, err := fs.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read template file %s: %w", path, err)
+	}
+
+	t, err := template.New(path).Parse(string(content))
+	if err != nil {
+		return nil, fmt.Errorf("parse template %s: %w", path, err)
+	}
+
+	result := bytes.Buffer{}
+	err = t.Execute(&result, data)
+	if err != nil {
+		return nil, fmt.Errorf("execute template %s: %w", path, err)
+	}
+	return result.Bytes(), nil
 }

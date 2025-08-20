@@ -26,12 +26,12 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("standby"), func() {
 		test.resourceCreator = util.CreateTestResourceCreator(k8sClientTest, test.resourceRetriever, namespace)
 		Expect(k8sClientTest).ToNot(BeNil())
 		test.standbyDBQueryTestCases = testcases.InitDbQueryTestCasesWithConnections(
-			util.InitExternalDbConnectionDbUtil(test.resourceCreator, resourceConfigs.ServiceToSqlQueryExternalDbNodePort, k8sClientTest),
-			util.InitDbConnectionDbUtil(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort, false, k8sClientTest),
+			util.InitDbConnectionDbUtil(k8sClientTest, util.WithExternalDbConfig(test.resourceCreator, resourceConfigs.ServiceToSqlQueryExternalDbNodePort)),
+			util.InitDbConnectionDbUtil(k8sClientTest, util.WithBaseConfig(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort, false)),
 		)
 		test.activeDBQueryTestCases = testcases.InitDbQueryTestCasesWithConnections(
-			util.InitDbConnectionDbUtil(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryPrimaryDbNodePort, true, k8sClientTest),
-			util.InitDbConnectionDbUtil(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort, false, k8sClientTest),
+			util.InitDbConnectionDbUtil(k8sClientTest, util.WithBaseConfig(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryPrimaryDbNodePort, true)),
+			util.InitDbConnectionDbUtil(k8sClientTest, util.WithBaseConfig(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort, false)),
 		)
 	})
 

@@ -91,4 +91,8 @@ const (
 
 	ConfigMApExternalDBYamlFile     = "resourceConfigs/externalConfigMap.yaml"
 	ConfigMapExternalDBResourceName = "external-postgres-config"
+
+	TLSSecretYamlTemplateFile = "resourceConfigs/tlsSecretTemplate.tpl"
+	TLSSecretNameEmpty        = "tls-secret-empty"
+	TLSSecretNameValid        = "tls-secret-valid"
 )

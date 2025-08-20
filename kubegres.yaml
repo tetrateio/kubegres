@@ -2655,6 +2655,36 @@ spec:
                   primaryEndpoint:
                     type: string
                 type: object
+              tls:
+                properties:
+                  clientCert:
+                    description: ClientCertPath is the path to the client certificate file. Defaults to /var/lib/postgresql/data/tls/client.crt
+                    type: string
+                  clientKey:
+                    description: ClientKeyPath is the path to the client key file. Defaults to /var/lib/postgresql/data/tls/client.key
+                    type: string
+                  enabled:
+                    description: Enabled indicates whether TLS is enabled in Postgresql connections. Defaults to false.
+                    type: boolean
+                  mode:
+                    description: SSLMode honors https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION. Required if TLS is enabled.
+                    type: string
+                  mountPath:
+                    description: MountPath is the path where the TLS certificates will be mounted in the Pod. Defaults to /var/lib/postgresql/data/tls
+                    type: string
+                  rootCert:
+                    description: RootCertPath is the path to the root certificate file. Defaults to /var/lib/postgresql/data/tls/root.crt
+                    type: string
+                  secretName:
+                    description: SecretName is the name of the Kubernetes secret that contains the TLS certificates. Required if TLS is enabled.
+                    type: string
+                  serverCert:
+                    description: ServerCertPath is the path to the server certificate file. Defaults to /var/lib/postgresql/data/tls/server.crt
+                    type: string
+                  serverKey:
+                    description: ServerKeyPath is the path to the server key file. Defaults to /var/lib/postgresql/data/tls/server.key
+                    type: string
+                type: object
               volume:
                 properties:
                   volumeClaimTemplates:
@@ -4400,6 +4430,81 @@ spec:
                   timeOutEpocInSeconds:
                     format: int64
                     type: integer
+                type: object
+              tlsTransition:
+                description: TLSTransition is used to track the TLS mode transition state.
+                properties:
+                  currentTransitMode:
+                    description: SSLMode honors https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION.
+                    type: string
+                  insecureSpec:
+                    properties:
+                      clientCert:
+                        description: ClientCertPath is the path to the client certificate file. Defaults to /var/lib/postgresql/data/tls/client.crt
+                        type: string
+                      clientKey:
+                        description: ClientKeyPath is the path to the client key file. Defaults to /var/lib/postgresql/data/tls/client.key
+                        type: string
+                      enabled:
+                        description: Enabled indicates whether TLS is enabled in Postgresql connections. Defaults to false.
+                        type: boolean
+                      mode:
+                        description: SSLMode honors https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION. Required if TLS is enabled.
+                        type: string
+                      mountPath:
+                        description: MountPath is the path where the TLS certificates will be mounted in the Pod. Defaults to /var/lib/postgresql/data/tls
+                        type: string
+                      rootCert:
+                        description: RootCertPath is the path to the root certificate file. Defaults to /var/lib/postgresql/data/tls/root.crt
+                        type: string
+                      secretName:
+                        description: SecretName is the name of the Kubernetes secret that contains the TLS certificates. Required if TLS is enabled.
+                        type: string
+                      serverCert:
+                        description: ServerCertPath is the path to the server certificate file. Defaults to /var/lib/postgresql/data/tls/server.crt
+                        type: string
+                      serverKey:
+                        description: ServerKeyPath is the path to the server key file. Defaults to /var/lib/postgresql/data/tls/server.key
+                        type: string
+                    type: object
+                  secureSpec:
+                    properties:
+                      clientCert:
+                        description: ClientCertPath is the path to the client certificate file. Defaults to /var/lib/postgresql/data/tls/client.crt
+                        type: string
+                      clientKey:
+                        description: ClientKeyPath is the path to the client key file. Defaults to /var/lib/postgresql/data/tls/client.key
+                        type: string
+                      enabled:
+                        description: Enabled indicates whether TLS is enabled in Postgresql connections. Defaults to false.
+                        type: boolean
+                      mode:
+                        description: SSLMode honors https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION. Required if TLS is enabled.
+                        type: string
+                      mountPath:
+                        description: MountPath is the path where the TLS certificates will be mounted in the Pod. Defaults to /var/lib/postgresql/data/tls
+                        type: string
+                      rootCert:
+                        description: RootCertPath is the path to the root certificate file. Defaults to /var/lib/postgresql/data/tls/root.crt
+                        type: string
+                      secretName:
+                        description: SecretName is the name of the Kubernetes secret that contains the TLS certificates. Required if TLS is enabled.
+                        type: string
+                      serverCert:
+                        description: ServerCertPath is the path to the server certificate file. Defaults to /var/lib/postgresql/data/tls/server.crt
+                        type: string
+                      serverKey:
+                        description: ServerKeyPath is the path to the server key file. Defaults to /var/lib/postgresql/data/tls/server.key
+                        type: string
+                    type: object
+                  transitState:
+                    type: string
+                  transitionInProgress:
+                    type: boolean
+                required:
+                - currentTransitMode
+                - transitState
+                - transitionInProgress
                 type: object
             type: object
         type: object

@@ -22,6 +22,8 @@ package resources
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	"k8s.io/client-go/tools/record"
@@ -67,6 +69,15 @@ type ResourcesContext struct {
 	StatefulSetCountSpecEnforcer   resources_count_spec.StatefulSetCountSpecEnforcer
 	ServicesCountSpecEnforcer      resources_count_spec.ServicesCountSpecEnforcer
 	BackUpCronJobCountSpecEnforcer resources_count_spec.BackUpCronJobCountSpecEnforcer
+	TLSConfigSpecHelper            template.TLSConfigSpecHelper
+}
+
+func tryToJson(obj interface{}) string {
+	b, err := json.Marshal(obj)
+	if err != nil {
+		return fmt.Sprintf("%+v", obj)
+	}
+	return string(b)
 }
 
 func CreateResourcesContext(kubegres *postgresV1.Kubegres,
@@ -80,7 +91,7 @@ func CreateResourcesContext(kubegres *postgresV1.Kubegres,
 	rc = &ResourcesContext{}
 
 	rc.LogWrapper = log.LogWrapper{Kubegres: kubegres, Logger: logger, Recorder: recorder}
-	rc.LogWrapper.Info("KUBEGRES", "name", kubegres.Name, "Status", kubegres.Status)
+	rc.LogWrapper.Info("KUBEGRES", "name", kubegres.Name, "Status", tryToJson(kubegres.Status))
 	rc.LogWrapper.Info("KUBEGRES metadata", "Labels", kubegres.Labels, "Annotations", kubegres.Annotations)
 	//rc.LogWrapper.WithName(kubegres.Name)
 
@@ -118,8 +129,15 @@ func CreateResourcesContext(kubegres *postgresV1.Kubegres,
 
 	rc.CustomConfigSpecHelper = template.CreateCustomConfigSpecHelper(rc.KubegresContext, rc.ResourcesStates)
 
+	rc.TLSConfigSpecHelper = template.CreateTLSConfigSpecHelper(rc.KubegresContext)
+
 	resourceTemplateLoader := template.ResourceTemplateLoader{}
-	rc.ResourcesCreatorFromTemplate = template.CreateResourcesCreatorFromTemplate(rc.KubegresContext, rc.CustomConfigSpecHelper, resourceTemplateLoader)
+	rc.ResourcesCreatorFromTemplate = template.CreateResourcesCreatorFromTemplate(
+		rc.KubegresContext,
+		resourceTemplateLoader,
+		rc.CustomConfigSpecHelper,
+		rc.TLSConfigSpecHelper,
+	)
 
 	addResourcesCountSpecEnforcers(rc)
 	addStatefulSetSpecEnforcers(rc)
@@ -146,7 +164,7 @@ func addResourcesCountSpecEnforcers(rc *ResourcesContext) {
 
 	rc.BaseConfigMapCountSpecEnforcer = resources_count_spec.CreateBaseConfigMapCountSpecEnforcer(rc.KubegresContext, rc.ResourcesStates, rc.ResourcesCreatorFromTemplate, rc.BlockingOperation)
 	rc.ServicesCountSpecEnforcer = resources_count_spec.CreateServicesCountSpecEnforcer(rc.KubegresContext, rc.ResourcesStates, rc.ResourcesCreatorFromTemplate)
-	rc.BackUpCronJobCountSpecEnforcer = resources_count_spec.CreateBackUpCronJobCountSpecEnforcer(rc.KubegresContext, rc.ResourcesStates, rc.ResourcesCreatorFromTemplate)
+	rc.BackUpCronJobCountSpecEnforcer = resources_count_spec.CreateBackUpCronJobCountSpecEnforcer(rc.KubegresContext, rc.ResourcesStates, rc.ResourcesCreatorFromTemplate, rc.TLSConfigSpecHelper)
 
 	rc.ResourcesCountSpecEnforcer = resources_count_spec.ResourcesCountSpecEnforcer{}
 	rc.ResourcesCountSpecEnforcer.AddSpecEnforcer(&rc.BaseConfigMapCountSpecEnforcer)
@@ -165,12 +183,13 @@ func addStatefulSetSpecEnforcers(rc *ResourcesContext) {
 	resourcesSpecEnforcer := statefulset_spec.CreateResourcesSpecEnforcer(rc.KubegresContext)
 	containersSpecEnforcer := statefulset_spec.CreateSidecarContainersSpecEnforcer(rc.KubegresContext)
 	volumeSpecEnforcer := statefulset_spec.CreateVolumeSpecEnforcer(rc.KubegresContext)
-	securityContextSpecEnforcer := statefulset_spec.CreateSecurityContextSpecEnforcer(rc.KubegresContext)
-	livenessProbeSpecEnforcer := statefulset_spec.CreateLivenessProbeSpecEnforcer(rc.KubegresContext)
-	readinessProbeSpecEnforcer := statefulset_spec.CreateReadinessProbeSpecEnforcer(rc.KubegresContext)
+	securityContextSpecEnforcer := statefulset_spec.CreateSecurityContextSpecEnforcer(rc.KubegresContext, rc.TLSConfigSpecHelper)
+	livenessProbeSpecEnforcer := statefulset_spec.CreateLivenessProbeSpecEnforcer(rc.KubegresContext, rc.TLSConfigSpecHelper)
+	readinessProbeSpecEnforcer := statefulset_spec.CreateReadinessProbeSpecEnforcer(rc.KubegresContext, rc.TLSConfigSpecHelper)
 	serviceAccountNameSpecEnforcer := statefulset_spec.CreateServiceAccountNameSpecEnforcer(rc.KubegresContext)
 	metadataSpecEnforcer := statefulset_spec.CreateMetadataSpecEnforcer(rc.KubegresContext)
 	standbyPrimaryEndpointSpecEnforcer := statefulset_spec.CreateStandbyPrimaryEndpointSpecEnforcer(rc.KubegresContext)
+	tlsSpecEnforcer := statefulset_spec.CreateTLSSpecEnforcer(rc.KubegresContext, rc.TLSConfigSpecHelper)
 
 	rc.StatefulSetsSpecsEnforcer = statefulset_spec.CreateStatefulSetsSpecsEnforcer(rc.KubegresContext)
 	rc.StatefulSetsSpecsEnforcer.AddSpecEnforcer(&containersSpecEnforcer)
@@ -188,6 +207,7 @@ func addStatefulSetSpecEnforcers(rc *ResourcesContext) {
 	rc.StatefulSetsSpecsEnforcer.AddSpecEnforcer(&serviceAccountNameSpecEnforcer)
 	rc.StatefulSetsSpecsEnforcer.AddSpecEnforcer(&metadataSpecEnforcer)
 	rc.StatefulSetsSpecsEnforcer.AddSpecEnforcer(&standbyPrimaryEndpointSpecEnforcer)
+	rc.StatefulSetsSpecsEnforcer.AddSpecEnforcer(&tlsSpecEnforcer)
 
 	rc.AllStatefulSetsSpecEnforcer = statefulset_spec.CreateAllStatefulSetsSpecEnforcer(rc.KubegresContext, rc.ResourcesStates, rc.BlockingOperation, rc.StatefulSetsSpecsEnforcer)
 }

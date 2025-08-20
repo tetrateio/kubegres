@@ -30,6 +30,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctx2 "reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/controllers/ctx/resources"
+	"reactive-tech.io/kubegres/controllers/spec/enforcer"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -55,6 +56,7 @@ type KubegresReconciler struct {
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="apps",resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="batch",resources=cronjobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="storage.k8s.io",resources=storageclasses,verbs=get;list;watch
@@ -79,6 +81,9 @@ func (r *KubegresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
+	tlsModeTransitEnforcer := enforcer.CreateTLSModeTransitEnforcer(resourcesContext)
+	tlsModeTransitEnforcer.LoadCurrentState()
+
 	nbreSecondsLeftBeforeTimeOut := resourcesContext.BlockingOperation.LoadActiveOperation()
 	resourcesContext.BlockingOperationLogger.Log()
 	resourcesContext.ResourcesStatesLogger.Log()
@@ -90,6 +95,12 @@ func (r *KubegresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			RequeueAfter: time.Duration(nbreSecondsLeftBeforeTimeOut) * time.Second,
 		}
 		return r.returnn(resultWithRequeue, nil, resourcesContext)
+	}
+
+	err = tlsModeTransitEnforcer.EnforceSpec()
+	if err != nil {
+		r.Logger.Error(err, "Failed to enforce TLS mode transition")
+		return r.returnn(ctrl.Result{}, err, resourcesContext)
 	}
 
 	specCheckResult, err := resourcesContext.SpecChecker.CheckSpec()

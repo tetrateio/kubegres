@@ -2,6 +2,7 @@ package status
 
 import (
 	"context"
+
 	v1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx/log"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -49,6 +50,15 @@ func (r *KubegresStatusWrapper) GetPreviousBlockingOperation() v1.KubegresBlocki
 func (r *KubegresStatusWrapper) SetPreviousBlockingOperation(value v1.KubegresBlockingOperation) {
 	r.addStatusFieldToUpdate("PreviousBlockingOperation", value)
 	r.Kubegres.Status.PreviousBlockingOperation = value
+}
+
+func (r *KubegresStatusWrapper) GetTLSTransition() v1.TLSTransition {
+	return r.Kubegres.Status.TLSTransition
+}
+
+func (r *KubegresStatusWrapper) SetTLSTransition(value v1.TLSTransition) {
+	r.addStatusFieldToUpdate("TLSTransition", value)
+	r.Kubegres.Status.TLSTransition = value
 }
 
 func (r *KubegresStatusWrapper) UpdateStatusIfChanged() error {

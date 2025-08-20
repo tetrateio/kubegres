@@ -47,6 +47,8 @@ type TestKubegresResources struct {
 	AreAllReady          bool
 	Resources            []TestKubegresResource
 	BackUpCronJob        TestKubegresBackUpCronJob
+	BaseConfigMap        TestConfigMap
+	CustomConfigMap      TestConfigMap
 }
 
 type TestKubegresResource struct {
@@ -58,8 +60,9 @@ type TestKubegresResource struct {
 }
 
 type TestKubegresBackUpCronJob struct {
-	Name string
-	Spec batch.CronJobSpec
+	Name   string
+	Spec   batch.CronJobSpec
+	Status batch.CronJobStatus
 }
 
 type TestKubegresPod struct {
@@ -67,6 +70,11 @@ type TestKubegresPod struct {
 	Metadata metav1.ObjectMeta
 	Spec     core.PodSpec
 	Resource *core.Pod
+}
+
+type TestConfigMap struct {
+	Name string
+	Data map[string]string
 }
 
 type TestKubegresStatefulSet struct {
@@ -144,12 +152,6 @@ func (r *TestResourceRetriever) getResource(resourceNameToRetrieve string, resou
 	return r.client.Get(ctx, lookupKey, resourceToRetrieve)
 }
 
-/*
-func (r *TestResourceRetriever) doesResourceExist(resourceName string, resourceType runtime.Object) bool {
-	err := r.getResource(resourceName, resourceType)
-	return err != nil
-}*/
-
 func (r *TestResourceRetriever) GetKubegresResources() (TestKubegresResources, error) {
 	return r.GetKubegresResourcesByName(resourceConfigs.KubegresResourceName)
 }
@@ -169,8 +171,30 @@ func (r *TestResourceRetriever) GetKubegresResourcesByName(kubegresName string) 
 	err = r.getResource(cronJobName, cronJob)
 	if err == nil {
 		testKubegresResources.BackUpCronJob = TestKubegresBackUpCronJob{
-			Name: cronJobName,
-			Spec: cronJob.Spec,
+			Name:   cronJobName,
+			Spec:   cronJob.Spec,
+			Status: cronJob.Status,
+		}
+	}
+
+	baseConfigMap := &core.ConfigMap{}
+	err = r.getResource(ctx.BaseConfigMapName, baseConfigMap)
+	if err == nil {
+		testKubegresResources.BaseConfigMap = TestConfigMap{
+			Name: baseConfigMap.Name,
+			Data: baseConfigMap.Data,
+		}
+	}
+
+	k, err := r.GetKubegres()
+	if err == nil {
+		customConfigMap := &core.ConfigMap{}
+		err = r.getResource(k.Spec.CustomConfig, customConfigMap)
+		if err == nil {
+			testKubegresResources.CustomConfigMap = TestConfigMap{
+				Name: customConfigMap.Name,
+				Data: customConfigMap.Data,
+			}
 		}
 	}
 
@@ -269,4 +293,14 @@ func (r *TestResourceRetriever) logAndReturnError(resourceType, resourceName str
 		log.Println("Error while retrieving Kubegres "+resourceType+" with name '"+resourceName+"'. Given error: ", err)
 	}
 	return TestKubegresResources{}, err
+}
+
+func (r *TestResourceRetriever) GetTLSSecret(name string) (*core.Secret, error) {
+	secret := &core.Secret{}
+	err := r.getResource(name, secret)
+	if err != nil {
+		log.Println("get TLS secret with name '"+name+"'. Given error: ", err)
+		return nil, err
+	}
+	return secret, nil
 }

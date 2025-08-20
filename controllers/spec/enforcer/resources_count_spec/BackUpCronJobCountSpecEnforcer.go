@@ -28,19 +28,22 @@ import (
 )
 
 type BackUpCronJobCountSpecEnforcer struct {
-	kubegresContext  ctx.KubegresContext
-	resourcesStates  states.ResourcesStates
-	resourcesCreator template.ResourcesCreatorFromTemplate
+	kubegresContext     ctx.KubegresContext
+	resourcesStates     states.ResourcesStates
+	resourcesCreator    template.ResourcesCreatorFromTemplate
+	tlsConfigSpecHelper template.TLSConfigSpecHelper
 }
 
 func CreateBackUpCronJobCountSpecEnforcer(kubegresContext ctx.KubegresContext,
 	resourcesStates states.ResourcesStates,
-	resourcesCreator template.ResourcesCreatorFromTemplate) BackUpCronJobCountSpecEnforcer {
+	resourcesCreator template.ResourcesCreatorFromTemplate,
+	tlsConfigSpecHelper template.TLSConfigSpecHelper) BackUpCronJobCountSpecEnforcer {
 
 	return BackUpCronJobCountSpecEnforcer{
-		kubegresContext:  kubegresContext,
-		resourcesStates:  resourcesStates,
-		resourcesCreator: resourcesCreator,
+		kubegresContext:     kubegresContext,
+		resourcesStates:     resourcesStates,
+		resourcesCreator:    resourcesCreator,
+		tlsConfigSpecHelper: tlsConfigSpecHelper,
 	}
 }
 
@@ -135,6 +138,16 @@ func (r *BackUpCronJobCountSpecEnforcer) hasSpecChanged() (hasSpecChanged bool) 
 		r.logSpecChange("spec.backup.customConfig")
 	}
 
+	currentVolumeMountSubPath := cronJobTemplateSpec.Containers[0].VolumeMounts[1].SubPath
+	expectedVolumeMountSubPath := states.ConfigMapDataKeyBackUpScript
+	if r.kubegresContext.Kubegres.Spec.TLS.Enabled {
+		expectedVolumeMountSubPath = states.ConfigMapDataKeyTLSBackupDatabaseScript
+	}
+	if currentVolumeMountSubPath != expectedVolumeMountSubPath {
+		hasSpecChanged = true
+		r.logSpecChange("spec.tls.enabled (volumeMount.SubPath)")
+	}
+
 	currentDBSource := cronJobTemplateSpec.Containers[0].Env[3].Value
 	expectedDBSource := r.kubegresContext.GetServiceResourceName(false)
 	if !r.kubegresContext.Kubegres.Spec.Standby.Enabled && *r.kubegresContext.Kubegres.Spec.Replicas == 1 {
@@ -143,6 +156,21 @@ func (r *BackUpCronJobCountSpecEnforcer) hasSpecChanged() (hasSpecChanged bool) 
 	if currentDBSource != expectedDBSource {
 		hasSpecChanged = true
 		r.logSpecChange("spec.backup.dbSource")
+	}
+
+	_, _, updated := r.tlsConfigSpecHelper.ConfigureTLSCertsVolumeToPodSpec(&cronJobTemplateSpec)
+	if updated {
+		hasSpecChanged = true
+		r.logSpecChange("spec.tls.enabled (TLS certs volume)")
+	}
+
+	_, _, updated = r.tlsConfigSpecHelper.ConfigureVolumeMountsToPodSpec(&cronJobTemplateSpec,
+		func(replacement states.TLSConfigKeyReplacement) bool {
+			return replacement.DoesApplyToBackupCronJob()
+		})
+	if updated {
+		hasSpecChanged = true
+		r.logSpecChange("spec.tls.enabled (TLS volumeMounts)")
 	}
 
 	return hasSpecChanged
