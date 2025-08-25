@@ -245,9 +245,9 @@ func startReplicationSlotsCleanup(
 		settings.healthCheckInterval = time.Second
 	}
 	healthCheckTicker := clk.Tick(settings.healthCheckInterval)
-	var gracePeriodEnabled bool
-	if settings.inactiveSlotGracePeriod != nil || *settings.inactiveSlotGracePeriod == 0 {
-		gracePeriodEnabled = true
+	gracePeriodEnabled := true
+	if settings.inactiveSlotGracePeriod == nil || *settings.inactiveSlotGracePeriod == 0 {
+		gracePeriodEnabled = false
 	}
 	for {
 		select {
