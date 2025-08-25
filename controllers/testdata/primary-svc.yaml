@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: "2025-08-15T11:00:30Z"
+  labels:
+    app: my-kubegres
+    replicationRole: primary
+  name: my-kubegres
+  namespace: default
+  ownerReferences:
+  - apiVersion: kubegres.reactive-tech.io/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Kubegres
+    name: my-kubegres
+    uid: 2d67f28d-742e-4b35-a4a8-9679bad46ab1
+  resourceVersion: "937"
+  uid: e785961d-c2e9-4f36-bef8-4e3741e89b18
+spec:
+  clusterIP: None
+  clusterIPs:
+  - None
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - port: 5432
+    protocol: TCP
+    targetPort: 5432
+  selector:
+    app: my-kubegres
+    replicationRole: primary
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}

@@ -61,11 +61,26 @@ func TestReplicationSlotsWithTestcontainers(t *testing.T) {
 	_, err = repo.CreateSlot(t.Context(), "my_awesome_test_slot")
 	require.ErrorIs(t, err, replicationSlotRepo.ErrAlreadyExist)
 
+	createdSlot2, err := repo.CreateSlot(t.Context(), "my_awesome_test_slot_2")
+	require.NoError(t, err)
+	slots, err := repo.ListAll(t.Context())
+	require.NoError(t, err)
+	require.Len(t, slots, 2)
+	require.Contains(t, slots, createdSlot)
+	require.Contains(t, slots, createdSlot2)
+
 	err = repo.DeleteSlot(t.Context(), "my_awesome_test_slot")
 	require.NoError(t, err)
 	err = repo.DeleteSlot(t.Context(), "non_existent_slot")
 	require.Error(t, err)
 
 	_, err = repo.FindSlotByName(t.Context(), "my_awesome_test_slot")
-	require.ErrorIs(t, err, replicationSlotRepo.ErrDoesNotExist)
+	require.ErrorIs(t, err, replicationSlotRepo.ErrNotFound)
+
+	err = repo.DeleteSlot(t.Context(), createdSlot2.Name)
+	require.NoError(t, err)
+
+	listAll, err := repo.ListAll(t.Context())
+	require.NoError(t, err)
+	require.Empty(t, listAll, "All slots should be deleted")
 }

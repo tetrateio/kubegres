@@ -21,8 +21,10 @@ limitations under the License.
 package resourceConfigs
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -92,6 +94,11 @@ func LoadYamlConfigMapExternalDB() v1.ConfigMap {
 }
 
 func getFileContents(filePath string) string {
+	dir, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(dir)
 	contents, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		log.Fatal("Unable to find file '"+filePath+"'. Given error: ", err)

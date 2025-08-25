@@ -9,6 +9,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	kubegresv1 "reactive-tech.io/kubegres/api/v1"
+	"reactive-tech.io/kubegres/controllers"
 	"reactive-tech.io/kubegres/internal/replicationslot"
 	"reactive-tech.io/kubegres/test/resourceConfigs"
 	"reactive-tech.io/kubegres/test/util"
@@ -23,7 +24,7 @@ type replicationSlotsCleanupTest struct {
 	keepCreatedResourcesForNextTest bool
 }
 
-func (t *replicationSlotsCleanupTest) givenNewKubegresWithReplicaitonSlotsSettings(rs kubegresv1.ReplicationSlots, replicas int32) {
+func (t *replicationSlotsCleanupTest) givenNewKubegresWithReplicationSlotsSettings(rs kubegresv1.ReplicationSlots, replicas int32) {
 	t.kubegresResource = resourceConfigs.LoadKubegresYaml()
 	t.kubegresResource.Spec.ReplicationSlots = rs
 	t.kubegresResource.Spec.Replicas = &replicas
@@ -66,8 +67,8 @@ func (t *replicationSlotsCleanupTest) thenEventShouldHaveOccurred(event util.Eve
 
 var testSlotRemovedEvent = util.EventRecord{
 	Eventtype: v1.EventTypeNormal,
-	Reason:    "ReplicationSlotCleanup",
-	Message:   "Replication slot 'test_slot' removed",
+	Reason:    controllers.ReplicationSlotDeletedReason,
+	Message:   "successfully deleted replication slot test_slot",
 }
 
 var _ = Describe("Setting Kubegres replication slots cleanup settings", func() {
@@ -101,7 +102,7 @@ var _ = Describe("Setting Kubegres replication slots cleanup settings", func() {
 			HealthCheckInterval:     healthCheckInterval,
 		}
 
-		test.givenNewKubegresWithReplicaitonSlotsSettings(slots, 2)
+		test.givenNewKubegresWithReplicationSlotsSettings(slots, 2)
 
 		test.whenKubegresIsCreated()
 
@@ -122,8 +123,6 @@ var _ = Describe("Setting Kubegres replication slots cleanup settings", func() {
 			Active: false,
 		}))
 
-		time.Sleep(5 * time.Minute)
-
 		test.keepCreatedResourcesForNextTest = true
 	})
 
@@ -133,7 +132,7 @@ var _ = Describe("Setting Kubegres replication slots cleanup settings", func() {
 		healthCheckInterval := time.Second
 		slots := kubegresv1.ReplicationSlots{
 			Enabled:                 true,
-			DisableCleanup:          true,
+			DisableCleanup:          false,
 			MaxWalKeepSize:          resource.MustParse("10Mi"),
 			InactiveSlotGracePeriod: &disableGracePeriod,
 			HealthCheckInterval:     healthCheckInterval,
@@ -146,7 +145,7 @@ var _ = Describe("Setting Kubegres replication slots cleanup settings", func() {
 		test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 		test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
 
-		test.thenEventShouldHaveOccurred(testSlotRemovedEvent, 2*healthCheckInterval, 100*time.Millisecond)
+		test.thenEventShouldHaveOccurred(testSlotRemovedEvent, 5*healthCheckInterval, 100*time.Millisecond)
 
 		replicationSlots := test.dbQueryTestCases.GetReplicationSlots()
 

@@ -30,6 +30,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctx2 "reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/controllers/ctx/resources"
+	"reactive-tech.io/kubegres/internal/sql"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"

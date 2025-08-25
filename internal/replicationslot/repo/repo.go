@@ -12,13 +12,14 @@ import (
 
 var (
 	ErrAlreadyExist = errors.New("slot already exist")
-	ErrDoesNotExist = errors.New("does not exist")
+	ErrNotFound     = errors.New("not found")
 )
 
 type Repository interface {
 	CreateSlot(ctx context.Context, name string) (replicationslot.ReplicationSlot, error)
 	FindSlotByName(ctx context.Context, name string) (replicationslot.ReplicationSlot, error)
 	DeleteSlot(ctx context.Context, name string) error
+	ListAll(ctx context.Context) ([]replicationslot.ReplicationSlot, error)
 }
 
 func New(db Querier) Repository {
@@ -29,12 +30,50 @@ func New(db Querier) Repository {
 
 // Querier is an interface that abstracts sql.DB operations.
 type Querier interface {
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
 type repo struct {
 	db Querier
+}
+
+func (r *repo) ListAll(ctx context.Context) ([]replicationslot.ReplicationSlot, error) {
+	listAllStmt := `
+		SELECT
+			slot_name, plugin, slot_type, datoid, database,
+			active, active_pid, xmin, catalog_xmin, restart_lsn
+		FROM pg_replication_slots
+		`
+	rows, err := r.db.QueryContext(ctx, listAllStmt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list replication slots: %w", err)
+	}
+	defer rows.Close()
+	var slots []replicationslot.ReplicationSlot
+	for rows.Next() {
+		var rs replicationSlotDb
+		if err := rows.Scan(
+			&rs.SlotName,
+			&rs.Plugin,
+			&rs.SlotType,
+			&rs.Datoid,
+			&rs.Database,
+			&rs.Active,
+			&rs.ActivePid,
+			&rs.Xmin,
+			&rs.CatalogXmin,
+			&rs.RestartLSN,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan replication slot: %w", err)
+		}
+		slots = append(slots, toReplicationSlot(rs))
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error occurred while iterating over replication slots: %w", err)
+	}
+	return slots, nil
 }
 
 type replicationSlotDb struct {
@@ -103,7 +142,7 @@ func (r *repo) FindSlotByName(ctx context.Context, name string) (replicationslot
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return replicationslot.ReplicationSlot{}, fmt.Errorf("replication slot '%s': %w", name, ErrDoesNotExist)
+			return replicationslot.ReplicationSlot{}, fmt.Errorf("replication slot '%s': %w", name, ErrNotFound)
 		}
 		return replicationslot.ReplicationSlot{}, fmt.Errorf("failed to scan replication slot details: %w", err)
 	}
@@ -116,7 +155,7 @@ func (r *repo) DeleteSlot(ctx context.Context, name string) error {
 	if err != nil {
 		// TODO(piotrkpc): handle errors better using pg error codes
 		if strings.Contains(err.Error(), "does not exist") {
-			return fmt.Errorf("replication slot '%s': %w", name, ErrDoesNotExist)
+			return fmt.Errorf("replication slot '%s': %w", name, ErrNotFound)
 		}
 		return fmt.Errorf("failed to delete replication slot '%s': %w", name, err)
 	}
