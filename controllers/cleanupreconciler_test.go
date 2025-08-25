@@ -289,8 +289,6 @@ func kubegres(t *testing.T) *kubegresv1.Kubegres {
 	return k
 }
 
-// TODO(piotrkpc): test
-
 type mockFuncRun struct {
 	wasCalled        bool
 	cancelContextRun bool
