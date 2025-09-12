@@ -21,8 +21,6 @@ limitations under the License.
 package v1
 
 import (
-	"time"
-
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -69,11 +67,30 @@ type Probe struct {
 }
 
 type ReplicationSlots struct {
-	Enabled                 bool              `json:"enabled,omitempty"`
-	DisableCleanup          bool              `json:"disableCleanup,omitempty"`
-	MaxWalKeepSize          resource.Quantity `json:"maxWalKeepSize,omitempty"`
-	InactiveSlotGracePeriod *time.Duration    `json:"inactiveSlotGracePeriod,omitempty"`
-	HealthCheckInterval     time.Duration     `json:"healthCheckInterval,omitempty"`
+	// Enabled indicates whether the replication slots feature is activated.
+	Enabled bool `json:"enabled,omitempty"`
+	// DisableCleanup, when set to true, prevents automatic cleanup of inactive replication slots.
+	// This can be useful in scenarios where you want to retain replication slots for manual management or specific use cases.
+	// By default, this is set to false, allowing the system to clean up inactive slots based on the defined grace period.
+	DisableCleanup bool `json:"disableCleanup,omitempty"`
+	// +kubebuilder:validation:Optional
+	// MaxWalKeepSize defines the maximum size of WAL files to retain for replication slots.
+	// This helps manage disk space usage by limiting the amount of WAL data kept for replication.
+	// The value should be specified in a format like "1Gi", "500Mi", etc.
+	// If not set, the limit is not enforced.
+	MaxWalKeepSize resource.Quantity `json:"maxWalKeepSize,omitempty"`
+	// +kubebuilder:validation:Type:=string
+	// +kubebuilder:validation:Pattern:="^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+	// +kubebuilder:default:="2m"
+	// InactiveSlotGracePeriod defines how long a replication slot can remain inactive before it becomes eligible for cleanup.
+	// The value should be specified in the format: 30s, 1m, 5m, etc. Default is 2m.
+	InactiveSlotGracePeriod metav1.Duration `json:"inactiveSlotGracePeriod,omitempty"`
+	// +kubebuilder:validation:Type:=string
+	// +kubebuilder:validation:Pattern:="^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+	// +kubebuilder:default:="30s"
+	// HealthCheckInterval defines how often the health of replication slots is checked.
+	// The value should be specified in the format: 30s, 1m, 5m, etc. Default is 30s.
+	HealthCheckInterval metav1.Duration `json:"healthCheckInterval,omitempty"`
 }
 
 type TLS struct {
