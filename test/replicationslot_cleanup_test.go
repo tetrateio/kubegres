@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kubegresv1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers"
 	"reactive-tech.io/kubegres/internal/replicationslot"
@@ -98,8 +99,8 @@ var _ = Describe("Setting Kubegres replication slots cleanup settings", func() {
 			Enabled:                 true,
 			DisableCleanup:          true,
 			MaxWalKeepSize:          resource.MustParse("10Mi"),
-			InactiveSlotGracePeriod: &disableGracePeriod,
-			HealthCheckInterval:     healthCheckInterval,
+			InactiveSlotGracePeriod: &metav1.Duration{Duration: disableGracePeriod},
+			HealthCheckInterval:     metav1.Duration{Duration: healthCheckInterval},
 		}
 
 		test.givenNewKubegresWithReplicationSlotsSettings(slots, 2)
@@ -134,8 +135,8 @@ var _ = Describe("Setting Kubegres replication slots cleanup settings", func() {
 			Enabled:                 true,
 			DisableCleanup:          false,
 			MaxWalKeepSize:          resource.MustParse("10Mi"),
-			InactiveSlotGracePeriod: &disableGracePeriod,
-			HealthCheckInterval:     healthCheckInterval,
+			InactiveSlotGracePeriod: &metav1.Duration{Duration: disableGracePeriod},
+			HealthCheckInterval:     metav1.Duration{Duration: healthCheckInterval},
 		}
 
 		test.givenExistingKubegresIsUpdatedWithReplicationSlotsSettings(slots)

@@ -197,11 +197,16 @@ func (r *CleanupReplicationSlotsReconciler) SetupWithManager(mgr manager.Manager
 }
 
 func (r *CleanupReplicationSlotsReconciler) getSettings(kubegres kubegresv1.Kubegres) *settings {
-	return &settings{
-		kubegres:                &kubegres,
-		healthCheckInterval:     kubegres.Spec.ReplicationSlots.HealthCheckInterval,
-		inactiveSlotGracePeriod: kubegres.Spec.ReplicationSlots.InactiveSlotGracePeriod,
+	s := &settings{
+		kubegres:            &kubegres,
+		healthCheckInterval: kubegres.Spec.ReplicationSlots.HealthCheckInterval.Duration,
 	}
+	period := kubegres.Spec.ReplicationSlots.InactiveSlotGracePeriod
+	if period == nil {
+		return s
+	}
+	s.inactiveSlotGracePeriod = &period.Duration
+	return s
 }
 
 var _ clock = &realClock{}

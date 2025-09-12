@@ -84,7 +84,7 @@ func (r *UndefinedSpecValuesChecker) apply() error {
 	}
 
 	if kubegresSpec.ReplicationSlots.Enabled {
-		if kubegresSpec.ReplicationSlots.InactiveSlotGracePeriod.Nanoseconds() == nil {
+		if kubegresSpec.ReplicationSlots.InactiveSlotGracePeriod == nil {
 			defaultGracePeriod := ctx.DefaultReplicationSlotsInactiveSlotGracePeriod
 			kubegresSpec.ReplicationSlots.InactiveSlotGracePeriod = &defaultGracePeriod
 			wasSpecChanged = true
