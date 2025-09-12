@@ -509,27 +509,38 @@ spec:
               replicationSlots:
                 properties:
                   disableCleanup:
+                    description: |-
+                      DisableCleanup, when set to true, prevents automatic cleanup of inactive replication slots.
+                      This can be useful in scenarios where you want to retain replication slots for manual management or specific use cases.
+                      By default, this is set to false, allowing the system to clean up inactive slots based on the defined grace period.
                     type: boolean
                   enabled:
+                    description: Enabled indicates whether the replication slots feature
+                      is activated.
                     type: boolean
                   healthCheckInterval:
+                    default: 30s
                     description: |-
-                      A Duration represents the elapsed time between two instants
-                      as an int64 nanosecond count. The representation limits the
-                      largest representable duration to approximately 290 years.
-                    format: int64
-                    type: integer
+                      HealthCheckInterval defines how often the health of replication slots is checked.
+                      The value should be specified in the format: 30s, 1m, 5m, etc. Default is 30s.
+                    pattern: ^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$
+                    type: string
                   inactiveSlotGracePeriod:
+                    default: 2m
                     description: |-
-                      A Duration represents the elapsed time between two instants
-                      as an int64 nanosecond count. The representation limits the
-                      largest representable duration to approximately 290 years.
-                    format: int64
-                    type: integer
+                      InactiveSlotGracePeriod defines how long a replication slot can remain inactive before it becomes eligible for cleanup.
+                      The value should be specified in the format: 30s, 1m, 5m, etc. Default is 2m.
+                    pattern: ^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$
+                    type: string
                   maxWalKeepSize:
                     anyOf:
                     - type: integer
                     - type: string
+                    description: |-
+                      MaxWalKeepSize defines the maximum size of WAL files to retain for replication slots.
+                      This helps manage disk space usage by limiting the amount of WAL data kept for replication.
+                      The value should be specified in a format like "1Gi", "500Mi", etc.
+                      If not set, the limit is not enforced.
                     pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                     x-kubernetes-int-or-string: true
                 type: object

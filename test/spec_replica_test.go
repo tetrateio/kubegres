@@ -35,6 +35,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
+	"reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/internal/replicationslot"
 	"reactive-tech.io/kubegres/test/resourceConfigs"
 	"reactive-tech.io/kubegres/test/util"
@@ -163,14 +164,12 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), func() {
 		})
 
 		It("THEN existing Kubegres is updated with replicationSlots enabled and default values", func() {
-			maxWalKeepSize := resource.MustParse("100Mi")
 			test.givenExistingKubegresReplicationSlotsIsSetTo(postgresv1.ReplicationSlots{
-				Enabled:        true,
-				MaxWalKeepSize: maxWalKeepSize,
+				Enabled: true,
 			})
 			test.whenKubernetesIsUpdated()
 
-			test.thenReplicationSlotsShouldHaveDefaultSettingsWith(maxWalKeepSize)
+			test.thenReplicationSlotsShouldHaveDefaultSettingsWith()
 
 			test.thenPodsStatesShouldBe(1, 1)
 			test.thenReplicationSlotShouldBeActive()
@@ -552,7 +551,7 @@ func (r *SpecReplicaTest) givenExistingKubegresReplicationSlotsIsSetTo(slots pos
 	r.kubegresResource.Spec.ReplicationSlots = slots
 }
 
-func (r *SpecReplicaTest) thenReplicationSlotsShouldHaveDefaultSettingsWith(wantMaxWalKeepSize resource.Quantity) {
+func (r *SpecReplicaTest) thenReplicationSlotsShouldHaveDefaultSettingsWith() {
 
 	Eventually(func() bool {
 		kubegres, err := r.resourceRetriever.GetKubegres()
@@ -562,14 +561,14 @@ func (r *SpecReplicaTest) thenReplicationSlotsShouldHaveDefaultSettingsWith(want
 		}
 
 		if kubegres.Spec.ReplicationSlots.Enabled &&
-			kubegres.Spec.ReplicationSlots.MaxWalKeepSize.Equal(wantMaxWalKeepSize) &&
-			kubegres.Spec.ReplicationSlots.HealthCheckInterval == 30*time.Second &&
-			kubegres.Spec.ReplicationSlots.InactiveSlotGracePeriod == 2*time.Minute {
+			kubegres.Spec.ReplicationSlots.MaxWalKeepSize.IsZero() &&
+			kubegres.Spec.ReplicationSlots.HealthCheckInterval == ctx.DefaultReplicationSlotsHealthCheckInterval &&
+			kubegres.Spec.ReplicationSlots.InactiveSlotGracePeriod == ctx.DefaultReplicationSlotsInactiveSlotGracePeriod {
 
 			return true
 		}
 		log.Printf("Replication slots settings do not match. Expected: Enabled=%v, MaxWalKeepSize=%s, HealthCheckInterval=%s, InactiveSlotGracePeriod=%s. Got: ReplicationSlots: %v",
-			true, wantMaxWalKeepSize.String(), "30s", "2m", kubegres.Spec.ReplicationSlots)
+			true, "", "30s", "2m", kubegres.Spec.ReplicationSlots)
 
 		return false
 

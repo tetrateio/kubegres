@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx/log"
 	"reactive-tech.io/kubegres/controllers/ctx/status"
@@ -43,25 +44,27 @@ type KubegresContext struct {
 }
 
 const (
-	PrimaryRoleName                                = "primary"
-	KindKubegres                                   = "Kubegres"
-	DeploymentOwnerKey                             = ".metadata.controller"
-	DatabaseVolumeName                             = "postgres-db"
-	BaseConfigMapVolumeName                        = "base-config"
-	CustomConfigMapVolumeName                      = "custom-config"
-	BaseConfigMapName                              = "base-kubegres-config"
-	CronJobNamePrefix                              = "backup-"
-	DefaultContainerPortNumber                     = 5432
-	DefaultPodServiceAccountName                   = "default"
-	DefaultDatabaseVolumeMount                     = "/var/lib/postgresql/data"
-	DefaultDatabaseFolder                          = "pgdata"
-	EnvVarNamePgData                               = "PGDATA"
-	EnvVarNameOfPostgresSuperUserPsw               = "POSTGRES_PASSWORD"
-	EnvVarNameOfPostgresReplicationUserPsw         = "POSTGRES_REPLICATION_PASSWORD"
-	EnvVarReplicationSlotName                      = "POSTGRES_REPLICATION_SLOT"
-	DefaultReplicationSlotsMaxWalKeepSize          = "1Gi"
-	DefaultReplicationSlotsInactiveSlotGracePeriod = 2 * time.Minute
-	DefaultReplicationSlotsHealthCheckInterval     = 30 * time.Second
+	PrimaryRoleName                        = "primary"
+	KindKubegres                           = "Kubegres"
+	DeploymentOwnerKey                     = ".metadata.controller"
+	DatabaseVolumeName                     = "postgres-db"
+	BaseConfigMapVolumeName                = "base-config"
+	CustomConfigMapVolumeName              = "custom-config"
+	BaseConfigMapName                      = "base-kubegres-config"
+	CronJobNamePrefix                      = "backup-"
+	DefaultContainerPortNumber             = 5432
+	DefaultPodServiceAccountName           = "default"
+	DefaultDatabaseVolumeMount             = "/var/lib/postgresql/data"
+	DefaultDatabaseFolder                  = "pgdata"
+	EnvVarNamePgData                       = "PGDATA"
+	EnvVarNameOfPostgresSuperUserPsw       = "POSTGRES_PASSWORD"
+	EnvVarNameOfPostgresReplicationUserPsw = "POSTGRES_REPLICATION_PASSWORD"
+	EnvVarReplicationSlotName              = "POSTGRES_REPLICATION_SLOT"
+)
+
+var (
+	DefaultReplicationSlotsInactiveSlotGracePeriod = metav1.Duration{Duration: 2 * time.Minute}
+	DefaultReplicationSlotsHealthCheckInterval     = metav1.Duration{Duration: 30 * time.Second}
 )
 
 func (r *KubegresContext) GetServiceResourceName(isPrimary bool) string {

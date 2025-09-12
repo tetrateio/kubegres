@@ -24,7 +24,6 @@ import (
 	"strconv"
 
 	core "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
 )
@@ -85,19 +84,13 @@ func (r *UndefinedSpecValuesChecker) apply() error {
 	}
 
 	if kubegresSpec.ReplicationSlots.Enabled {
-		if kubegresSpec.ReplicationSlots.MaxWalKeepSize.IsZero() {
-			kubegresSpec.ReplicationSlots.MaxWalKeepSize = resource.MustParse(ctx.DefaultReplicationSlotsMaxWalKeepSize)
-			wasSpecChanged = true
-			r.createLog("spec.replicationSlots.maxWalKeepSize", kubegresSpec.ReplicationSlots.MaxWalKeepSize.String())
-		}
-
-		if kubegresSpec.ReplicationSlots.InactiveSlotGracePeriod == 0 {
+		if kubegresSpec.ReplicationSlots.InactiveSlotGracePeriod.Nanoseconds() == 0 {
 			kubegresSpec.ReplicationSlots.InactiveSlotGracePeriod = ctx.DefaultReplicationSlotsInactiveSlotGracePeriod
 			wasSpecChanged = true
 			r.createLog("spec.replicationSlots.inactiveSlotGracePeriod", kubegresSpec.ReplicationSlots.InactiveSlotGracePeriod.String())
 		}
 
-		if kubegresSpec.ReplicationSlots.HealthCheckInterval == 0 {
+		if kubegresSpec.ReplicationSlots.HealthCheckInterval.Nanoseconds() == 0 {
 			kubegresSpec.ReplicationSlots.HealthCheckInterval = ctx.DefaultReplicationSlotsHealthCheckInterval
 			wasSpecChanged = true
 			r.createLog("spec.replicationSlots.healthCheckInterval", kubegresSpec.ReplicationSlots.HealthCheckInterval.String())
