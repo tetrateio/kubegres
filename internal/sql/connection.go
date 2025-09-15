@@ -2,6 +2,7 @@ package sql
 
 import (
 	"database/sql"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"strings"
 	"sync"
 	"time"
@@ -43,7 +44,7 @@ func (c *Connection) connect(dsn string) error {
 	defer c.mu.Unlock()
 
 	c.dsn = dsn
-	db, err := sql.Open("postgres", dsn)
+	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return err
 	}
