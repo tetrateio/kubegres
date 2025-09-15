@@ -1,6 +1,7 @@
 package statefulset_spec
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -87,8 +88,8 @@ func (c *SidecarContainersSpecEnforcer) createDifference(currentSidecarContainer
 
 	difference := StatefulSetSpecDifference{
 		SpecName: c.GetSpecName(),
-		Current:  strings.Join(expectedContainers, ","),
-		Expected: strings.Join(currentContainers, ","),
+		Current:  strings.Join(expectedContainers, ", "),
+		Expected: strings.Join(currentContainers, ", "),
 	}
 	return difference
 }
@@ -112,6 +113,19 @@ func (c *SidecarContainersSpecEnforcer) EnforceSpec(statefulSet *apps.StatefulSe
 }
 
 func (c *SidecarContainersSpecEnforcer) OnSpecEnforcedSuccessfully(statefulSet *apps.StatefulSet) error {
-	c.kubegresContext.Log.InfoEvent("StatefulSetOperation", "Sidecar containers spec enforced successfully", "StatefulSet name", statefulSet.Name, "Sidecar containers", c.kubegresContext.Kubegres.Spec.SidecarContainers)
+	containerNames := c.getSidecarContainerNames()
+	c.kubegresContext.Log.InfoEvent("StatefulSetOperation", "Sidecar containers spec enforced successfully", "StatefulSet name", statefulSet.Name, "Sidecar containers", containerNames)
 	return nil
+}
+
+func (c *SidecarContainersSpecEnforcer) getSidecarContainerNames() string {
+	expectedContainers := c.kubegresContext.Kubegres.Spec.SidecarContainers
+	if len(expectedContainers) == 0 {
+		return "[]"
+	}
+	containerNames := make([]string, len(expectedContainers))
+	for i, container := range expectedContainers {
+		containerNames[i] = container.Name
+	}
+	return fmt.Sprintf("[%s]", strings.Join(containerNames, ", "))
 }
