@@ -63,7 +63,7 @@ const (
 )
 
 var (
-	DefaultReplicationSlotsInactiveSlotGracePeriod = metav1.Duration{Duration: 2 * time.Minute}
+	DefaultReplicationSlotsInactiveSlotGracePeriod = metav1.Duration{Duration: 10 * time.Minute}
 	DefaultReplicationSlotsHealthCheckInterval     = metav1.Duration{Duration: 30 * time.Second}
 )
 
