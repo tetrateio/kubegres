@@ -103,7 +103,7 @@ type simpleReplicationSlotCreateDeleter struct {
 }
 
 func (r *simpleReplicationSlotCreateDeleter) Create(statefulSet *v1.StatefulSet) (*v1.StatefulSet, error) {
-	replicationSlotName, err := createReplicationSlotName(r.kubegresContext.Kubegres.GetName(), r.clusterName, statefulSet.GetName(), r.kubegresContext.ClusterRole())
+	replicationSlotName, err := buildReplicationSlotName(r.kubegresContext.Kubegres.GetName(), r.clusterName, statefulSet.GetName(), r.kubegresContext.ClusterRole())
 	objKey := ctrlclient.ObjectKeyFromObject(statefulSet)
 	if err != nil {
 		r.kubegresContext.Log.ErrorEvent("ReplicationSlotCreate", fmt.Errorf("replication slot name: %v: %w", objKey, err), "Failed to create replication slot name")
@@ -131,7 +131,7 @@ func (r *simpleReplicationSlotCreateDeleter) Create(statefulSet *v1.StatefulSet)
 	return ss, nil
 }
 
-func createReplicationSlotName(kubegresName, clusterName, statefulSetName string, role kubegresCtx.ClusterRole) (string, error) {
+func buildReplicationSlotName(kubegresName, clusterName, statefulSetName string, role kubegresCtx.ClusterRole) (string, error) {
 	// if any of this are empty, we cannot create a valid replication slot name
 	if kubegresName == "" || statefulSetName == "" || role == "" {
 		return "", fmt.Errorf("replication slot name cannot be created for statefulSet '%s' because it has empty 'name', 'role' or label", statefulSetName)
@@ -156,7 +156,7 @@ func createReplicationSlotName(kubegresName, clusterName, statefulSetName string
 }
 
 func (r *simpleReplicationSlotCreateDeleter) Delete(statefulSet *v1.StatefulSet) error {
-	replicationSlotName, err := createReplicationSlotName(r.kubegresContext.Kubegres.GetName(), r.clusterName, statefulSet.GetName(), r.kubegresContext.ClusterRole())
+	replicationSlotName, err := buildReplicationSlotName(r.kubegresContext.Kubegres.GetName(), r.clusterName, statefulSet.GetName(), r.kubegresContext.ClusterRole())
 	objKey := ctrlclient.ObjectKeyFromObject(statefulSet)
 	if err != nil {
 		r.kubegresContext.Log.ErrorEvent("ReplicationSlotDelete", fmt.Errorf("replication slot name: %v: %w", objKey, err), "Failed to create replication slot name")
@@ -480,6 +480,7 @@ func (r *ReplicaDbCountSpecEnforcer) undeployReplicaStatefulSets(replicaToUndepl
 	//   Another thing to consider is that should we use `SELECT pg_terminate_backend(<active_pid>);` to force termination of a backend process
 	//   and then delete the active replication slots?
 	//   Or should we fail here with a warning and relay on asynchronous cleanup loop to delete the replication slots?
+	//   Issue discussed in: https://github.com/tetrateio/tetrate/issues/26542
 	var attempt int
 	err = retry.OnError(wait.Backoff{
 		Duration: 3 * time.Second,

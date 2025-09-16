@@ -21,7 +21,7 @@ func TestReplicationSlotsWithTestcontainers(t *testing.T) {
 	}
 
 	pgContainer, err := postgres.Run(t.Context(),
-		"postgres:latest",
+		"postgres:14.5",
 		testcontainers.WithCmd("postgres"),
 		testcontainers.WithCmdArgs([]string{"-c", "wal_level=replica"}...),
 		testcontainers.WithWaitStrategy(
