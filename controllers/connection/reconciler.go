@@ -129,6 +129,8 @@ func (r kubegresReconciler) Reconcile(ctx context.Context, request reconcile.Req
 		r.logger.Info("New DB connection created.", "connectionID", connID)
 	}
 
+	// TODO(piotrkpc): This is wrong and needs to use KubegresContext or States to load primary database location.
+	//   the only time we should look in env vars for host/port is when running a standby.
 	secretRef := updateDSNData(dsnData, kubegres)
 	for k, v := range secretRef {
 		// first register the secret reference so the secret reconciler can find it
