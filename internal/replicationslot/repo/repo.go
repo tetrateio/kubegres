@@ -17,7 +17,7 @@ var (
 
 type Repository interface {
 	CreateSlot(ctx context.Context, name string) (replicationslot.ReplicationSlot, error)
-	FindSlotByName(ctx context.Context, name string) (replicationslot.ReplicationSlot, error)
+	GetSlot(ctx context.Context, name string) (replicationslot.ReplicationSlot, error)
 	DeleteSlot(ctx context.Context, name string) error
 	ListAll(ctx context.Context) ([]replicationslot.ReplicationSlot, error)
 }
@@ -112,14 +112,14 @@ func (r *repo) CreateSlot(ctx context.Context, name string) (replicationslot.Rep
 		return replicationslot.ReplicationSlot{}, fmt.Errorf("failed to create replication slot: %w", err)
 	}
 
-	slot, err := r.FindSlotByName(ctx, name)
+	slot, err := r.GetSlot(ctx, name)
 	if err != nil {
 		return replicationslot.ReplicationSlot{}, fmt.Errorf("failed to find created replication slot: %w", err)
 	}
 	return slot, nil
 }
 
-func (r *repo) FindSlotByName(ctx context.Context, name string) (replicationslot.ReplicationSlot, error) {
+func (r *repo) GetSlot(ctx context.Context, name string) (replicationslot.ReplicationSlot, error) {
 	findSlotStmt := `
 		SELECT
 			slot_name, plugin, slot_type, datoid, database,

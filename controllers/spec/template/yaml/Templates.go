@@ -304,6 +304,7 @@ data:
           echo "primary_conninfo = '$primary_conninfo'" > $PGDATA/postgresql.auto.conf
         fi
     
+        # Delete any existing 'primary_slot_name' entry and set it again if the env-var is set
         grep "primary_slot_name" $PGDATA/postgresql.auto.conf > /dev/null && sed -i '/primary_slot_name/d' $PGDATA/postgresql.auto.conf
         if [ -n "$POSTGRES_REPLICATION_SLOT" ]; then
           echo "$dt - Setting replication slot '$POSTGRES_REPLICATION_SLOT' in postgresql.auto.conf";
