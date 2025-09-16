@@ -118,6 +118,7 @@ var _ = BeforeSuite(func() {
 		k8sManager.GetClient(),
 		util.CreateMockLogger().WithName("db-conn-reconciler"),
 		connectionStore,
+		record.EventRecorder(&eventRecorderTest),
 	).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
