@@ -107,11 +107,12 @@ func main() {
 
 	connectionStore := sql.NewConnectionStore()
 
+	eventRecorder := mgr.GetEventRecorderFor("Kubegres-controller")
 	if err = (&controllers.KubegresReconciler{
 		Client:          mgr.GetClient(),
 		Logger:          ctrl.Log.WithName("controllers").WithName(ctx2.KindKubegres),
 		Scheme:          mgr.GetScheme(),
-		Recorder:        mgr.GetEventRecorderFor("Kubegres-controller"),
+		Recorder:        eventRecorder,
 		ConnectionStore: connectionStore,
 		ClusterName:     clusterName,
 	}).SetupWithManager(mgr); err != nil {
@@ -129,7 +130,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = connection.NewDBConnectionReconciler(mgr.GetClient(), ctrl.Log.WithName("controllers"), connectionStore).
+	if err = connection.NewDBConnectionReconciler(
+		mgr.GetClient(),
+		ctrl.Log.WithName("controllers"),
+		connectionStore,
+		eventRecorder,
+	).
 		SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to add DBConnectionReconciler")
 		os.Exit(1)

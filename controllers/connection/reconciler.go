@@ -3,14 +3,22 @@ package connection
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	apiv1 "reactive-tech.io/kubegres/api/v1"
+	kubegresCtx "reactive-tech.io/kubegres/controllers/ctx"
+	"reactive-tech.io/kubegres/controllers/ctx/log"
+	"reactive-tech.io/kubegres/controllers/ctx/status"
+	"reactive-tech.io/kubegres/controllers/states"
 	"reactive-tech.io/kubegres/internal/sql"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -29,10 +37,7 @@ const (
 	appliesToTLS appliesTo = iota
 	appliesToPassword
 	appliesToUser
-	appliesToHostAddr
-	appliesToHost
 	appliesToDatabase
-	appliesToPort
 )
 
 type (
@@ -43,9 +48,10 @@ type (
 		client client.Client
 		logger logr.Logger
 
-		connStore *sql.ConnectionStore
-		dsnStore  *SyncMap[sql.ConnectionID, *sql.DSNData]
-		secrets   *SyncMap[types.NamespacedName, secretReference]
+		connStore     *sql.ConnectionStore
+		dsnStore      *SyncMap[sql.ConnectionID, *sql.DSNData]
+		secrets       *SyncMap[types.NamespacedName, secretReference]
+		eventRecorder record.EventRecorder
 	}
 
 	kubegresReconciler struct {
@@ -67,13 +73,14 @@ type (
 )
 
 // NewDBConnectionReconciler is a constructor.
-func NewDBConnectionReconciler(c client.Client, logger logr.Logger, connStore *sql.ConnectionStore) *DBConnectionReconciler {
+func NewDBConnectionReconciler(c client.Client, logger logr.Logger, connStore *sql.ConnectionStore, recorder record.EventRecorder) *DBConnectionReconciler {
 	return &DBConnectionReconciler{
-		client:    c,
-		logger:    logger.WithName("DBConnectionReconciler"),
-		connStore: connStore,
-		dsnStore:  NewSyncMap[sql.ConnectionID, *sql.DSNData](),
-		secrets:   NewSyncMap[types.NamespacedName, secretReference](),
+		client:        c,
+		logger:        logger.WithName("DBConnectionReconciler"),
+		connStore:     connStore,
+		dsnStore:      NewSyncMap[sql.ConnectionID, *sql.DSNData](),
+		secrets:       NewSyncMap[types.NamespacedName, secretReference](),
+		eventRecorder: recorder,
 	}
 }
 
@@ -131,7 +138,7 @@ func (r kubegresReconciler) Reconcile(ctx context.Context, request reconcile.Req
 
 	// TODO(piotrkpc): This is wrong and needs to use KubegresContext or States to load primary database location.
 	//   the only time we should look in env vars for host/port is when running a standby.
-	secretRef := updateDSNData(dsnData, kubegres)
+	secretRef, err := updateDSNData(ctx, r.client, r.logger, r.eventRecorder, dsnData, kubegres)
 	for k, v := range secretRef {
 		// first register the secret reference so the secret reconciler can find it
 		r.secrets.Set(k, v)
@@ -196,12 +203,6 @@ func updateDSNDataFromSecret(dsnData *sql.DSNData, secret *corev1.Secret, secret
 	switch secretRef.appliesTo {
 	case appliesToTLS:
 	// TODO (sergicastro): save files
-	case appliesToHost:
-		dsnData.Host = readKey(secretRef.key)
-	case appliesToHostAddr:
-		dsnData.HostAddr = readKey(secretRef.key)
-	case appliesToPort:
-		dsnData.Port = readKey(secretRef.key)
 	case appliesToDatabase:
 		dsnData.Database = readKey(secretRef.key)
 	case appliesToUser:
@@ -220,48 +221,83 @@ var (
 	// These are going to be looked up in the environment variables of the Kubegres resource spec.
 	// https://www.postgresql.org/docs/current/libpq-envars.html
 
-	portEnvVars        = []string{"DB_PORT", "PGPORT", "POSTGRES_PORT"}
-	hostnameEnvVars    = []string{"DB_HOST", "PGHOST", "POSTGRES_HOST"}
-	hostAddressEnvVars = []string{"PGHOSTADDR"}
-	databaseEnvVars    = []string{"DB_NAME", "PGDATABASE", "POSTGRES_DATABASE"}
-	usernameEnvVars    = []string{"DB_USER", "PGUSER", "POSTGRES_USER"}
-	passwordEnvVars    = []string{"DB_PASSWORD", "PGPASSWORD", "POSTGRES_PASSWORD"}
+	databaseEnvVars = []string{"DB_NAME", "PGDATABASE", "POSTGRES_DATABASE"}
+	usernameEnvVars = []string{"DB_USER", "PGUSER", "POSTGRES_USER"}
+	passwordEnvVars = []string{"DB_PASSWORD", "PGPASSWORD", "POSTGRES_PASSWORD"}
 )
 
-func updateDSNData(dsnData *sql.DSNData, kubegres *apiv1.Kubegres) map[types.NamespacedName]secretReference {
+func updateDSNData(ctx context.Context, k8sClient client.Client, logger logr.Logger, recorder record.EventRecorder, dsnData *sql.DSNData, kubegres *apiv1.Kubegres) (map[types.NamespacedName]secretReference, error) {
 	connID := toConnectionID(types.NamespacedName{
 		Namespace: kubegres.Namespace,
 		Name:      kubegres.Name,
 	})
+
+	wrappedLogger := log.LogWrapper{Kubegres: kubegres, Logger: logger, Recorder: recorder}
+
+	kubegresContext := kubegresCtx.KubegresContext{
+		Kubegres:        kubegres,
+		Ctx:             ctx,
+		Client:          k8sClient,
+		Log:             wrappedLogger,
+		ConnectionStore: nil,
+		Status: &status.KubegresStatusWrapper{
+			Kubegres: kubegres,
+			Ctx:      ctx,
+			Client:   k8sClient,
+			Log:      wrappedLogger,
+		},
+	}
+	var svcName, port string
+	var err error
+	testHost, foundTestHost := os.LookupEnv("TEST_PRIMARY_HOSTNAME")
+	testPort, foundTestPort := os.LookupEnv("TEST_PRIMARY_PORT")
+
+	// TODO(piotrkpc): refactor this
+	if foundTestPort && foundTestHost {
+		svcName = testHost
+		port = testPort
+	} else {
+		if kubegresContext.ClusterRole() == kubegresCtx.StandbyRoleName {
+			split := strings.Split(kubegresContext.Kubegres.Spec.Standby.PrimaryEndpoint, ":")
+			if len(split) != 2 {
+				err := fmt.Errorf("invalid primary endpoint format: %s", kubegresContext.Kubegres.Spec.Standby.PrimaryEndpoint)
+				wrappedLogger.Error(err, "Failed to parse primary endpoint", "connectionID", connID)
+				return nil, err
+			}
+			_, err = strconv.ParseInt(split[1], 10, 0)
+			if err != nil {
+				wrappedLogger.Error(err, "Failed to parse port from primary endpoint", "connectionID", connID)
+				return nil, fmt.Errorf("parse port from primary endpoint: %w", err)
+			}
+			port = split[1]
+			svcName = split[0]
+		}
+
+		if kubegresContext.ClusterRole() == kubegresCtx.PrimaryRoleName {
+			var resourcesStates states.ResourcesStates
+			resourcesStates, err = states.LoadResourcesStates(kubegresContext)
+			if err != nil {
+				wrappedLogger.Error(err, "Failed to load resources states", "connectionID", connID)
+				return nil, fmt.Errorf("load resources states: %w", err)
+			}
+			var aPort int32
+			svcName, aPort, err = resourcesStates.PrimaryConnectionDetails()
+			if err != nil {
+				wrappedLogger.Error(err, "Failed to get primary connection details", "connectionID", connID)
+				return nil, fmt.Errorf("get primary connection details: %w", err)
+			}
+			port = strconv.Itoa(int(aPort))
+		}
+	}
+
+	if svcName == "" || port == "" {
+		wrappedLogger.Error(err, "Failed to get primary connection details", "connectionID", connID)
+		return nil, fmt.Errorf("get primary connection details: %w", err)
+	}
+	dsnData.Host = svcName
+	dsnData.Port = port
+
 	secretRef := make(map[types.NamespacedName]secretReference)
-
-	if hostAddrEV, ok := findEnvVar(kubegres.Spec.Env, hostAddressEnvVars...); ok {
-		if hostAddrEV.Value != "" {
-			dsnData.HostAddr = hostAddrEV.Value
-		} else if k, v, ok := secretRefFromEnvVar(hostAddrEV, connID, kubegres, appliesToHostAddr); ok {
-			secretRef[k] = v
-		}
-	}
-
-	if testHost := os.Getenv("TEST_PRIMARY_HOSTNAME"); testHost != "" {
-		dsnData.Host = testHost
-	} else if hostEV, ok := findEnvVar(kubegres.Spec.Env, hostnameEnvVars...); ok {
-		if hostEV.Value != "" {
-			dsnData.Host = hostEV.Value
-		} else if k, v, ok := secretRefFromEnvVar(hostEV, connID, kubegres, appliesToHost); ok {
-			secretRef[k] = v
-		}
-	}
-
-	if testPort := os.Getenv("TEST_PRIMARY_PORT"); testPort != "" {
-		dsnData.Port = testPort
-	} else if portEV, ok := findEnvVar(kubegres.Spec.Env, portEnvVars...); ok {
-		if portEV.Value != "" {
-			dsnData.Port = portEV.Value
-		} else if k, v, ok := secretRefFromEnvVar(portEV, connID, kubegres, appliesToPort); ok {
-			secretRef[k] = v
-		}
-	}
 
 	if dbNameEV, ok := findEnvVar(kubegres.Spec.Env, databaseEnvVars...); ok {
 		if dbNameEV.Value != "" {
@@ -307,7 +343,7 @@ func updateDSNData(dsnData *sql.DSNData, kubegres *apiv1.Kubegres) map[types.Nam
 		dsnData.ClientKeyPath = tls.ClientKeyPath
 	}
 
-	return secretRef
+	return secretRef, nil
 }
 
 func secretRefFromEnvVar(ev corev1.EnvVar, connID sql.ConnectionID, kubegres *apiv1.Kubegres, appliesTo appliesTo) (types.NamespacedName, secretReference, bool) {
