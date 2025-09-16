@@ -66,6 +66,6 @@ func TestReplicationSlotsWithTestcontainers(t *testing.T) {
 	err = repo.DeleteSlot(t.Context(), "non_existent_slot")
 	require.Error(t, err)
 
-	_, err = repo.FindSlotByName(t.Context(), "my_awesome_test_slot")
+	_, err = repo.GetSlot(t.Context(), "my_awesome_test_slot")
 	require.ErrorIs(t, err, replicationSlotRepo.ErrDoesNotExist)
 }
