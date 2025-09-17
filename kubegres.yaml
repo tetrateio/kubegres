@@ -4808,7 +4808,7 @@ spec:
         - --leader-elect
         command:
         - /manager
-        image: tetrate/kubegres:v1.16.0-tetrate-v21
+        image: tetrate/kubegres:v1.16.0-tetrate-v22
         livenessProbe:
           httpGet:
             path: /healthz
