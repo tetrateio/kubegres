@@ -132,17 +132,14 @@ func (r *ServicesCountSpecEnforcer) createServiceResource(isPrimary bool) (core.
 	}
 }
 
-// TODO (sergicastro) this is only necessary to test the connection PR, after it is merged to the replication slots branch, this can be removed
 func (r *ServicesCountSpecEnforcer) canConnectToPrimaryDb() bool {
 
 	if !r.resourcesStates.Services.Primary.IsDeployed {
-		r.kubegresContext.Log.Warning("REMOVE ME: Primary DB Service is not deployed, cannot connect to Primary DB.")
 		return false
 	}
 
 	conn, ok := r.kubegresContext.GetSQLConnection()
 	if !ok {
-		r.kubegresContext.Log.Warning("REMOVE ME: Cannot connect to Primary DB, no SQL connection available.")
 		return false
 	}
 
@@ -150,19 +147,14 @@ func (r *ServicesCountSpecEnforcer) canConnectToPrimaryDb() bool {
 	defer cancel()
 
 	if err := conn.DB().PingContext(ctx); err != nil {
-		r.kubegresContext.Log.Warning("REMOVE ME: Cannot connect to Primary DB, unable to connect to Primary DB.", "Error", err)
 		return false
 	}
-
-	r.kubegresContext.Log.Info("REMOVE ME: Successfully connected to Primary DB.")
 
 	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if _, err := conn.DB().ExecContext(ctx, "SELECT 1"); err != nil {
-		r.kubegresContext.Log.Warning("REMOVE ME: Cannot connect to Primary DB, unable to execute test query 'SELECT 1'.", "Error", err)
 		return false
 	}
 
-	r.kubegresContext.Log.Info("REMOVE ME: Successfully executed test query 'SELECT 1' on Primary DB.")
 	return true
 }
