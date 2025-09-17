@@ -21,7 +21,6 @@ limitations under the License.
 package resourceConfigs
 
 import (
-	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
