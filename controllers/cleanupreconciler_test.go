@@ -15,6 +15,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	storage "k8s.io/api/storage/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -195,9 +196,40 @@ func TestCleanupReplicationSlotsReconciler_Reconcile(t *testing.T) {
 				clk.tickHealthCheck(time.Second, time.Now())
 				assertReplicationSlotsNbre(t, m, 0)
 			},
-
-			//assertCleanupFunc: func(t *testing.T, reconciler *CleanupReplicationSlotsReconciler) {
-			//},
+		},
+		{
+			name: "settings changed - cancel and start a new routine",
+			clientSetupFn: func(*testing.T) client.Client {
+				k := kubegres(t)
+				k.Spec.ReplicationSlots = kubegresv1.ReplicationSlots{
+					Enabled:                 true,
+					InactiveSlotGracePeriod: &metav1.Duration{Duration: time.Second}, // this is new
+				}
+				return fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+					k, primaryStatefulSet(t), primarySvc(t)).Build()
+			},
+			setupDbConnStore: func(t *testing.T, cs *sqladapters.ConnectionStore) {
+				cs.Set(sqladapters.ConnectionID{Name: "my-kubegres", Namespace: "default"}, &sqladapters.Connection{})
+			},
+			setupCleanupRoutines: func(t *testing.T, m map[client.ObjectKey]cleanupRoutine) *mockFuncRun {
+				mockFunc := &mockFuncRun{}
+				m[types.NamespacedName{Name: "my-kubegres", Namespace: "default"}] = cleanupRoutine{
+					cancelFunc: mockFunc.CancelContext,
+					settings: &settings{
+						inactiveSlotGracePeriod: nil, // this setting is old - disabled, not set
+					},
+				}
+				return mockFunc
+			},
+			req: reconcile.Request{NamespacedName: types.NamespacedName{Name: "my-kubegres", Namespace: "default"}},
+			assertReconcileOutput: func(t *testing.T, result reconcile.Result, err error) {
+				require.NoError(t, err)
+				assert.Equal(t, reconcile.Result{}, result)
+			},
+			assertCleanupFunc: func(t *testing.T, registeredRoutines map[client.ObjectKey]cleanupRoutine, cleanupFunc *mockFuncRun) {
+				assert.True(t, cleanupFunc.cancelContextRun, "cleanup cancel should be called")
+				assert.Contains(t, registeredRoutines, types.NamespacedName{Name: "my-kubegres", Namespace: "default"})
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -256,8 +288,6 @@ func TestCleanupReplicationSlotsReconciler_Reconcile(t *testing.T) {
 			if tt.assertRepo != nil {
 				tt.assertRepo(t, &repo, clk)
 			}
-			//tt.assertMockLogger(t, mocklogger.GetSink().(*util.MockLogSink))
-			//tt.assertClient(t, c)
 		})
 	}
 }
