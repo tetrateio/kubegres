@@ -94,11 +94,6 @@ func LoadYamlConfigMapExternalDB() v1.ConfigMap {
 }
 
 func getFileContents(filePath string) string {
-	dir, err := os.Getwd()
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(dir)
 	contents, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		log.Fatal("Unable to find file '"+filePath+"'. Given error: ", err)
