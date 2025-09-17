@@ -121,30 +121,3 @@ func (r *ServicesCountSpecEnforcer) createServiceResource(isPrimary bool) (core.
 		return r.resourcesCreator.CreateReplicaService()
 	}
 }
-
-func (r *ServicesCountSpecEnforcer) canConnectToPrimaryDb() bool {
-
-	if !r.resourcesStates.Services.Primary.IsDeployed {
-		return false
-	}
-
-	conn, ok := r.kubegresContext.GetSQLConnection()
-	if !ok {
-		return false
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := conn.DB().PingContext(ctx); err != nil {
-		return false
-	}
-
-	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if _, err := conn.DB().ExecContext(ctx, "SELECT 1"); err != nil {
-		return false
-	}
-
-	return true
-}
