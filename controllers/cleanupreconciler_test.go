@@ -30,6 +30,24 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+func TestCleanupRoutinesHandler(t *testing.T) {
+	h := cleanupRoutinesHandler{
+		runningCleanupRoutines: make(map[client.ObjectKey]cleanupRoutine),
+	}
+
+	object := client.ObjectKeyFromObject(kubegres(t))
+	mockFunc := &mockFuncRun{}
+	h.startCleanup(object, &settings{}, mockFunc.Run)
+
+	assert.Eventually(t, func() bool { return mockFunc.wasCalled }, time.Second, time.Millisecond)
+
+	assert.True(t, h.HasActiveRoutine(object, &settings{}))
+
+	h.stopCleanup(object)
+	assert.False(t, h.HasActiveRoutine(object, &settings{}))
+	// TODO(piotrkpc): what happens if background function is down
+}
+
 func TestCleanupReplicationSlotsReconciler_Reconcile(t *testing.T) {
 
 	scheme := runtime.NewScheme()
@@ -292,6 +310,97 @@ func TestCleanupReplicationSlotsReconciler_Reconcile(t *testing.T) {
 	}
 }
 
+func TestStartReplicationSlotsCleanupRoutine(t *testing.T) {
+
+	const timeout = 3 * time.Second
+
+	clk := newMockClock(t)
+	eventRecorder := record.NewFakeRecorder(10)
+
+	connectionStore := sqladapters.NewConnectionStore()
+
+	repo := &mockRepo{
+		slots: map[string]replicationslot.ReplicationSlot{
+			"inactive": {
+				Name: "inactive",
+			},
+			"active": {
+				Name:   "active",
+				Active: true,
+			},
+		},
+	}
+
+	var rf repoFactory = func(querier replicationSlotRepo.Querier) replicationSlotRepo.Repository {
+		return repo
+	}
+
+	s := &settings{
+		kubegres: kubegres(t),
+	}
+
+	go startReplicationSlotsCleanup(t.Context(), eventRecorder, realClock{}, connectionStore, s, rf)
+
+	gracePeriod := 5 * time.Second
+	healthCheckInterval := 1 * time.Second
+	s = &settings{
+		kubegres:                kubegres(t),
+		healthCheckInterval:     healthCheckInterval,
+		inactiveSlotGracePeriod: &gracePeriod,
+	}
+
+	go startReplicationSlotsCleanup(t.Context(), eventRecorder, clk, connectionStore, s, rf)
+
+	clk.waitForTicker(healthCheckInterval, timeout)
+	clk.tickHealthCheck(healthCheckInterval, time.Now())
+
+	// Database connection is not ready
+	assertEventRecorded(t, eventRecorder, PrimaryNotReadyReason)
+
+	// Simulate that the database connection is now ready
+	connectionStore.Set(sqladapters.ConnectionID{
+		Name:      s.kubegres.GetName(),
+		Namespace: s.kubegres.GetNamespace(),
+	}, &sqladapters.Connection{})
+
+	// 1st tick - one inactive slot but grace period is set, so it should not be deleted yet
+	clk.tickHealthCheck(healthCheckInterval, time.Now())
+
+	assertReplicationSlotsNbre(t, repo, 2)
+	slots, err := repo.ListAll(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, slots, replicationslot.ReplicationSlot{Name: "inactive"}, "inactive slot should be here because of grace period")
+
+	repo.slots["inactive"] = replicationslot.ReplicationSlot{
+		Name:   "inactive",
+		Active: true, // Simulate that the slot is now active
+	}
+
+	clk.waitForGracePeriodTimer(timeout)
+	clk.endGracePeriodTimerWith(time.Now())
+
+	assertReplicationSlotsNbre(t, repo, 2)
+	slots, err = repo.ListAll(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, slots, replicationslot.ReplicationSlot{Name: "inactive", Active: true})
+
+	// Simulate that the slot is now inactive again
+	repo.slots["inactive"] = replicationslot.ReplicationSlot{
+		Name:   "inactive",
+		Active: false,
+	}
+
+	// 2nd tick - inactive slot should be deleted after grace period
+	clk.tickHealthCheck(healthCheckInterval, time.Now())
+	clk.waitForGracePeriodTimer(timeout)
+	clk.endGracePeriodTimerWith(time.Now())
+
+	assertReplicationSlotsNbre(t, repo, 1)
+	slots, err = repo.ListAll(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, slots, replicationslot.ReplicationSlot{Name: "active", Active: true}, "active slot should remain after cleanup")
+}
+
 //go:embed testdata/primary-ss.yaml
 var primaryStatefulSetYaml string
 
@@ -330,26 +439,6 @@ func (f *mockFuncRun) Run(_ context.Context, _ record.EventRecorder, c clock, _ 
 
 func (f *mockFuncRun) CancelContext() {
 	f.cancelContextRun = true
-
-}
-
-func TestCleanupRoutinesHandler(t *testing.T) {
-	h := cleanupRoutinesHandler{
-		runningCleanupRoutines: make(map[client.ObjectKey]cleanupRoutine),
-	}
-
-	object := client.ObjectKeyFromObject(kubegres(t))
-	mockFunc := &mockFuncRun{}
-	h.startCleanup(object, &settings{}, mockFunc.Run)
-
-	assert.Eventually(t, func() bool { return mockFunc.wasCalled }, time.Second, time.Millisecond)
-
-	assert.True(t, h.HasActiveRoutine(object, &settings{}))
-
-	h.stopCleanup(object)
-	assert.False(t, h.HasActiveRoutine(object, &settings{}))
-	// TODO(piotrkpc): what happens if background function is down
-
 }
 
 type mockClock struct {
@@ -466,97 +555,6 @@ func (m *mockRepo) ListAll(ctx context.Context) ([]replicationslot.ReplicationSl
 	values := maps.Values(m.slots)
 	slots := slices.Collect(values)
 	return slots, nil
-}
-
-func TestStartReplicationSlotsCleanupRoutine(t *testing.T) {
-
-	const timeout = 3 * time.Second
-
-	clk := newMockClock(t)
-	eventRecorder := record.NewFakeRecorder(10)
-
-	connectionStore := sqladapters.NewConnectionStore()
-
-	repo := &mockRepo{
-		slots: map[string]replicationslot.ReplicationSlot{
-			"inactive": {
-				Name: "inactive",
-			},
-			"active": {
-				Name:   "active",
-				Active: true,
-			},
-		},
-	}
-
-	var rf repoFactory = func(querier replicationSlotRepo.Querier) replicationSlotRepo.Repository {
-		return repo
-	}
-
-	s := &settings{
-		kubegres: kubegres(t),
-	}
-
-	go startReplicationSlotsCleanup(t.Context(), eventRecorder, realClock{}, connectionStore, s, rf)
-
-	gracePeriod := 5 * time.Second
-	healthCheckInterval := 1 * time.Second
-	s = &settings{
-		kubegres:                kubegres(t),
-		healthCheckInterval:     healthCheckInterval,
-		inactiveSlotGracePeriod: &gracePeriod,
-	}
-
-	go startReplicationSlotsCleanup(t.Context(), eventRecorder, clk, connectionStore, s, rf)
-
-	clk.waitForTicker(healthCheckInterval, timeout)
-	clk.tickHealthCheck(healthCheckInterval, time.Now())
-
-	// Database connection is not ready
-	assertEventRecorded(t, eventRecorder, PrimaryNotReadyReason)
-
-	// Simulate that the database connection is now ready
-	connectionStore.Set(sqladapters.ConnectionID{
-		Name:      s.kubegres.GetName(),
-		Namespace: s.kubegres.GetNamespace(),
-	}, &sqladapters.Connection{})
-
-	// 1st tick - one inactive slot but grace period is set, so it should not be deleted yet
-	clk.tickHealthCheck(healthCheckInterval, time.Now())
-
-	assertReplicationSlotsNbre(t, repo, 2)
-	slots, err := repo.ListAll(t.Context())
-	require.NoError(t, err)
-	require.Contains(t, slots, replicationslot.ReplicationSlot{Name: "inactive"}, "inactive slot should be here because of grace period")
-
-	repo.slots["inactive"] = replicationslot.ReplicationSlot{
-		Name:   "inactive",
-		Active: true, // Simulate that the slot is now active
-	}
-
-	clk.waitForGracePeriodTimer(timeout)
-	clk.endGracePeriodTimerWith(time.Now())
-
-	assertReplicationSlotsNbre(t, repo, 2)
-	slots, err = repo.ListAll(t.Context())
-	require.NoError(t, err)
-	require.Contains(t, slots, replicationslot.ReplicationSlot{Name: "inactive", Active: true})
-
-	// Simulate that the slot is now inactive again
-	repo.slots["inactive"] = replicationslot.ReplicationSlot{
-		Name:   "inactive",
-		Active: false,
-	}
-
-	// 2nd tick - inactive slot should be deleted after grace period
-	clk.tickHealthCheck(healthCheckInterval, time.Now())
-	clk.waitForGracePeriodTimer(timeout)
-	clk.endGracePeriodTimerWith(time.Now())
-
-	assertReplicationSlotsNbre(t, repo, 1)
-	slots, err = repo.ListAll(t.Context())
-	require.NoError(t, err)
-	require.Contains(t, slots, replicationslot.ReplicationSlot{Name: "active", Active: true}, "active slot should remain after cleanup")
 }
 
 func newMockClock(t *testing.T) *mockClock {
