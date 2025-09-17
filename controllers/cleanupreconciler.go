@@ -310,7 +310,7 @@ func startReplicationSlotsCleanup(
 }
 
 func deleteIfInactive(ctx context.Context, slot string, repo replicationSlotRepo.Repository) error {
-	slotToCheck, err := repo.FindSlotByName(ctx, slot)
+	slotToCheck, err := repo.GetSlot(ctx, slot)
 	if err != nil {
 		if errors.Is(err, replicationSlotRepo.ErrNotFound) {
 			return nil // Slot does not exist, nothing to delete

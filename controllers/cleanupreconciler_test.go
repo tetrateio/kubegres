@@ -411,7 +411,7 @@ func (m *mockRepo) CreateSlot(ctx context.Context, name string) (replicationslot
 	return slot, nil
 }
 
-func (m *mockRepo) FindSlotByName(ctx context.Context, name string) (replicationslot.ReplicationSlot, error) {
+func (m *mockRepo) GetSlot(ctx context.Context, name string) (replicationslot.ReplicationSlot, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if slot, exists := m.slots[name]; exists {
