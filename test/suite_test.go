@@ -122,6 +122,14 @@ var _ = BeforeSuite(func() {
 	).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
+	err = controllers.NewCleanupReplicationSlotsReconciler(
+		k8sManager.GetClient(),
+		util.CreateMockLogger().WithName("cleanup-replication-slots-reconciler"),
+		record.EventRecorder(&eventRecorderTest),
+		connectionStore,
+	).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred())
+
 	go func() {
 		err = k8sManager.Start(ctrl.SetupSignalHandler())
 		if err != nil {

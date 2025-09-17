@@ -77,5 +77,8 @@ func (r *DbStorageClassStates) GetStorageClass() (*storage.StorageClass, error) 
 }
 
 func (r *DbStorageClassStates) getSpecStorageClassName() string {
+	if r.kubegresContext.Kubegres.Spec.Database.StorageClassName == nil {
+		return ""
+	}
 	return *r.kubegresContext.Kubegres.Spec.Database.StorageClassName
 }

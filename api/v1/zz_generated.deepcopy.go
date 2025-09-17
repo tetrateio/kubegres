@@ -22,6 +22,7 @@ package v1
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -308,7 +309,11 @@ func (in *Probe) DeepCopy() *Probe {
 func (in *ReplicationSlots) DeepCopyInto(out *ReplicationSlots) {
 	*out = *in
 	out.MaxWalKeepSize = in.MaxWalKeepSize.DeepCopy()
-	out.InactiveSlotGracePeriod = in.InactiveSlotGracePeriod
+	if in.InactiveSlotGracePeriod != nil {
+		in, out := &in.InactiveSlotGracePeriod, &out.InactiveSlotGracePeriod
+		*out = new(metav1.Duration)
+		**out = **in
+	}
 	out.HealthCheckInterval = in.HealthCheckInterval
 }
 

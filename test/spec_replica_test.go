@@ -563,7 +563,8 @@ func (r *SpecReplicaTest) thenReplicationSlotsShouldHaveDefaultSettingsWith() {
 		if kubegres.Spec.ReplicationSlots.Enabled &&
 			kubegres.Spec.ReplicationSlots.MaxWalKeepSize.IsZero() &&
 			kubegres.Spec.ReplicationSlots.HealthCheckInterval == ctx.DefaultReplicationSlotsHealthCheckInterval &&
-			kubegres.Spec.ReplicationSlots.InactiveSlotGracePeriod == ctx.DefaultReplicationSlotsInactiveSlotGracePeriod {
+			kubegres.Spec.ReplicationSlots.InactiveSlotGracePeriod != nil &&
+			*kubegres.Spec.ReplicationSlots.InactiveSlotGracePeriod == ctx.DefaultReplicationSlotsInactiveSlotGracePeriod {
 
 			return true
 		}

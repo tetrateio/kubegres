@@ -82,9 +82,10 @@ type ReplicationSlots struct {
 	// +kubebuilder:validation:Type:=string
 	// +kubebuilder:validation:Pattern:="^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
 	// +kubebuilder:default:="10m"
+	// +nullable
 	// InactiveSlotGracePeriod defines how long a replication slot can remain inactive before it becomes eligible for cleanup.
 	// The value should be specified in the format: 30s, 1m, 5m, etc. Default is 10m.
-	InactiveSlotGracePeriod metav1.Duration `json:"inactiveSlotGracePeriod,omitempty"`
+	InactiveSlotGracePeriod *metav1.Duration `json:"inactiveSlotGracePeriod,omitempty"`
 	// +kubebuilder:validation:Type:=string
 	// +kubebuilder:validation:Pattern:="^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
 	// +kubebuilder:default:="30s"

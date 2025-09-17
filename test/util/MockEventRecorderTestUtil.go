@@ -21,13 +21,16 @@ limitations under the License.
 package util
 
 import (
+	"log"
+	"sync"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"log"
 	log2 "reactive-tech.io/kubegres/controllers/ctx/log"
 )
 
 type MockEventRecorderTestUtil struct {
+	mu           sync.RWMutex // To ensure thread safety when accessing eventRecords
 	eventRecords []EventRecord
 }
 
@@ -38,7 +41,8 @@ type EventRecord struct {
 }
 
 func (r *MockEventRecorderTestUtil) CheckEventExist(eventRecordToSearch EventRecord) bool {
-
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	for _, eventRecord := range r.eventRecords {
 		if eventRecord == eventRecordToSearch {
 			return true
@@ -48,6 +52,8 @@ func (r *MockEventRecorderTestUtil) CheckEventExist(eventRecordToSearch EventRec
 }
 
 func (r *MockEventRecorderTestUtil) RemoveAllEvents() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.eventRecords = []EventRecord{}
 }
 
@@ -56,6 +62,8 @@ func (r *MockEventRecorderTestUtil) Event(object runtime.Object, eventtype, reas
 }
 
 func (r *MockEventRecorderTestUtil) Eventf(object runtime.Object, eventtype, reason, messageFmt string, args ...interface{}) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	messageFmt = r.constructFullMsg(messageFmt, args)
 	log.Println("Event - eventtype: '" + eventtype + "', reason: '" + reason + "', message: '" + messageFmt + "'")
 	r.eventRecords = append(r.eventRecords, EventRecord{Eventtype: eventtype, Reason: reason, Message: messageFmt})

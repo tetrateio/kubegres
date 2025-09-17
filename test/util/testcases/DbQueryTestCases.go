@@ -98,3 +98,7 @@ func (r *DbQueryTestCases) isLastInsertedUserInDb(users []util.AccountUser) bool
 func (r *DbQueryTestCases) GetReplicationSlots() []replicationslot.ReplicationSlot {
 	return r.connectionPrimaryDb.GetReplicationSlots()
 }
+
+func (r *DbQueryTestCases) CreateReplicationSlot(slotName string) error {
+	return r.connectionPrimaryDb.CreateReplicationSlot(slotName)
+}

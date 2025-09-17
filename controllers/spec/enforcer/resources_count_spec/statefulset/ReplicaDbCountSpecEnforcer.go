@@ -164,7 +164,7 @@ func (r *simpleReplicationSlotCreateDeleter) Delete(statefulSet *v1.StatefulSet)
 	}
 	err = r.repo.DeleteSlot(r.kubegresContext.Ctx, replicationSlotName)
 	if err != nil {
-		if errors.Is(err, replicationSlotRepo.ErrDoesNotExist) {
+		if errors.Is(err, replicationSlotRepo.ErrNotFound) {
 			r.kubegresContext.Log.InfoEvent("ReplicationSlotDelete", fmt.Sprintf("Replication slot '%s' for statefulSet '%s' does not exist, skipping deletion.", replicationSlotName, statefulSet.GetName()))
 			return nil // If the slot does not exist, we can safely ignore this error.
 		}

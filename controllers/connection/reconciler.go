@@ -273,7 +273,7 @@ func updateDSNData(ctx context.Context, k8sClient client.Client, logger logr.Log
 			svcName = split[0]
 		}
 
-		if kubegresContext.ClusterRole() == kubegresCtx.PrimaryRoleName {
+		if kubegresContext.ClusterRole() == kubegresCtx.ActiveRoleName {
 			var resourcesStates states.ResourcesStates
 			resourcesStates, err = states.LoadResourcesStates(kubegresContext)
 			if err != nil {
@@ -291,7 +291,7 @@ func updateDSNData(ctx context.Context, k8sClient client.Client, logger logr.Log
 	}
 
 	if svcName == "" || port == "" {
-		wrappedLogger.Error(err, "Failed to get primary connection details", "connectionID", connID)
+		wrappedLogger.Error(err, "Failed to get primary connection details", "connectionID", connID, "svcName", svcName, "port", port)
 		return nil, fmt.Errorf("get primary connection details: %w", err)
 	}
 	dsnData.Host = svcName

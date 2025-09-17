@@ -364,3 +364,20 @@ func (r *DbConnectionDbUtil) logInfo(msg string) {
 func (r *DbConnectionDbUtil) logError(msg string, err error) {
 	log.Println(r.LogLabel+" - "+msg+" ", err)
 }
+
+func (r *DbConnectionDbUtil) CreateReplicationSlot(name string) error {
+
+	if !r.connect() {
+		return nil
+	}
+
+	sqlQuery := "SELECT pg_create_physical_replication_slot('" + name + "');"
+	_, err := r.db.Exec(sqlQuery)
+	if err != nil {
+		r.logError("Error of query: "+sqlQuery+" ", err)
+		return err
+	}
+
+	r.logInfo("Success of: " + sqlQuery)
+	return nil
+}

@@ -1,0 +1,169 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  creationTimestamp: "2025-08-15T11:00:04Z"
+  generation: 1
+  labels:
+    app: my-kubegres
+    index: "1"
+    kubegres.reactive-tech.io/mode: active
+    replicationRole: primary
+  name: my-kubegres-1
+  namespace: default
+  ownerReferences:
+  - apiVersion: kubegres.reactive-tech.io/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Kubegres
+    name: my-kubegres
+    uid: 2d67f28d-742e-4b35-a4a8-9679bad46ab1
+  resourceVersion: "935"
+  uid: 51294a5f-e7e6-4ee5-b1a5-60d245e04050
+spec:
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  podManagementPolicy: OrderedReady
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: my-kubegres
+      index: "1"
+  serviceName: my-kubegres
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: my-kubegres
+        index: "1"
+        kubegres.reactive-tech.io/mode: active
+        replicationRole: primary
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - my-kubegres
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+      containers:
+      - args:
+        - -c
+        - config_file=/etc/postgres.conf
+        - -c
+        - hba_file=/etc/pg_hba.conf
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
+        - name: PGDATA
+          value: /var/lib/postgres/data/pgdata
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: superUserPassword
+              name: my-kubegres-secret
+        - name: POSTGRES_REPLICATION_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: replicationUserPassword
+              name: my-kubegres-secret
+        - name: POSTGRES_MYAPP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: myAppUserPassword
+              name: my-kubegres-secret
+        image: postgres:14.5
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - exec pg_isready -U postgres -h $POD_IP
+          failureThreshold: 10
+          initialDelaySeconds: 60
+          periodSeconds: 20
+          successThreshold: 1
+          timeoutSeconds: 15
+        name: my-kubegres-1
+        ports:
+        - containerPort: 5432
+          protocol: TCP
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - exec pg_isready -U postgres -h $POD_IP
+          failureThreshold: 3
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 3
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/lib/postgres/data
+          name: postgres-db
+        - mountPath: /docker-entrypoint-initdb.d/primary_create_replication_role.sh
+          name: base-config
+          subPath: primary_create_replication_role.sh
+        - mountPath: /etc/postgres.conf
+          name: base-config
+          subPath: postgres.conf
+        - mountPath: /docker-entrypoint-initdb.d/primary_init_script.sh
+          name: base-config
+          subPath: primary_init_script.sh
+        - mountPath: /etc/pg_hba.conf
+          name: base-config
+          subPath: pg_hba.conf
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - configMap:
+          defaultMode: 511
+          name: base-kubegres-config
+        name: base-config
+  updateStrategy:
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      creationTimestamp: null
+      name: postgres-db
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 200Mi
+      storageClassName: standard
+      volumeMode: Filesystem
+    status:
+      phase: Pending
+status:
+  availableReplicas: 1
+  collisionCount: 0
+  currentReplicas: 1
+  currentRevision: my-kubegres-1-54bfcf6c8c
+  observedGeneration: 1
+  readyReplicas: 1
+  replicas: 1
+  updateRevision: my-kubegres-1-54bfcf6c8c
+  updatedReplicas: 1
