@@ -60,12 +60,6 @@ func (r *ServicesCountSpecEnforcer) EnforceSpec() error {
 		}
 	}
 
-	if r.isPrimaryServiceDeployed() && r.isPrimaryDbReady() {
-		if !r.canConnectToPrimaryDb() {
-			return errors.New("cannot connect to primary DB using primary service")
-		}
-	}
-
 	return nil
 }
 
