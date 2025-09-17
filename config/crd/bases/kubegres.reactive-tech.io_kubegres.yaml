@@ -506,6 +506,44 @@ spec:
               replicas:
                 format: int32
                 type: integer
+              replicationSlots:
+                properties:
+                  disableCleanup:
+                    description: |-
+                      DisableCleanup, when set to true, prevents automatic cleanup of inactive replication slots.
+                      This can be useful in scenarios where you want to retain replication slots for manual management or specific use cases.
+                      By default, this is set to false, allowing the system to clean up inactive slots based on the defined grace period.
+                    type: boolean
+                  enabled:
+                    description: Enabled indicates whether the replication slots feature
+                      is activated.
+                    type: boolean
+                  healthCheckInterval:
+                    default: 30s
+                    description: |-
+                      HealthCheckInterval defines how often the health of replication slots is checked.
+                      The value should be specified in the format: 30s, 1m, 5m, etc. Default is 30s.
+                    pattern: ^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$
+                    type: string
+                  inactiveSlotGracePeriod:
+                    default: 10m
+                    description: |-
+                      InactiveSlotGracePeriod defines how long a replication slot can remain inactive before it becomes eligible for cleanup.
+                      The value should be specified in the format: 30s, 1m, 5m, etc. Default is 10m.
+                    pattern: ^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$
+                    type: string
+                  maxWalKeepSize:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: |-
+                      MaxWalKeepSize defines the maximum size of WAL files to retain for replication slots.
+                      This helps manage disk space usage by limiting the amount of WAL data kept for replication.
+                      The value should be specified in a format like "1Gi", "500Mi", etc.
+                      If not set, the limit is not enforced.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                type: object
               resources:
                 description: ResourceRequirements describes the compute resource requirements.
                 properties:
@@ -2770,6 +2808,34 @@ spec:
                   enabled:
                     type: boolean
                   primaryEndpoint:
+                    type: string
+                type: object
+              tls:
+                properties:
+                  clientCert:
+                    description: ClientCertPath is the path to the client certificate
+                      file.
+                    type: string
+                  clientKey:
+                    description: ClientKeyPath is the path to the client key file.
+                    type: string
+                  mode:
+                    description: SSLMode honors https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION.
+                    type: string
+                  rootCert:
+                    description: RootCertPath is the path to the root certificate
+                      file.
+                    type: string
+                  secretName:
+                    description: SecretName is the name of the Kubernetes secret that
+                      contains the TLS certificates.
+                    type: string
+                  serverCert:
+                    description: ServerCertPath is the path to the server certificate
+                      file.
+                    type: string
+                  serverKey:
+                    description: ServerKeyPath is the path to the server key file.
                     type: string
                 type: object
               volume:

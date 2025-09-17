@@ -21,6 +21,8 @@ limitations under the License.
 package states
 
 import (
+	"errors"
+
 	"reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/controllers/states/statefulset"
 )
@@ -94,4 +96,16 @@ func (r *ResourcesStates) loadServicesStates() (err error) {
 func (r *ResourcesStates) loadBackUpStates() (err error) {
 	r.BackUp, err = loadBackUpStates(r.kubegresContext)
 	return err
+}
+
+func (r *ResourcesStates) PrimaryConnectionDetails() (svcName string, port int32, err error) {
+	if !r.Services.Primary.IsDeployed {
+		return "", 0, errors.New("primary service is not deployed")
+	}
+	if !r.StatefulSets.Primary.IsDeployed || !r.StatefulSets.Primary.IsReady {
+		return "", 0, errors.New("primary statefulset is not deployed or not ready")
+	}
+	svcName = r.Services.Primary.Name
+	port = r.Services.Primary.Service.Spec.Ports[0].Port
+	return svcName, port, nil
 }

@@ -30,6 +30,8 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 	"reactive-tech.io/kubegres/controllers"
+	"reactive-tech.io/kubegres/controllers/connection"
+	"reactive-tech.io/kubegres/internal/sql"
 	"reactive-tech.io/kubegres/test/util"
 	"reactive-tech.io/kubegres/test/util/kindcluster"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -55,6 +57,8 @@ var kindCluster kindcluster.KindTestClusterUtil
 var k8sClientTest client.Client
 var testEnv *envtest.Environment
 var eventRecorderTest util.MockEventRecorderTestUtil
+
+const TestClusterName = "testcluster"
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -87,7 +91,7 @@ var _ = BeforeSuite(func() {
 
 	// +kubebuilder:scaffold:scheme
 
-	k8sClientTest, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
+	k8sClientTest, err = client.NewWithWatch(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).ToNot(HaveOccurred())
 	Expect(k8sClientTest).ToNot(BeNil())
 
@@ -96,15 +100,26 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).ToNot(HaveOccurred())
 
-	mockLogger := util.CreateMockLogger()
 	eventRecorderTest = util.MockEventRecorderTestUtil{}
 
+	connectionStore := sql.NewConnectionStore()
+
 	err = (&controllers.KubegresReconciler{
-		Client:   k8sManager.GetClient(),
-		Logger:   mockLogger,
-		Scheme:   k8sManager.GetScheme(),
-		Recorder: record.EventRecorder(&eventRecorderTest),
+		Client:          k8sManager.GetClient(),
+		Logger:          util.CreateMockLogger().WithName("kubegres-reconciler"),
+		Scheme:          k8sManager.GetScheme(),
+		Recorder:        record.EventRecorder(&eventRecorderTest),
+		ConnectionStore: connectionStore,
+		ClusterName:     TestClusterName,
 	}).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred())
+
+	err = connection.NewDBConnectionReconciler(
+		k8sManager.GetClient(),
+		util.CreateMockLogger().WithName("db-conn-reconciler"),
+		connectionStore,
+		record.EventRecorder(&eventRecorderTest),
+	).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
 	go func() {
@@ -117,7 +132,6 @@ var _ = BeforeSuite(func() {
 
 	log.Println("Waiting for Kubernetes to start")
 
-	k8sClientTest = k8sManager.GetClient()
 	Expect(k8sClientTest).ToNot(BeNil())
 
 	// Wait for Kubernetes envtest to start

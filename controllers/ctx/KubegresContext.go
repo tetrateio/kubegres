@@ -24,19 +24,23 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx/log"
 	"reactive-tech.io/kubegres/controllers/ctx/status"
+	"reactive-tech.io/kubegres/internal/sql"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type KubegresContext struct {
-	Kubegres *v1.Kubegres
-	Status   *status.KubegresStatusWrapper
-	Ctx      context.Context
-	Log      log.LogWrapper
-	Client   client.Client
+	Kubegres        *v1.Kubegres
+	Status          *status.KubegresStatusWrapper
+	Ctx             context.Context
+	Log             log.LogWrapper
+	Client          client.Client
+	ConnectionStore *sql.ConnectionStore
 }
 
 const (
@@ -55,6 +59,12 @@ const (
 	EnvVarNamePgData                       = "PGDATA"
 	EnvVarNameOfPostgresSuperUserPsw       = "POSTGRES_PASSWORD"
 	EnvVarNameOfPostgresReplicationUserPsw = "POSTGRES_REPLICATION_PASSWORD"
+	EnvVarReplicationSlotName              = "POSTGRES_REPLICATION_SLOT"
+)
+
+var (
+	DefaultReplicationSlotsInactiveSlotGracePeriod = metav1.Duration{Duration: 10 * time.Minute}
+	DefaultReplicationSlotsHealthCheckInterval     = metav1.Duration{Duration: 30 * time.Second}
 )
 
 func (r *KubegresContext) GetServiceResourceName(isPrimary bool) string {
@@ -73,4 +83,27 @@ func (r *KubegresContext) IsReservedVolumeName(volumeName string) bool {
 		volumeName == BaseConfigMapVolumeName ||
 		volumeName == CustomConfigMapVolumeName ||
 		strings.Contains(volumeName, "kube-api")
+}
+
+func (r *KubegresContext) GetSQLConnection() (sql.ConnectionSupplier, bool) {
+	if r.ConnectionStore == nil {
+		r.Log.Error(nil, "Cannot get an SQL connection from the store")
+		return nil, false
+	}
+
+	return r.ConnectionStore.Get(sql.ConnectionID{Name: r.Kubegres.Name, Namespace: r.Kubegres.Namespace})
+}
+
+type ClusterRole string
+
+const (
+	ActiveRoleName  ClusterRole = "active"
+	StandbyRoleName ClusterRole = "standby"
+)
+
+func (r *KubegresContext) ClusterRole() ClusterRole {
+	if r.Kubegres.Spec.Standby.Enabled {
+		return StandbyRoleName
+	}
+	return ActiveRoleName
 }

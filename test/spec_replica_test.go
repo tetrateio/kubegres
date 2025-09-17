@@ -21,8 +21,12 @@ limitations under the License.
 package test
 
 import (
+	"fmt"
 	"log"
 	"reflect"
+	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -31,6 +35,8 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
+	"reactive-tech.io/kubegres/controllers/ctx"
+	"reactive-tech.io/kubegres/internal/replicationslot"
 	"reactive-tech.io/kubegres/test/resourceConfigs"
 	"reactive-tech.io/kubegres/test/util"
 	"reactive-tech.io/kubegres/test/util/testcases"
@@ -67,7 +73,7 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), func() {
 
 			test.whenKubegresIsCreated()
 
-			test.thenErrorEventShouldBeLogged()
+			test.thenErrorEventShouldBeLogged(specReplicaUndefinedMsg)
 
 			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'replica' set to nil'")
 		})
@@ -83,7 +89,7 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), func() {
 
 			test.whenKubegresIsCreated()
 
-			test.thenErrorEventShouldBeLogged()
+			test.thenErrorEventShouldBeLogged(specReplicaUndefinedMsg)
 
 			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'replica' set to 0'")
 		})
@@ -104,6 +110,122 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("group:5"), func() {
 			test.thenDeployedKubegresSpecShouldBeSetTo(1)
 
 			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+
+			Expect(test.dbQueryTestCases.GetReplicationSlots()).Should(BeEmpty())
+
+			test.keepCreatedResourcesForNextTest = true
+		})
+
+		It("THEN 1 primary and 1 replica should be created", func() {
+
+			test.givenExistingKubegresSpecIsSetTo(2)
+
+			test.whenKubernetesIsUpdated()
+
+			test.thenPodsStatesShouldBe(1, 1)
+
+			test.thenDeployedKubegresSpecShouldBeSetTo(2)
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
+
+			Expect(test.dbQueryTestCases.GetReplicationSlots()).Should(BeEmpty())
+
+			test.keepCreatedResourcesForNextTest = true
+		})
+
+		It("THEN existing Kubegres is updated with wrong replicationSlots settings", func() {
+			kubegres, err := test.resourceRetriever.GetKubegres()
+			Expect(err).ToNot(HaveOccurred())
+
+			dbSize := resource.MustParse(kubegres.Spec.Database.Size)
+			a1Gi := resource.MustParse("1Gi")
+			a1Gi.Add(dbSize)
+			invalidSize := a1Gi // 1Gi + DB size > DB Size - invalid config
+
+			test.givenExistingKubegresReplicationSlotsIsSetTo(postgresv1.ReplicationSlots{
+				Enabled:        true,
+				MaxWalKeepSize: invalidSize,
+			})
+
+			test.whenKubernetesIsUpdated()
+
+			test.thenErrorEventShouldBeLogged(fmt.Sprintf("In the Resources Spec the value of 'spec.replicationSlots.maxWalKeepSize' (%s) must be less than 'spec.database.size' (%s).",
+				a1Gi.String(), dbSize.String()))
+
+			test.thenPodsStatesShouldBe(1, 1)
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
+
+			Expect(test.dbQueryTestCases.GetReplicationSlots()).Should(BeEmpty())
+
+			test.keepCreatedResourcesForNextTest = true
+		})
+
+		It("THEN existing Kubegres is updated with replicationSlots enabled and default values", func() {
+			test.givenExistingKubegresReplicationSlotsIsSetTo(postgresv1.ReplicationSlots{
+				Enabled: true,
+			})
+			test.whenKubernetesIsUpdated()
+
+			test.thenReplicationSlotsShouldHaveDefaultSettingsWith()
+
+			test.thenPodsStatesShouldBe(1, 1)
+			test.thenReplicationSlotShouldBeActive()
+			test.thenRunningIndexesShouldBe([]int{1, 3})
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
+
+			test.keepCreatedResourcesForNextTest = true
+		})
+
+		It("THEN existing Kubegres is updated with replicationSlots enabled decreased to 0 replicas", func() {
+
+			test.givenExistingKubegresSpecIsSetTo(1)
+
+			test.whenKubernetesIsUpdated()
+
+			test.thenPodsStatesShouldBe(1, 0)
+
+			test.thenReplicationSlotsShouldBeCleanedUp()
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+
+			test.keepCreatedResourcesForNextTest = true
+		})
+
+		It("THEN existing Kubegres is updated back to settings with 1 replicas", func() {
+			test.givenExistingKubegresSpecIsSetTo(2)
+
+			test.whenKubernetesIsUpdated()
+
+			test.thenPodsStatesShouldBe(1, 1)
+			test.thenRunningIndexesShouldBe([]int{1, 4})
+
+			test.thenReplicationSlotShouldBeActive()
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
+
+			test.keepCreatedResourcesForNextTest = true
+		})
+
+		It("THEN existing Kubegres is updated with replicationSlots disabled", func() {
+			test.givenExistingKubegresReplicationSlotsIsSetTo(postgresv1.ReplicationSlots{
+				Enabled: false,
+			})
+
+			test.whenKubernetesIsUpdated()
+
+			test.thenReplicationSlotsShouldBeCleanedUp()
+
+			test.thenPodsStatesShouldBe(1, 1)
+			test.thenRunningIndexesShouldBe([]int{1, 5})
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
 
 			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec 'replica' set to 1'")
 		})
@@ -307,11 +429,13 @@ func (r *SpecReplicaTest) whenKubernetesIsUpdated() {
 	r.resourceCreator.UpdateResource(r.kubegresResource, "Kubegres")
 }
 
-func (r *SpecReplicaTest) thenErrorEventShouldBeLogged() {
+const specReplicaUndefinedMsg = "In the Resources Spec the value of 'spec.replicas' is undefined. Please set a value otherwise this operator cannot work correctly."
+
+func (r *SpecReplicaTest) thenErrorEventShouldBeLogged(msg string) {
 	expectedErrorEvent := util.EventRecord{
 		Eventtype: corev1.EventTypeWarning,
 		Reason:    "SpecCheckErr",
-		Message:   "In the Resources Spec the value of 'spec.replicas' is undefined. Please set a value otherwise this operator cannot work correctly.",
+		Message:   msg,
 	}
 	Eventually(func() bool {
 		_, err := r.resourceRetriever.GetKubegres()
@@ -340,6 +464,19 @@ func (r *SpecReplicaTest) thenPodsStatesShouldBe(nbrePrimary, nbreReplicas int) 
 			log.Println("Deployed and Ready StatefulSets check successful")
 			return true
 		}
+
+		log.Println(
+			"Deployed and Ready StatefulSets check failed. Expected: nbrePrimary=",
+			nbrePrimary,
+			" nbreReplicas=",
+			nbreReplicas,
+			". Got: nbrePrimary=",
+			pods.NbreDeployedPrimary,
+			" nbreReplicas=",
+			pods.NbreDeployedReplicas,
+			" allPodsAreReady=",
+			pods.AreAllReady,
+		)
 
 		return false
 
@@ -399,4 +536,145 @@ func (r *SpecReplicaTest) givenExistingKubegresSpecResourcesIsSetTo(resources co
 	}
 
 	r.kubegresResource.Spec.Resources = resources
+}
+
+func (r *SpecReplicaTest) givenExistingKubegresReplicationSlotsIsSetTo(slots postgresv1.ReplicationSlots) {
+	var err error
+	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
+
+	if err != nil {
+		log.Println("Error while getting Kubegres resource : ", err)
+		Expect(err).Should(Succeed())
+		return
+	}
+
+	r.kubegresResource.Spec.ReplicationSlots = slots
+}
+
+func (r *SpecReplicaTest) thenReplicationSlotsShouldHaveDefaultSettingsWith() {
+
+	Eventually(func() bool {
+		kubegres, err := r.resourceRetriever.GetKubegres()
+		if err != nil {
+			log.Println("Error while retrieving Kubegres resource: ", err)
+			return false
+		}
+
+		if kubegres.Spec.ReplicationSlots.Enabled &&
+			kubegres.Spec.ReplicationSlots.MaxWalKeepSize.IsZero() &&
+			kubegres.Spec.ReplicationSlots.HealthCheckInterval == ctx.DefaultReplicationSlotsHealthCheckInterval &&
+			kubegres.Spec.ReplicationSlots.InactiveSlotGracePeriod == ctx.DefaultReplicationSlotsInactiveSlotGracePeriod {
+
+			return true
+		}
+		log.Printf("Replication slots settings do not match. Expected: Enabled=%v, MaxWalKeepSize=%s, HealthCheckInterval=%s, InactiveSlotGracePeriod=%s. Got: ReplicationSlots: %v",
+			true, "", "30s", "2m", kubegres.Spec.ReplicationSlots)
+
+		return false
+
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+
+}
+
+func (r *SpecReplicaTest) thenReplicationSlotShouldBe(slot replicationslot.ReplicationSlot) {
+
+	Eventually(func() bool {
+		replicationSlots := r.dbQueryTestCases.GetReplicationSlots()
+		if len(replicationSlots) == 0 {
+			log.Println("No replication slots found")
+			return false
+		}
+
+		for _, replicationSlot := range replicationSlots {
+			if reflect.DeepEqual(replicationSlot, slot) {
+				return true
+			}
+		}
+
+		log.Printf("Replication slot %v not found, got: %v", slot, replicationSlots)
+		return false
+
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+
+}
+
+func (r *SpecReplicaTest) thenReplicationSlotShouldBeActive() {
+
+	var kubegresName, replicaActiveName string
+	Eventually(func() bool {
+		kubegres, err := r.resourceRetriever.GetKubegres()
+		if err != nil {
+			log.Println("Error while retrieving Kubegres resource: ", err)
+			return false
+		}
+		kubegresName = kubegres.GetName()
+
+		resources, err := r.resourceRetriever.GetKubegresResources()
+		if err != nil {
+			log.Println("Error while retrieving Kubegres resources: ", err)
+			return false
+		}
+
+		idx := slices.IndexFunc(resources.Resources, func(kr util.TestKubegresResource) bool {
+			return kr.IsReady && !kr.IsPrimary
+		})
+		if idx == -1 {
+			log.Println("No active replica found")
+			return false
+		}
+		replicaActiveName = resources.Resources[idx].StatefulSet.Resource.GetName()
+		log.Printf("Active replica found: %s", replicaActiveName)
+		return true
+
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+
+	r.thenReplicationSlotShouldBe(replicationslot.ReplicationSlot{
+		Name:   strings.ReplaceAll(fmt.Sprintf("%s_%s_%s_%s", kubegresName, TestClusterName, "active", replicaActiveName), "-", "_"),
+		Active: true,
+	})
+
+}
+
+func (r *SpecReplicaTest) thenReplicationSlotsShouldBeCleanedUp() {
+	Eventually(func() bool {
+		for _, slot := range r.dbQueryTestCases.GetReplicationSlots() {
+			if slot.Active {
+				log.Printf("replication slot should NOT be active: %v", slot)
+				return false
+			}
+		}
+		return true
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+}
+
+func (r *SpecReplicaTest) thenRunningIndexesShouldBe(wantIndexes []int) {
+	Eventually(func() bool {
+		resources, err := r.resourceRetriever.GetKubegresResources()
+		if err != nil {
+			log.Println("Error while retrieving Kubegres resources: ", err)
+			return false
+		}
+		if len(resources.Resources) != len(wantIndexes) {
+			log.Printf("Expected %d resources, got %d", len(wantIndexes), len(resources.Resources))
+			return false
+		}
+		for _, kubegresResource := range resources.Resources {
+			index, found := kubegresResource.StatefulSet.Metadata.GetLabels()["index"]
+			if !found {
+				log.Printf("No index label found for resource %s", kubegresResource.StatefulSet.Resource.GetName())
+				return false
+			}
+			indexInt, err := strconv.Atoi(index)
+			if err != nil {
+				log.Printf("Error converting index label to int for resource %s: %v", kubegresResource.StatefulSet.Resource.GetName(), err)
+				return false
+			}
+			if !slices.Contains(wantIndexes, indexInt) {
+				log.Printf("Index %d not found in expected indexes %v for resource %s", indexInt, wantIndexes, kubegresResource.StatefulSet.Resource.GetName())
+				return false
+			}
+			log.Printf("Resource %s has expected index %d", kubegresResource.StatefulSet.Resource.GetName(), indexInt)
+		}
+		return true
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
 }

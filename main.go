@@ -25,7 +25,9 @@ import (
 	"os"
 
 	"go.uber.org/zap/zapcore"
+	"reactive-tech.io/kubegres/controllers/connection"
 	ctx2 "reactive-tech.io/kubegres/controllers/ctx"
+	"reactive-tech.io/kubegres/internal/sql"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -58,11 +60,15 @@ func init() {
 }
 
 func main() {
-	var metricsAddr string
+	var (
+		metricsAddr string
+		probeAddr   string
+		clusterName string
+	)
 	var enableLeaderElection bool
-	var probeAddr string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flag.StringVar(&clusterName, "k8s-cluster-name", "kubegres", "The name of the K8s cluster. This is used to identify the cluster in case of multi-cluster deployments.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -99,28 +105,44 @@ func main() {
 		os.Exit(1)
 	}
 
+	connectionStore := sql.NewConnectionStore()
+
+	eventRecorder := mgr.GetEventRecorderFor("Kubegres-controller")
 	if err = (&controllers.KubegresReconciler{
-		Client:   mgr.GetClient(),
-		Logger:   ctrl.Log.WithName("controllers").WithName(ctx2.KindKubegres),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("Kubegres-controller"),
+		Client:          mgr.GetClient(),
+		Logger:          ctrl.Log.WithName("controllers").WithName(ctx2.KindKubegres),
+		Scheme:          mgr.GetScheme(),
+		Recorder:        eventRecorder,
+		ConnectionStore: connectionStore,
+		ClusterName:     clusterName,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", ctx2.KindKubegres)
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
 
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+	if err = mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+	if err = mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
 
+	if err = connection.NewDBConnectionReconciler(
+		mgr.GetClient(),
+		ctrl.Log.WithName("controllers"),
+		connectionStore,
+		eventRecorder,
+	).
+		SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to add DBConnectionReconciler")
+		os.Exit(1)
+	}
+
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err = mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}

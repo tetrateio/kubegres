@@ -22,6 +22,7 @@ package resources
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	"k8s.io/client-go/tools/record"
@@ -40,6 +41,7 @@ import (
 	"reactive-tech.io/kubegres/controllers/spec/template"
 	"reactive-tech.io/kubegres/controllers/states"
 	log2 "reactive-tech.io/kubegres/controllers/states/log"
+	"reactive-tech.io/kubegres/internal/sql"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -69,11 +71,15 @@ type ResourcesContext struct {
 	BackUpCronJobCountSpecEnforcer resources_count_spec.BackUpCronJobCountSpecEnforcer
 }
 
-func CreateResourcesContext(kubegres *postgresV1.Kubegres,
+func CreateResourcesContext(
+	kubegres *postgresV1.Kubegres,
 	ctx context.Context,
 	logger logr.Logger,
 	client client.Client,
-	recorder record.EventRecorder) (rc *ResourcesContext, err error) {
+	recorder record.EventRecorder,
+	connectionStore *sql.ConnectionStore,
+	clusterName string,
+) (rc *ResourcesContext, err error) {
 
 	setReplicaFieldToZeroIfNil(kubegres)
 
@@ -92,11 +98,12 @@ func CreateResourcesContext(kubegres *postgresV1.Kubegres,
 	}
 
 	rc.KubegresContext = ctx2.KubegresContext{
-		Kubegres: kubegres,
-		Status:   rc.KubegresStatusWrapper,
-		Ctx:      ctx,
-		Log:      rc.LogWrapper,
-		Client:   client,
+		Kubegres:        kubegres,
+		Status:          rc.KubegresStatusWrapper,
+		Ctx:             ctx,
+		Log:             rc.LogWrapper,
+		Client:          client,
+		ConnectionStore: connectionStore,
 	}
 
 	rc.DefaultStorageClass = defaultspec.CreateDefaultStorageClass(rc.KubegresContext)
@@ -121,7 +128,10 @@ func CreateResourcesContext(kubegres *postgresV1.Kubegres,
 	resourceTemplateLoader := template.ResourceTemplateLoader{}
 	rc.ResourcesCreatorFromTemplate = template.CreateResourcesCreatorFromTemplate(rc.KubegresContext, rc.CustomConfigSpecHelper, resourceTemplateLoader)
 
-	addResourcesCountSpecEnforcers(rc)
+	err = addResourcesCountSpecEnforcers(rc, clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("add resources count spec enforcers: %w", err)
+	}
 	addStatefulSetSpecEnforcers(rc)
 	addBlockingOperationConfigs(rc)
 
@@ -137,11 +147,21 @@ func setReplicaFieldToZeroIfNil(kubegres *postgresV1.Kubegres) {
 	kubegres.Spec.Replicas = &replica
 }
 
-func addResourcesCountSpecEnforcers(rc *ResourcesContext) {
+func addResourcesCountSpecEnforcers(rc *ResourcesContext, clusterName string) error {
+	replicaDbCountSpecEnforcer, err := statefulset.CreateReplicaDbCountSpecEnforcer(
+		rc.KubegresContext,
+		rc.ResourcesStates,
+		rc.ResourcesCreatorFromTemplate,
+		rc.BlockingOperation,
+		clusterName,
+	)
+	if err != nil {
+		return fmt.Errorf("create replica db count spec enforcer: %w", err)
+	}
 
 	rc.PrimaryToReplicaFailOver = failover.CreatePrimaryToReplicaFailOver(rc.KubegresContext, rc.ResourcesStates, rc.BlockingOperation)
 	rc.PrimaryDbCountSpecEnforcer = statefulset.CreatePrimaryDbCountSpecEnforcer(rc.KubegresContext, rc.ResourcesStates, rc.ResourcesCreatorFromTemplate, rc.BlockingOperation, rc.PrimaryToReplicaFailOver)
-	rc.ReplicaDbCountSpecEnforcer = statefulset.CreateReplicaDbCountSpecEnforcer(rc.KubegresContext, rc.ResourcesStates, rc.ResourcesCreatorFromTemplate, rc.BlockingOperation)
+	rc.ReplicaDbCountSpecEnforcer = replicaDbCountSpecEnforcer
 	rc.StatefulSetCountSpecEnforcer = resources_count_spec.CreateStatefulSetCountSpecEnforcer(rc.PrimaryDbCountSpecEnforcer, rc.ReplicaDbCountSpecEnforcer)
 
 	rc.BaseConfigMapCountSpecEnforcer = resources_count_spec.CreateBaseConfigMapCountSpecEnforcer(rc.KubegresContext, rc.ResourcesStates, rc.ResourcesCreatorFromTemplate, rc.BlockingOperation)
@@ -153,6 +173,7 @@ func addResourcesCountSpecEnforcers(rc *ResourcesContext) {
 	rc.ResourcesCountSpecEnforcer.AddSpecEnforcer(&rc.StatefulSetCountSpecEnforcer)
 	rc.ResourcesCountSpecEnforcer.AddSpecEnforcer(&rc.ServicesCountSpecEnforcer)
 	rc.ResourcesCountSpecEnforcer.AddSpecEnforcer(&rc.BackUpCronJobCountSpecEnforcer)
+	return nil
 }
 
 func addStatefulSetSpecEnforcers(rc *ResourcesContext) {

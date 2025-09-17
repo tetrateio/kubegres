@@ -22,6 +22,7 @@ package v1
 
 import (
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -65,6 +66,50 @@ type Probe struct {
 	ReadinessProbe *v1.Probe `json:"readinessProbe,omitempty"`
 }
 
+type ReplicationSlots struct {
+	// Enabled indicates whether the replication slots feature is activated.
+	Enabled bool `json:"enabled,omitempty"`
+	// DisableCleanup, when set to true, prevents automatic cleanup of inactive replication slots.
+	// This can be useful in scenarios where you want to retain replication slots for manual management or specific use cases.
+	// By default, this is set to false, allowing the system to clean up inactive slots based on the defined grace period.
+	DisableCleanup bool `json:"disableCleanup,omitempty"`
+	// +kubebuilder:validation:Optional
+	// MaxWalKeepSize defines the maximum size of WAL files to retain for replication slots.
+	// This helps manage disk space usage by limiting the amount of WAL data kept for replication.
+	// The value should be specified in a format like "1Gi", "500Mi", etc.
+	// If not set, the limit is not enforced.
+	MaxWalKeepSize resource.Quantity `json:"maxWalKeepSize,omitempty"`
+	// +kubebuilder:validation:Type:=string
+	// +kubebuilder:validation:Pattern:="^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+	// +kubebuilder:default:="10m"
+	// InactiveSlotGracePeriod defines how long a replication slot can remain inactive before it becomes eligible for cleanup.
+	// The value should be specified in the format: 30s, 1m, 5m, etc. Default is 10m.
+	InactiveSlotGracePeriod metav1.Duration `json:"inactiveSlotGracePeriod,omitempty"`
+	// +kubebuilder:validation:Type:=string
+	// +kubebuilder:validation:Pattern:="^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+	// +kubebuilder:default:="30s"
+	// HealthCheckInterval defines how often the health of replication slots is checked.
+	// The value should be specified in the format: 30s, 1m, 5m, etc. Default is 30s.
+	HealthCheckInterval metav1.Duration `json:"healthCheckInterval,omitempty"`
+}
+
+type TLS struct {
+	// SecretName is the name of the Kubernetes secret that contains the TLS certificates.
+	SecretName string `json:"secretName,omitempty"`
+	// RootCertPath is the path to the root certificate file.
+	RootCertPath string `json:"rootCert,omitempty"`
+	// ServerCertPath is the path to the server certificate file.
+	ServerCertPath string `json:"serverCert,omitempty"`
+	// ServerKeyPath is the path to the server key file.
+	ServerKeyPath string `json:"serverKey,omitempty"`
+	// ClientCertPath is the path to the client certificate file.
+	ClientCertPath string `json:"clientCert,omitempty"`
+	// ClientKeyPath is the path to the client key file.
+	ClientKeyPath string `json:"clientKey,omitempty"`
+	// SSLMode honors https://www.postgresql.org/docs/current/libpq-ssl.html#LIBPQ-SSL-PROTECTION.
+	SSLMode string `json:"mode,omitempty"`
+}
+
 type KubegresSpec struct {
 	Replicas           *int32                    `json:"replicas,omitempty"`
 	Image              string                    `json:"image,omitempty"`
@@ -77,12 +122,14 @@ type KubegresSpec struct {
 	Env                []v1.EnvVar               `json:"env,omitempty"`
 	Scheduler          KubegresScheduler         `json:"scheduler,omitempty"`
 	Resources          v1.ResourceRequirements   `json:"resources,omitempty"`
+	ReplicationSlots   ReplicationSlots          `json:"replicationSlots,omitempty"`
 	Volume             Volume                    `json:"volume,omitempty"`
 	SecurityContext    *v1.PodSecurityContext    `json:"securityContext,omitempty"`
 	Probe              Probe                     `json:"probe,omitempty"`
 	ServiceAccountName string                    `json:"serviceAccountName,omitempty"`
 	Standby            Standby                   `json:"standby,omitempty"`
 	SidecarContainers  []v1.Container            `json:"sidecarContainers,omitempty"`
+	TLS                TLS                       `json:"tls,omitempty"`
 }
 
 type Standby struct {

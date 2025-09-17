@@ -21,10 +21,11 @@ limitations under the License.
 package defaultspec
 
 import (
+	"strconv"
+
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
-	"strconv"
 )
 
 type UndefinedSpecValuesChecker struct {
@@ -80,6 +81,20 @@ func (r *UndefinedSpecValuesChecker) apply() error {
 		kubegresSpec.Scheduler.Affinity = r.createDefaultAffinity()
 		wasSpecChanged = true
 		r.createLog("spec.Affinity", kubegresSpec.Scheduler.Affinity.String())
+	}
+
+	if kubegresSpec.ReplicationSlots.Enabled {
+		if kubegresSpec.ReplicationSlots.InactiveSlotGracePeriod.Nanoseconds() == 0 {
+			kubegresSpec.ReplicationSlots.InactiveSlotGracePeriod = ctx.DefaultReplicationSlotsInactiveSlotGracePeriod
+			wasSpecChanged = true
+			r.createLog("spec.replicationSlots.inactiveSlotGracePeriod", kubegresSpec.ReplicationSlots.InactiveSlotGracePeriod.String())
+		}
+
+		if kubegresSpec.ReplicationSlots.HealthCheckInterval.Nanoseconds() == 0 {
+			kubegresSpec.ReplicationSlots.HealthCheckInterval = ctx.DefaultReplicationSlotsHealthCheckInterval
+			wasSpecChanged = true
+			r.createLog("spec.replicationSlots.healthCheckInterval", kubegresSpec.ReplicationSlots.HealthCheckInterval.String())
+		}
 	}
 
 	if wasSpecChanged {

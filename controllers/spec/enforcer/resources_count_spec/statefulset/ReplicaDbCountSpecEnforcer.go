@@ -22,35 +22,164 @@ package statefulset
 
 import (
 	"errors"
+	"fmt"
+	"regexp"
 	"strconv"
+	"strings"
+	"time"
 
 	v1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/util/retry"
 	postgresV1 "reactive-tech.io/kubegres/api/v1"
-	"reactive-tech.io/kubegres/controllers/ctx"
+	kubegresCtx "reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/controllers/operation"
 	"reactive-tech.io/kubegres/controllers/spec/template"
 	"reactive-tech.io/kubegres/controllers/states"
 	"reactive-tech.io/kubegres/controllers/states/statefulset"
+	replicationSlotRepo "reactive-tech.io/kubegres/internal/replicationslot/repo"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type ReplicaDbCountSpecEnforcer struct {
-	kubegresContext   ctx.KubegresContext
-	resourcesStates   states.ResourcesStates
-	resourcesCreator  template.ResourcesCreatorFromTemplate
-	blockingOperation *operation.BlockingOperation
+	kubegresContext               kubegresCtx.KubegresContext
+	resourcesStates               states.ResourcesStates
+	resourcesCreator              template.ResourcesCreatorFromTemplate
+	blockingOperation             *operation.BlockingOperation
+	replicationSlotsCreateDeleter replicationSlotsCreateDeleter
 }
 
+type replicationSlotsCreateDeleter interface {
+	Create(*v1.StatefulSet) (*v1.StatefulSet, error)
+	Delete(*v1.StatefulSet) error
+}
+
+type noopReplicationSlotsCreateDeleter struct{}
+
+func (n noopReplicationSlotsCreateDeleter) Create(ss *v1.StatefulSet) (*v1.StatefulSet, error) {
+	return ss, nil
+}
+func (n noopReplicationSlotsCreateDeleter) Delete(*v1.StatefulSet) error { return nil }
+
 func CreateReplicaDbCountSpecEnforcer(
-	kubegresContext ctx.KubegresContext,
+	kubegresContext kubegresCtx.KubegresContext,
 	resourcesStates states.ResourcesStates,
 	resourcesCreator template.ResourcesCreatorFromTemplate,
-	blockingOperation *operation.BlockingOperation) ReplicaDbCountSpecEnforcer {
+	blockingOperation *operation.BlockingOperation,
+	clusterName string,
+) (ReplicaDbCountSpecEnforcer, error) {
 
-	return ReplicaDbCountSpecEnforcer{
-		kubegresContext:   kubegresContext,
-		resourcesStates:   resourcesStates,
-		resourcesCreator:  resourcesCreator,
-		blockingOperation: blockingOperation,
+	enforcer := ReplicaDbCountSpecEnforcer{
+		kubegresContext:               kubegresContext,
+		resourcesStates:               resourcesStates,
+		resourcesCreator:              resourcesCreator,
+		blockingOperation:             blockingOperation,
+		replicationSlotsCreateDeleter: noopReplicationSlotsCreateDeleter{},
+	}
+
+	// TODO(piotrkpc): should this be here ? not testable code really
+	if kubegresContext.Kubegres.Spec.ReplicationSlots.Enabled {
+		sqlConn, ok := kubegresContext.GetSQLConnection()
+		if !ok {
+			return ReplicaDbCountSpecEnforcer{}, errors.New("get SQL connection from kubegresContext")
+		}
+		enforcer.replicationSlotsCreateDeleter = newSimpleReplicationSlotsCreateDeleter(
+			kubegresContext,
+			resourcesStates,
+			replicationSlotRepo.New(sqlConn.DB()),
+			clusterName,
+		)
+	}
+
+	return enforcer, nil
+}
+
+type simpleReplicationSlotCreateDeleter struct {
+	repo            replicationSlotRepo.Repository
+	states          states.ResourcesStates
+	kubegresContext kubegresCtx.KubegresContext
+	clusterName     string
+}
+
+func (r *simpleReplicationSlotCreateDeleter) Create(statefulSet *v1.StatefulSet) (*v1.StatefulSet, error) {
+	replicationSlotName, err := buildReplicationSlotName(r.kubegresContext.Kubegres.GetName(), r.clusterName, statefulSet.GetName(), r.kubegresContext.ClusterRole())
+	objKey := ctrlclient.ObjectKeyFromObject(statefulSet)
+	if err != nil {
+		r.kubegresContext.Log.ErrorEvent("ReplicationSlotCreate", fmt.Errorf("replication slot name: %v: %w", objKey, err), "Failed to create replication slot name")
+		return nil, err
+	}
+	slot, err := r.repo.CreateSlot(r.kubegresContext.Ctx, replicationSlotName)
+	if err != nil {
+		r.kubegresContext.Log.ErrorEvent("ReplicationSlotCreate", fmt.Errorf("replication slot: %v for statefulSet: %v: %w", slot, objKey, err), "Failed to create replication slot")
+		return nil, err
+	}
+
+	ss := statefulSet.DeepCopy()
+	for i, container := range ss.Spec.Template.Spec.Containers {
+		ss.Spec.Template.Spec.Containers[i].Env = append(container.Env, corev1.EnvVar{
+			Name:  kubegresCtx.EnvVarReplicationSlotName,
+			Value: slot.Name,
+		})
+	}
+	for i, container := range ss.Spec.Template.Spec.InitContainers {
+		ss.Spec.Template.Spec.InitContainers[i].Env = append(container.Env, corev1.EnvVar{
+			Name:  kubegresCtx.EnvVarReplicationSlotName,
+			Value: slot.Name,
+		})
+	}
+	return ss, nil
+}
+
+func buildReplicationSlotName(kubegresName, clusterName, statefulSetName string, role kubegresCtx.ClusterRole) (string, error) {
+	// if any of this are empty, we cannot create a valid replication slot name
+	if kubegresName == "" || statefulSetName == "" || role == "" {
+		return "", fmt.Errorf("replication slot name cannot be created for statefulSet '%s' because it has empty 'name', 'role' or label", statefulSetName)
+	}
+
+	replicationSlotName := fmt.Sprintf("%s_%s_%s_%s", kubegresName, clusterName, role, statefulSetName)
+	replicationSlotName = strings.ReplaceAll(replicationSlotName, "-", "_") // Replace dashes with underscores to ensure compatibility with PostgreSQL slot names.
+
+	// Validate that the generated name contains only allowed characters.
+	// This is a safeguard against any other unexpected characters in the components.
+	validSlotNameRegex := regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
+	if !validSlotNameRegex.MatchString(replicationSlotName) {
+		return "", fmt.Errorf("generated replication slot name '%s' contains invalid characters (allowed: letters, numbers, underscore)", replicationSlotName)
+	}
+
+	//Note: PostgreSQL identifiers are also typically limited to 63 characters.
+	if len(replicationSlotName) > 63 {
+		return "", fmt.Errorf("generated replication slot name '%s' is longer than the 63-character limit", replicationSlotName)
+	}
+
+	return replicationSlotName, nil
+}
+
+func (r *simpleReplicationSlotCreateDeleter) Delete(statefulSet *v1.StatefulSet) error {
+	replicationSlotName, err := buildReplicationSlotName(r.kubegresContext.Kubegres.GetName(), r.clusterName, statefulSet.GetName(), r.kubegresContext.ClusterRole())
+	objKey := ctrlclient.ObjectKeyFromObject(statefulSet)
+	if err != nil {
+		r.kubegresContext.Log.ErrorEvent("ReplicationSlotDelete", fmt.Errorf("replication slot name: %v: %w", objKey, err), "Failed to create replication slot name")
+		return err
+	}
+	err = r.repo.DeleteSlot(r.kubegresContext.Ctx, replicationSlotName)
+	if err != nil {
+		if errors.Is(err, replicationSlotRepo.ErrDoesNotExist) {
+			r.kubegresContext.Log.InfoEvent("ReplicationSlotDelete", fmt.Sprintf("Replication slot '%s' for statefulSet '%s' does not exist, skipping deletion.", replicationSlotName, statefulSet.GetName()))
+			return nil // If the slot does not exist, we can safely ignore this error.
+		}
+		r.kubegresContext.Log.ErrorEvent("ReplicationSlotDelete", fmt.Errorf("replication slot: %v for statefulSet: %v: %w", replicationSlotName, objKey, err), "Failed to delete replication slot")
+		return err
+	}
+	return nil
+}
+
+func newSimpleReplicationSlotsCreateDeleter(kubegresContext kubegresCtx.KubegresContext, resourcesStates states.ResourcesStates, repository replicationSlotRepo.Repository, clusterName string) replicationSlotsCreateDeleter {
+	return &simpleReplicationSlotCreateDeleter{
+		repo:            repository,
+		states:          resourcesStates,
+		kubegresContext: kubegresContext,
+		clusterName:     clusterName,
 	}
 }
 
@@ -143,6 +272,14 @@ func (r *ReplicaDbCountSpecEnforcer) Enforce() error {
 		}
 	}
 
+	// Then undeploy replicas that don't match running configuration
+	replicationSlotDesired := r.replicationSlotsEnabled()
+	for _, deployedStatefulSet := range r.resourcesStates.StatefulSets.Replicas.All.GetAllReverseSortedByInstanceIndex() {
+		if r.hasReplicationSlotsEnabled(deployedStatefulSet) != replicationSlotDesired {
+			return r.undeployReplicaStatefulSets(deployedStatefulSet)
+		}
+	}
+
 	return nil
 }
 
@@ -159,7 +296,13 @@ func (r *ReplicaDbCountSpecEnforcer) getDeployedReplicas() []statefulset.Statefu
 }
 
 func (r *ReplicaDbCountSpecEnforcer) getNbreDeployedReplicas() int32 {
-	return r.resourcesStates.StatefulSets.Replicas.NbreDeployed
+	deployedReplicas := r.resourcesStates.StatefulSets.Replicas.NbreDeployed
+	for _, deployedReplica := range r.resourcesStates.StatefulSets.Replicas.All.GetAllReverseSortedByInstanceIndex() {
+		if r.hasReplicationSlotsEnabled(deployedReplica) != r.replicationSlotsEnabled() {
+			deployedReplicas--
+		}
+	}
+	return deployedReplicas
 }
 
 func (r *ReplicaDbCountSpecEnforcer) getExpectedNbreReplicasToDeploy() int32 {
@@ -276,10 +419,17 @@ func (r *ReplicaDbCountSpecEnforcer) deployReplicaStatefulSet() error {
 		return err
 	}
 
-	r.kubegresContext.Log.Info("Deploying Replica statefulSet '" + replicaStatefulSet.Name + "'")
-	err = r.kubegresContext.Client.Create(r.kubegresContext.Ctx, &replicaStatefulSet)
+	updatedStatefulSet, err := r.replicationSlotsCreateDeleter.Create(&replicaStatefulSet)
 	if err != nil {
-		r.kubegresContext.Log.ErrorEvent("ReplicaStatefulSetDeploymentErr", err, "Unable to deploy Replica StatefulSet.", "Replica name", replicaStatefulSet.Name)
+		r.kubegresContext.Log.ErrorEvent("ReplicaStatefulSetReplicationSlotCreationErr", err, "Error while creating replication slot for the Replica StatefulSet.", "Replica name", replicaStatefulSet.Name)
+		r.blockingOperation.RemoveActiveOperation()
+		return err
+	}
+
+	r.kubegresContext.Log.Info("Deploying Replica statefulSet '" + updatedStatefulSet.Name + "'")
+	err = r.kubegresContext.Client.Create(r.kubegresContext.Ctx, updatedStatefulSet)
+	if err != nil {
+		r.kubegresContext.Log.ErrorEvent("ReplicaStatefulSetDeploymentErr", err, "Unable to deploy Replica StatefulSet.", "Replica name", updatedStatefulSet.Name)
 		r.blockingOperation.RemoveActiveOperation()
 		return err
 	}
@@ -287,7 +437,7 @@ func (r *ReplicaDbCountSpecEnforcer) deployReplicaStatefulSet() error {
 	r.kubegresContext.Status.SetEnforcedReplicas(r.kubegresContext.Kubegres.Status.EnforcedReplicas + 1)
 
 	r.kubegresContext.Status.SetLastCreatedInstanceIndex(instanceIndex)
-	r.kubegresContext.Log.InfoEvent("ReplicaStatefulSetDeployment", "Deployed Replica StatefulSet.", "Replica name", replicaStatefulSet.Name)
+	r.kubegresContext.Log.InfoEvent("ReplicaStatefulSetDeployment", "Deployed Replica StatefulSet.", "Replica name", updatedStatefulSet.Name)
 	return nil
 }
 
@@ -321,6 +471,36 @@ func (r *ReplicaDbCountSpecEnforcer) undeployReplicaStatefulSets(replicaToUndepl
 	if err != nil {
 		r.blockingOperation.RemoveActiveOperation()
 		return err
+	}
+
+	// TODO(piotrkpc): a lot of magic numbers here. We should think how to make it better. Ideally we should not start a retry loop here
+	//   and rather we should return an error from a reconciler and relay on the controller-runtime to retry the reconciliation but the problem here
+	//   is that reconciliation is not really idempotent as it relies on the blocking operations in statuses.
+	//   We are doing this because we cannot delete active replication slots.
+	//   Another thing to consider is that should we use `SELECT pg_terminate_backend(<active_pid>);` to force termination of a backend process
+	//   and then delete the active replication slots?
+	//   Or should we fail here with a warning and relay on asynchronous cleanup loop to delete the replication slots?
+	//   Issue discussed in: https://github.com/tetrateio/tetrate/issues/26542
+	var attempt int
+	err = retry.OnError(wait.Backoff{
+		Duration: 3 * time.Second,
+		Factor:   2,
+		Steps:    10,
+		Cap:      12 * time.Second,
+	}, func(err error) bool {
+		if err == nil {
+			return false
+		}
+		r.kubegresContext.Log.ErrorEvent("ReplicaStatefulSetReplicationSlotDeletionErr", err, "Error while deleting replication slot for the Replica StatefulSet.", "Replica name", replicaToUndeploy.StatefulSet.Name, "Attempt", attempt)
+		return true
+	}, func() error {
+		attempt++
+		return r.replicationSlotsCreateDeleter.Delete(&replicaToUndeploy.StatefulSet)
+	})
+
+	if err != nil {
+		// exhausted all attempts to delete the replication slot
+		r.kubegresContext.Log.ErrorEvent("ReplicaStatefulSetReplicationSlotDeletionErr", err, "Failed to delete replication slot for the Replica StatefulSet after all attempts.", "Replica name", replicaToUndeploy.StatefulSet.Name, "Attempt", attempt)
 	}
 
 	r.kubegresContext.Status.SetEnforcedReplicas(r.kubegresContext.Kubegres.Status.EnforcedReplicas - 1)
@@ -364,4 +544,19 @@ func (r *ReplicaDbCountSpecEnforcer) logAutomaticFailoverIsDisabled() {
 			"However, a Replica failover cannot happen because the automatic failover feature is disabled in the YAML. "+
 			"To re-enable automatic failover, either set the field 'failover.isDisabled' to false "+
 			"or remove that field from the YAML.")
+}
+
+func (r *ReplicaDbCountSpecEnforcer) replicationSlotsEnabled() bool {
+	return r.kubegresContext.Kubegres.Spec.ReplicationSlots.Enabled
+}
+
+func (r *ReplicaDbCountSpecEnforcer) hasReplicationSlotsEnabled(statefulSet statefulset.StatefulSetWrapper) bool {
+	for _, container := range statefulSet.StatefulSet.Spec.Template.Spec.Containers {
+		for _, envVar := range container.Env {
+			if envVar.Name == kubegresCtx.EnvVarReplicationSlotName && envVar.Value != "" {
+				return true
+			}
+		}
+	}
+	return false
 }
