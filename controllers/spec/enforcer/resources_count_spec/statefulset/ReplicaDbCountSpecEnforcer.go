@@ -582,10 +582,12 @@ func (r *ReplicaDbCountSpecEnforcer) hasReplicationSlotsEnabled(statefulSet stat
 	for _, container := range statefulSet.StatefulSet.Spec.Template.Spec.Containers {
 		for _, envVar := range container.Env {
 			if envVar.Name == kubegresCtx.EnvVarReplicationSlotName && envVar.Value != "" {
-				// we also need to check if the replication slot actually exist in the database
-				// if it does not exist, we should treat it as if replication slots are not enabled.
+				// Also check if the replication slot actually exist in the database.
+				// If it does not, treat it as if replication slots are not enabled, so we'll trigger a rollout of the 
+				// current replica.
 				// This could happen after a failover when the primary changes and the new primary does not have
-				// replication slots created for existing replicas.
+				// replication slots created for the alread existing replicas.
+				// Causing the rollout of the replicas will make all of them to be registered in the new primary.
 				_, err := r.replicationSlotsCreateDeleter.GetFor(&statefulSet.StatefulSet)
 				if errors.Is(err, errNotFound) {
 					return false
