@@ -85,7 +85,6 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 	Context("GIVEN Kubegres with 1 primary and no replicas AND that primary is deleted including its associated PVC", func() {
 
 		It("THEN the primary should be automatically re-created and a new PVC should be associated to the new primary", func() {
-			Skip("temp")
 
 			log.Print("START OF: Test 'GIVEN Kubegres with 1 primary and no replicas AND that primary is deleted including its associated PVC'")
 
@@ -124,7 +123,6 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 
 		It("THEN the failover should take place with a replica becoming primary AND a new replica created AND existing data available, twice", func() {
 
-			Skip("temp")
 			log.Print("START OF: Test 'GIVEN Kubegres with 1 primary and 1 replicas AND primary is deleted'")
 
 			test.givenNewKubegresSpecIsSetTo(2)
@@ -236,7 +234,6 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 		})
 
 		It("THEN the failover should take place with a replica becoming primary AND a new replica created AND existing data available, twice", func() {
-			Skip("temp")
 
 			log.Print("START OF: Test 'GIVEN Kubegres with 1 primary and 2 replicas using custom-configs map AND primary is deleted'")
 

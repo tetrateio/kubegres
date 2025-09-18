@@ -86,7 +86,7 @@ func InitExternalDbConnectionDbUtil(resourceCreator TestResourceCreator, nodePor
 		log.Fatal("Unable to create a Service on port '"+strconv.Itoa(nodePort)+"' to query external DB.", err)
 	}
 
-	return DbConnectionDbUtil{
+	db := DbConnectionDbUtil{
 		Port:             nodePort,
 		LogLabel:         "External DB",
 		IsPrimaryDb:      true,
@@ -95,6 +95,9 @@ func InitExternalDbConnectionDbUtil(resourceCreator TestResourceCreator, nodePor
 		resourceCreator:  resourceCreator,
 		k8sClient:        k8sClient,
 	}
+	db.exportNodeAddressAndPort()
+
+	return db
 }
 
 func (r *DbConnectionDbUtil) Close() {
