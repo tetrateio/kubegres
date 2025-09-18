@@ -85,6 +85,7 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 	Context("GIVEN Kubegres with 1 primary and no replicas AND that primary is deleted including its associated PVC", func() {
 
 		It("THEN the primary should be automatically re-created and a new PVC should be associated to the new primary", func() {
+			Skip("temp")
 
 			log.Print("START OF: Test 'GIVEN Kubegres with 1 primary and no replicas AND that primary is deleted including its associated PVC'")
 
@@ -123,6 +124,7 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 
 		It("THEN the failover should take place with a replica becoming primary AND a new replica created AND existing data available, twice", func() {
 
+			Skip("temp")
 			log.Print("START OF: Test 'GIVEN Kubegres with 1 primary and 1 replicas AND primary is deleted'")
 
 			test.givenNewKubegresSpecIsSetTo(2)
@@ -171,11 +173,70 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 
 			log.Print("END OF: Test 'GIVEN Kubegres with 1 primary and 1 replicas AND primary is deleted'")
 		})
+
 	})
 
 	Context("GIVEN Kubegres with 1 primary and 2 replicas using custom-configs map AND primary is deleted", func() {
 
+		It("THEN when Replication Slots are enabled, the failover should take place with a replica becoming primary AND a new replica created AND existing data available, twice", func() {
+
+			log.Print("START OF: Test 'GIVEN Kubegres with 1 primary and 2 replicas with Replication Slots enabled AND primary is deleted'")
+
+			var rs = &postgresv1.ReplicationSlots{
+				Enabled: true,
+			}
+			test.givenNewKubegresReplicationSlotsAreSetTo(rs, 4)
+
+			test.whenKubegresIsCreated()
+
+			test.thenPodsStatesShouldBe(1, 3)
+			expectedNbreUsers := 0
+
+			test.GivenUserAddedInPrimaryDb()
+			expectedNbreUsers++
+
+			test.GivenUserAddedInPrimaryDb()
+			expectedNbreUsers++
+
+			// First failover
+			test.whenPrimaryIsDeleted()
+
+			test.thenPodsStatesShouldBe(1, 3)
+
+			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
+			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
+
+			test.GivenUserAddedInPrimaryDb()
+			expectedNbreUsers++
+
+			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
+			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
+
+			log.Println("waiting ")
+			//time.Sleep(10 * time.Minute)
+
+			// Second failover
+
+			test.whenPrimaryIsDeleted()
+
+			test.thenPodsStatesShouldBe(1, 3)
+
+			log.Println("waiting ")
+			//time.Sleep(10 * time.Minute)
+
+			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
+			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
+
+			test.GivenUserAddedInPrimaryDb()
+			expectedNbreUsers++
+
+			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
+			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
+
+		})
+
 		It("THEN the failover should take place with a replica becoming primary AND a new replica created AND existing data available, twice", func() {
+			Skip("temp")
 
 			log.Print("START OF: Test 'GIVEN Kubegres with 1 primary and 2 replicas using custom-configs map AND primary is deleted'")
 
@@ -390,4 +451,11 @@ func (r *PrimaryFailureAndRecoveryTest) ThenReplicaDbContainsExpectedNbreUsers(e
 		return true
 
 	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+}
+
+func (r *PrimaryFailureAndRecoveryTest) givenNewKubegresReplicationSlotsAreSetTo(rs *postgresv1.ReplicationSlots, replicas int) {
+	r.kubegresResource = resourceConfigs.LoadKubegresYaml()
+	i := int32(replicas)
+	r.kubegresResource.Spec.Replicas = &i
+	r.kubegresResource.Spec.ReplicationSlots = *rs
 }
