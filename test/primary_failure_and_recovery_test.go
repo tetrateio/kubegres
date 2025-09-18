@@ -210,17 +210,11 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
 			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
 
-			log.Println("waiting ")
-			//time.Sleep(10 * time.Minute)
-
 			// Second failover
 
 			test.whenPrimaryIsDeleted()
 
 			test.thenPodsStatesShouldBe(1, 3)
-
-			log.Println("waiting ")
-			//time.Sleep(10 * time.Minute)
 
 			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
 			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
