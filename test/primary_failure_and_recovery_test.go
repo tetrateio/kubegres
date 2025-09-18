@@ -175,10 +175,6 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 			log.Print("END OF: Test 'GIVEN Kubegres with 1 primary and 1 replicas AND primary is deleted'")
 		})
 
-	})
-
-	Context("GIVEN Kubegres with 1 primary and 2 replicas using custom-configs map AND primary is deleted", func() {
-
 		It("THEN when Replication Slots are enabled, the failover should take place with a replica becoming primary AND a new replica created AND existing data available, twice", func() {
 
 			log.Print("START OF: Test 'GIVEN Kubegres with 1 primary and 2 replicas with Replication Slots enabled AND primary is deleted'")
@@ -205,7 +201,8 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 			// First failover
 			test.whenPrimaryIsDeleted()
 
-			test.thenPodsStatesShouldBe(1, 3)
+			test.thenPodsStatesShouldBe(1, 2+2) // There should be 2 replicas left + wait for at least 2 new replicas to be created because the old replicas don't have replication slots
+			test.thenPodsStatesShouldBe(1, 3)   // after new replicas are created, wait for old replicas to be deleted
 
 			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
 			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
@@ -220,7 +217,8 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 
 			test.whenPrimaryIsDeleted()
 
-			test.thenPodsStatesShouldBe(1, 3)
+			test.thenPodsStatesShouldBe(1, 2+2) // There should be 2 replicas left + wait for at least 2 new replicas to be created because the old replicas don't have replication slots
+			test.thenPodsStatesShouldBe(1, 3)   // after new replicas are created, wait for old replicas to be deleted
 
 			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
 			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
@@ -232,6 +230,10 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
 
 		})
+
+	})
+
+	Context("GIVEN Kubegres with 1 primary and 2 replicas using custom-configs map AND primary is deleted", func() {
 
 		It("THEN the failover should take place with a replica becoming primary AND a new replica created AND existing data available, twice", func() {
 
