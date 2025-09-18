@@ -390,42 +390,54 @@ func (r *StandByTest) givenBackupPvcIsCreated() {
 }
 
 func (r *StandByTest) givenExistingKubegresSpecIsSetTo(specNbreReplicas int32) {
-	var err error
-	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
+	Eventually(func() bool {
+		var err error
+		r.kubegresResource, err = r.resourceRetriever.GetKubegres()
 
-	if err != nil {
-		log.Println("Error while getting Kubegres resource : ", err)
-		Expect(err).Should(Succeed())
-		return
-	}
+		if err != nil {
+			log.Println("Error while getting Kubegres resource : ", err)
+			Expect(err).Should(Succeed())
+			return false
+		}
 
-	r.kubegresResource.Spec.Replicas = &specNbreReplicas
+		r.kubegresResource.Spec.Replicas = &specNbreReplicas
+		return true
+
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
 }
 
 func (r *StandByTest) givenExistingKubegresSpecStandbyEnabledIsSetTo(enabled bool) {
-	var err error
-	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
+	Eventually(func() bool {
+		var err error
+		r.kubegresResource, err = r.resourceRetriever.GetKubegres()
 
-	if err != nil {
-		log.Println("Error while getting Kubegres resource : ", err)
-		Expect(err).Should(Succeed())
-		return
-	}
+		if err != nil {
+			log.Println("Error while getting Kubegres resource : ", err)
+			Expect(err).Should(Succeed())
+			return false
+		}
 
-	r.kubegresResource.Spec.Standby.Enabled = enabled
+		r.kubegresResource.Spec.Standby.Enabled = enabled
+		return true
+
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
 }
 
 func (r *StandByTest) givenExistingKubegresSpecIsSetToPrimaryEndpoint(newEndpoint string) {
-	var err error
-	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
+	Eventually(func() bool {
+		var err error
+		r.kubegresResource, err = r.resourceRetriever.GetKubegres()
 
-	if err != nil {
-		log.Println("Error while getting Kubegres resource : ", err)
-		Expect(err).Should(Succeed())
-		return
-	}
+		if err != nil {
+			log.Println("Error while getting Kubegres resource : ", err)
+			Expect(err).Should(Succeed())
+			return false
+		}
 
-	r.kubegresResource.Spec.Standby.PrimaryEndpoint = newEndpoint
+		r.kubegresResource.Spec.Standby.PrimaryEndpoint = newEndpoint
+		return true
+
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
 }
 
 func (r *StandByTest) givenKubegresSpecIsSetToBackup(backupSchedule, backupPvcName, backupVolumeMount string, specNbreReplicas int32) {
@@ -579,14 +591,17 @@ func (r *StandByTest) thenCronJobExistsWithSpec(expectedConfigMapName,
 }
 
 func (r *StandByTest) givenExistingKubegresSpecReplicationSlotsIsSetTo(slots postgresv1.ReplicationSlots) {
-	var err error
-	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
+	Eventually(func() bool {
+		var err error
+		r.kubegresResource, err = r.resourceRetriever.GetKubegres()
 
-	if err != nil {
-		log.Println("Error while getting Kubegres resource : ", err)
-		Expect(err).Should(Succeed())
-		return
-	}
-	r.kubegresResource.Spec.ReplicationSlots = slots
+		if err != nil {
+			log.Println("Error while getting Kubegres resource : ", err)
+			Expect(err).Should(Succeed())
+			return false
+		}
+		r.kubegresResource.Spec.ReplicationSlots = slots
+		return true
 
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
 }
