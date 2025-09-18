@@ -139,6 +139,9 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 			test.GivenUserAddedInPrimaryDb()
 			expectedNbreUsers++
 
+			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
+			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
+
 			// First failover
 
 			test.whenPrimaryIsDeleted()
@@ -195,6 +198,9 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 
 			test.GivenUserAddedInPrimaryDb()
 			expectedNbreUsers++
+
+			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
+			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
 
 			// First failover
 			test.whenPrimaryIsDeleted()
