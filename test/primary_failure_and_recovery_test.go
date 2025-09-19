@@ -201,8 +201,7 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 			// First failover
 			test.whenPrimaryIsDeleted()
 
-			test.thenPodsStatesShouldBe(1, 2+2) // There should be 2 replicas left + wait for at least 2 new replicas to be created because the old replicas don't have replication slots
-			test.thenPodsStatesShouldBe(1, 3)   // after new replicas are created, wait for old replicas to be deleted
+			test.thenPodsStatesShouldBe(1, 3)
 
 			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
 			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
@@ -217,8 +216,7 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 
 			test.whenPrimaryIsDeleted()
 
-			test.thenPodsStatesShouldBe(1, 2+2) // There should be 2 replicas left + wait for at least 2 new replicas to be created because the old replicas don't have replication slots
-			test.thenPodsStatesShouldBe(1, 3)   // after new replicas are created, wait for old replicas to be deleted
+			test.thenPodsStatesShouldBe(1, 3)
 
 			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
 			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)

@@ -2,17 +2,19 @@ package statefulset
 
 import (
 	"errors"
-	"k8s.io/api/apps/v1"
 	"sort"
 	"strconv"
+
+	"k8s.io/api/apps/v1"
 )
 
 type StatefulSetWrapper struct {
-	IsDeployed    bool
-	IsReady       bool
-	InstanceIndex int32
-	StatefulSet   v1.StatefulSet
-	Pod           PodWrapper
+	IsDeployed             bool
+	IsReady                bool
+	InstanceIndex          int32
+	StatefulSet            v1.StatefulSet
+	Pod                    PodWrapper
+	HaveReplicationSlotSet bool
 }
 
 type StatefulSetWrappers struct {
