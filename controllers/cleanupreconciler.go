@@ -151,8 +151,6 @@ func (r *CleanupReplicationSlotsReconciler) Reconcile(ctx context.Context, reque
 		return reconcile.Result{}, nil
 	}
 
-	r.Logger.Info("Starting replication slots cleanup", "kubegres", kubegres.Name)
-
 	wrappedLogger := log.LogWrapper{Kubegres: &kubegres, Logger: r.Logger, Recorder: r.Recorder}
 
 	kubegresContext := kubegresCtx.KubegresContext{
@@ -181,6 +179,8 @@ func (r *CleanupReplicationSlotsReconciler) Reconcile(ctx context.Context, reque
 	if r.cleanupRoutinesHandler.HasActiveRoutine(ctrlclient.ObjectKeyFromObject(&kubegres), r.getSettings(kubegres)) {
 		return reconcile.Result{}, nil
 	}
+
+	r.Logger.Info("Starting replication slots cleanup", "kubegres", kubegres.Name)
 	r.cleanupRoutinesHandler.startCleanup(
 		ctrlclient.ObjectKeyFromObject(&kubegres),
 		r.getSettings(kubegres),

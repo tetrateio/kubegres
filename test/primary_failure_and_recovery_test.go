@@ -139,6 +139,9 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 			test.GivenUserAddedInPrimaryDb()
 			expectedNbreUsers++
 
+			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
+			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
+
 			// First failover
 
 			test.whenPrimaryIsDeleted()
@@ -171,6 +174,61 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 
 			log.Print("END OF: Test 'GIVEN Kubegres with 1 primary and 1 replicas AND primary is deleted'")
 		})
+
+		It("THEN when Replication Slots are enabled, the failover should take place with a replica becoming primary AND a new replica created AND existing data available, twice", func() {
+
+			log.Print("START OF: Test 'GIVEN Kubegres with 1 primary and 2 replicas with Replication Slots enabled AND primary is deleted'")
+
+			var rs = &postgresv1.ReplicationSlots{
+				Enabled: true,
+			}
+			test.givenNewKubegresReplicationSlotsAreSetTo(rs, 4)
+
+			test.whenKubegresIsCreated()
+
+			test.thenPodsStatesShouldBe(1, 3)
+			expectedNbreUsers := 0
+
+			test.GivenUserAddedInPrimaryDb()
+			expectedNbreUsers++
+
+			test.GivenUserAddedInPrimaryDb()
+			expectedNbreUsers++
+
+			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
+			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
+
+			// First failover
+			test.whenPrimaryIsDeleted()
+
+			test.thenPodsStatesShouldBe(1, 3)
+
+			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
+			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
+
+			test.GivenUserAddedInPrimaryDb()
+			expectedNbreUsers++
+
+			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
+			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
+
+			// Second failover
+
+			test.whenPrimaryIsDeleted()
+
+			test.thenPodsStatesShouldBe(1, 3)
+
+			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
+			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
+
+			test.GivenUserAddedInPrimaryDb()
+			expectedNbreUsers++
+
+			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
+			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
+
+		})
+
 	})
 
 	Context("GIVEN Kubegres with 1 primary and 2 replicas using custom-configs map AND primary is deleted", func() {
@@ -390,4 +448,11 @@ func (r *PrimaryFailureAndRecoveryTest) ThenReplicaDbContainsExpectedNbreUsers(e
 		return true
 
 	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+}
+
+func (r *PrimaryFailureAndRecoveryTest) givenNewKubegresReplicationSlotsAreSetTo(rs *postgresv1.ReplicationSlots, replicas int) {
+	r.kubegresResource = resourceConfigs.LoadKubegresYaml()
+	i := int32(replicas)
+	r.kubegresResource.Spec.Replicas = &i
+	r.kubegresResource.Spec.ReplicationSlots = *rs
 }

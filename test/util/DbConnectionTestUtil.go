@@ -80,13 +80,13 @@ func InitDbConnectionDbUtil(resourceCreator TestResourceCreator, kubegresName st
 	return db
 }
 
-func InitExternalDbConnectionDbUtil(resourceCreator TestResourceCreator, nodePort int, k8sClient client.Client) DbConnectionDbUtil {
+func InitExternalDbConnectionDbUtil(resourceCreator TestResourceCreator, nodePort int, k8sClient client.Client, exportEnvVar bool) DbConnectionDbUtil {
 	serviceToQueryDb, err := resourceCreator.CreateServiceToSqlQueryExternalDb(nodePort)
 	if err != nil {
 		log.Fatal("Unable to create a Service on port '"+strconv.Itoa(nodePort)+"' to query external DB.", err)
 	}
 
-	return DbConnectionDbUtil{
+	db := DbConnectionDbUtil{
 		Port:             nodePort,
 		LogLabel:         "External DB",
 		IsPrimaryDb:      true,
@@ -95,6 +95,12 @@ func InitExternalDbConnectionDbUtil(resourceCreator TestResourceCreator, nodePor
 		resourceCreator:  resourceCreator,
 		k8sClient:        k8sClient,
 	}
+
+	if exportEnvVar {
+		db.exportNodeAddressAndPort()
+	}
+
+	return db
 }
 
 func (r *DbConnectionDbUtil) Close() {

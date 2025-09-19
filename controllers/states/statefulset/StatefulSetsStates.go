@@ -22,11 +22,12 @@ package statefulset
 
 import (
 	"errors"
+	"strconv"
+
 	apps "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"reactive-tech.io/kubegres/controllers/ctx"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"strconv"
 )
 
 type StatefulSetsStates struct {
@@ -83,6 +84,7 @@ func (r *StatefulSetsStates) createAndAppendStatefulSetStates(statefulSet apps.S
 	statefulSetWrapper := StatefulSetWrapper{}
 	statefulSetWrapper.IsDeployed = true
 	statefulSetWrapper.IsReady = statefulSet.Status.ReadyReplicas > 0
+	statefulSetWrapper.HaveReplicationSlotSet = r.haveReplicationSlotSet(statefulSet)
 	statefulSetWrapper.StatefulSet = statefulSet
 
 	instanceIndex, err := r.getInstanceIndexFromSpec(statefulSet)
@@ -128,7 +130,7 @@ func (r *StatefulSetsStates) addReplicaStatefulSetStates(statefulSetWrapper Stat
 	r.Replicas.NbreDeployed++
 	r.Replicas.All.Add(statefulSetWrapper)
 
-	if statefulSetWrapper.IsReady {
+	if statefulSetWrapper.IsReady && r.kubegresContext.Kubegres.Spec.ReplicationSlots.Enabled == statefulSetWrapper.HaveReplicationSlotSet {
 		r.Replicas.NbreReady++
 	}
 }
@@ -174,4 +176,15 @@ func (r *StatefulSetsStates) getInstanceIndexFromSpec(statefulSet apps.StatefulS
 		return 0, err
 	}
 	return int32(instanceIndex), nil
+}
+
+func (r *StatefulSetsStates) haveReplicationSlotSet(set apps.StatefulSet) bool {
+	for _, container := range set.Spec.Template.Spec.Containers {
+		for _, envVar := range container.Env {
+			if envVar.Name == ctx.EnvVarReplicationSlotName && envVar.Value != "" {
+				return true
+			}
+		}
+	}
+	return false
 }

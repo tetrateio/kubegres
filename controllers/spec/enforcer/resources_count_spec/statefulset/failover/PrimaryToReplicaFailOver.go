@@ -216,7 +216,7 @@ func (r *PrimaryToReplicaFailOver) selectReplicaToPromote() (statefulset.Statefu
 	}
 
 	for _, statefulSetWrapper := range r.resourcesStates.StatefulSets.Replicas.All.GetAllSortedByInstanceIndex() {
-		if statefulSetWrapper.IsReady {
+		if statefulSetWrapper.IsReady && statefulSetWrapper.HaveReplicationSlotSet == r.kubegresContext.Kubegres.Spec.ReplicationSlots.Enabled {
 			return statefulSetWrapper, nil
 		}
 	}

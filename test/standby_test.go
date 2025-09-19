@@ -26,7 +26,7 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("standby"), func() {
 		test.resourceCreator = util.CreateTestResourceCreator(k8sClientTest, test.resourceRetriever, namespace)
 		Expect(k8sClientTest).ToNot(BeNil())
 		test.standbyDBQueryTestCases = testcases.InitDbQueryTestCasesWithConnections(
-			util.InitExternalDbConnectionDbUtil(test.resourceCreator, resourceConfigs.ServiceToSqlQueryExternalDbNodePort, k8sClientTest),
+			util.InitExternalDbConnectionDbUtil(test.resourceCreator, resourceConfigs.ServiceToSqlQueryExternalDbNodePort, k8sClientTest, false),
 			util.InitDbConnectionDbUtil(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort, false, k8sClientTest),
 		)
 		test.activeDBQueryTestCases = testcases.InitDbQueryTestCasesWithConnections(
@@ -71,7 +71,7 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("standby"), func() {
 
 			test.whenKubegresIsCreated()
 
-			test.thenPodsStatesShouldBe("external-postgres", 0, 1, template.LabelModelStandbyValue)
+			test.thenPodsStatesShouldBe("external-postgres", 0, 1, template.LabelModelStandbyValue, false)
 
 			test.standbyDBQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 			test.standbyDBQueryTestCases.ThenWeCanSqlQueryReplicaDb()
@@ -89,7 +89,7 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("standby"), func() {
 
 			test.whenKubegresIsUpdated()
 
-			test.thenPodsStatesShouldBe("external-postgres", 0, 2, template.LabelModelStandbyValue)
+			test.thenPodsStatesShouldBe("external-postgres", 0, 2, template.LabelModelStandbyValue, false)
 
 			test.standbyDBQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 			test.standbyDBQueryTestCases.ThenWeCanSqlQueryReplicaDb()
@@ -107,7 +107,7 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("standby"), func() {
 
 			test.whenKubegresIsUpdated()
 
-			test.thenPodsStatesShouldBe("external-postgres", 0, 1, template.LabelModelStandbyValue)
+			test.thenPodsStatesShouldBe("external-postgres", 0, 1, template.LabelModelStandbyValue, false)
 
 			test.standbyDBQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 			test.standbyDBQueryTestCases.ThenWeCanSqlQueryReplicaDb()
@@ -130,7 +130,7 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("standby"), func() {
 
 			test.whenKubegresIsCreated()
 
-			test.thenPodsStatesShouldBe("external-postgres", 0, 1, template.LabelModelStandbyValue)
+			test.thenPodsStatesShouldBe("external-postgres", 0, 1, template.LabelModelStandbyValue, false)
 
 			test.standbyDBQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 			test.standbyDBQueryTestCases.ThenWeCanSqlQueryReplicaDb()
@@ -139,7 +139,7 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("standby"), func() {
 
 			test.whenKubegresIsUpdated()
 
-			test.thenPodsStatesShouldBe("external-postgres.default.svc.cluster.local", 0, 1, template.LabelModelStandbyValue)
+			test.thenPodsStatesShouldBe("external-postgres.default.svc.cluster.local", 0, 1, template.LabelModelStandbyValue, false)
 
 			test.standbyDBQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 			test.standbyDBQueryTestCases.ThenWeCanSqlQueryReplicaDb()
@@ -164,7 +164,7 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("standby"), func() {
 
 			test.whenKubegresIsCreated()
 
-			test.thenPodsStatesShouldBe("external-postgres", 0, 1, template.LabelModelStandbyValue)
+			test.thenPodsStatesShouldBe("external-postgres", 0, 1, template.LabelModelStandbyValue, false)
 
 			test.standbyDBQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 			test.standbyDBQueryTestCases.ThenWeCanSqlQueryReplicaDb()
@@ -188,7 +188,7 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("standby"), func() {
 
 				test.whenKubegresIsCreated()
 
-				test.thenPodsStatesShouldBe("external-postgres", 0, 1, template.LabelModelStandbyValue)
+				test.thenPodsStatesShouldBe("external-postgres", 0, 1, template.LabelModelStandbyValue, false)
 
 				test.standbyDBQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 				test.standbyDBQueryTestCases.ThenWeCanSqlQueryReplicaDb()
@@ -206,7 +206,7 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("standby"), func() {
 
 				test.whenKubegresIsUpdated()
 
-				test.thenPodsStatesShouldBe("external-postgres", 0, 2, template.LabelModelStandbyValue)
+				test.thenPodsStatesShouldBe("external-postgres", 0, 2, template.LabelModelStandbyValue, false)
 
 				test.standbyDBQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 				test.standbyDBQueryTestCases.ThenWeCanSqlQueryReplicaDb()
@@ -224,7 +224,7 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("standby"), func() {
 
 				test.whenKubegresIsUpdated()
 
-				test.thenPodsStatesShouldBe("my-kubegres", 1, 1, template.LabelModelActiveValue)
+				test.thenPodsStatesShouldBe("my-kubegres", 1, 1, template.LabelModelActiveValue, false)
 
 				test.activeDBQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 				test.activeDBQueryTestCases.ThenWeCanSqlQueryReplicaDb()
@@ -243,7 +243,7 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("standby"), func() {
 
 				test.whenKubegresIsUpdated()
 
-				test.thenPodsStatesShouldBe("external-postgres", 0, 2, template.LabelModelStandbyValue)
+				test.thenPodsStatesShouldBe("external-postgres", 0, 2, template.LabelModelStandbyValue, false)
 
 				test.standbyDBQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 				test.standbyDBQueryTestCases.ThenWeCanSqlQueryReplicaDb()
@@ -253,6 +253,94 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("standby"), func() {
 			})
 
 		})
+})
+
+var _ = Describe("Setting Kubegres spec 'replica' with replication slots", Label("standby"), func() {
+
+	var test = StandByTest{}
+
+	BeforeEach(func() {
+		namespace := resourceConfigs.DefaultNamespace
+		test.resourceRetriever = util.CreateTestResourceRetriever(k8sClientTest, namespace)
+		test.resourceCreator = util.CreateTestResourceCreator(k8sClientTest, test.resourceRetriever, namespace)
+		Expect(k8sClientTest).ToNot(BeNil())
+		test.standbyDBQueryTestCases = testcases.InitDbQueryTestCasesWithConnections(
+			util.InitExternalDbConnectionDbUtil(test.resourceCreator, resourceConfigs.ServiceToSqlQueryExternalDbNodePort, k8sClientTest, true),
+			util.InitDbConnectionDbUtil(test.resourceCreator, resourceConfigs.KubegresResourceName, resourceConfigs.ServiceToSqlQueryReplicaDbNodePort, false, k8sClientTest),
+		)
+	})
+
+	AfterEach(func() {
+		if !test.keepCreatedResourcesForNextTest {
+			test.resourceCreator.DeleteAllTestResources()
+		} else {
+			test.keepCreatedResourcesForNextTest = false
+		}
+	})
+	Context("GIVEN replication slots are enabled in the standby spec", func() {
+
+		It("THEN replica set to 1 should be running and replicating data from external postgres ", func() {
+
+			log.Print("START OF: Test 'GIVEN replica set to 1 should be running and replicating data from external postgres")
+
+			test.givenNewExternalPostgresIsCreatedAndReady()
+
+			test.givenNewKubegresSpecIsStandbySetToTrueAndPrimaryEndpointSetToExternalPostgres()
+
+			test.whenKubegresIsCreated()
+
+			test.thenPodsStatesShouldBe("external-postgres", 0, 1, template.LabelModelStandbyValue, false)
+
+			test.standbyDBQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.standbyDBQueryTestCases.ThenWeCanSqlQueryReplicaDb()
+
+			test.keepCreatedResourcesForNextTest = true
+
+			log.Print("END OF: Test 'replica set to 1 should be running and replicating data from external postgres")
+		})
+
+		It("THEN replication slots should be created for each replica", func() {
+			log.Print("START OF: Test 'GIVEN replication slots are enabled in the standby spec'")
+
+			test.givenExistingKubegresSpecReplicationSlotsIsSetTo(postgresv1.ReplicationSlots{
+				Enabled:        true,
+				DisableCleanup: true,
+			})
+			test.whenKubegresIsUpdated()
+
+			test.thenPodsStatesShouldBe("external-postgres", 0, 1, template.LabelModelStandbyValue, true)
+			test.standbyDBQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.standbyDBQueryTestCases.ThenWeCanSqlQueryReplicaDb()
+
+			Eventually(func() bool {
+				replicationSlots := test.standbyDBQueryTestCases.GetReplicationSlots()
+				if len(replicationSlots) != 1 {
+					log.Printf("Expected 1 replication slots, but got %d. Waiting...\n", len(replicationSlots))
+					return false
+				}
+				for _, slot := range replicationSlots {
+					if !slot.Active {
+						log.Printf("Replication slot '%s' is not active. Waiting...\n", slot.Name)
+						return false
+					}
+				}
+				return true
+			})
+
+			test.keepCreatedResourcesForNextTest = true
+		})
+
+		It("THEN 'standby.enabled' set to false should promote the replica to be primary", func() {
+			log.Print("START OF: Test 'GIVEN 'standby.enabled' set to false should promote the replica to be primary'")
+
+			test.givenExistingKubegresSpecStandbyEnabledIsSetTo(false)
+			test.whenKubegresIsUpdated()
+
+			test.thenPodsStatesShouldBe("my-kubegres", 1, 0, template.LabelModelActiveValue, false)
+		})
+
+	})
+
 })
 
 type StandByTest struct {
@@ -302,42 +390,54 @@ func (r *StandByTest) givenBackupPvcIsCreated() {
 }
 
 func (r *StandByTest) givenExistingKubegresSpecIsSetTo(specNbreReplicas int32) {
-	var err error
-	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
+	Eventually(func() bool {
+		var err error
+		r.kubegresResource, err = r.resourceRetriever.GetKubegres()
 
-	if err != nil {
-		log.Println("Error while getting Kubegres resource : ", err)
-		Expect(err).Should(Succeed())
-		return
-	}
+		if err != nil {
+			log.Println("Error while getting Kubegres resource : ", err)
+			Expect(err).Should(Succeed())
+			return false
+		}
 
-	r.kubegresResource.Spec.Replicas = &specNbreReplicas
+		r.kubegresResource.Spec.Replicas = &specNbreReplicas
+		return true
+
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
 }
 
 func (r *StandByTest) givenExistingKubegresSpecStandbyEnabledIsSetTo(enabled bool) {
-	var err error
-	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
+	Eventually(func() bool {
+		var err error
+		r.kubegresResource, err = r.resourceRetriever.GetKubegres()
 
-	if err != nil {
-		log.Println("Error while getting Kubegres resource : ", err)
-		Expect(err).Should(Succeed())
-		return
-	}
+		if err != nil {
+			log.Println("Error while getting Kubegres resource : ", err)
+			Expect(err).Should(Succeed())
+			return false
+		}
 
-	r.kubegresResource.Spec.Standby.Enabled = enabled
+		r.kubegresResource.Spec.Standby.Enabled = enabled
+		return true
+
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
 }
 
 func (r *StandByTest) givenExistingKubegresSpecIsSetToPrimaryEndpoint(newEndpoint string) {
-	var err error
-	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
+	Eventually(func() bool {
+		var err error
+		r.kubegresResource, err = r.resourceRetriever.GetKubegres()
 
-	if err != nil {
-		log.Println("Error while getting Kubegres resource : ", err)
-		Expect(err).Should(Succeed())
-		return
-	}
+		if err != nil {
+			log.Println("Error while getting Kubegres resource : ", err)
+			Expect(err).Should(Succeed())
+			return false
+		}
 
-	r.kubegresResource.Spec.Standby.PrimaryEndpoint = newEndpoint
+		r.kubegresResource.Spec.Standby.PrimaryEndpoint = newEndpoint
+		return true
+
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
 }
 
 func (r *StandByTest) givenKubegresSpecIsSetToBackup(backupSchedule, backupPvcName, backupVolumeMount string, specNbreReplicas int32) {
@@ -372,7 +472,7 @@ func (r *StandByTest) thenErrorEventShouldBeLogged() {
 	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
 }
 
-func (r *StandByTest) thenPodsStatesShouldBe(primaryEndpoint string, nbrePrimary, nbreReplicas int, labelModeValue string) bool {
+func (r *StandByTest) thenPodsStatesShouldBe(primaryEndpoint string, nbrePrimary, nbreReplicas int, labelModeValue string, wantPodsWithReplicaitonSlots bool) bool {
 	return Eventually(func() bool {
 
 		pods, err := r.resourceRetriever.GetKubegresResources()
@@ -381,7 +481,19 @@ func (r *StandByTest) thenPodsStatesShouldBe(primaryEndpoint string, nbrePrimary
 			return false
 		}
 
+		var haveReplicationSlotsEnvVar bool
 		for _, resource := range pods.Resources {
+			for _, container := range resource.Pod.Resource.Spec.Containers {
+				for _, envVar := range container.Env {
+					if envVar.Name == ctx.EnvVarReplicationSlotName {
+						haveReplicationSlotsEnvVar = true
+					}
+				}
+			}
+			if !resource.IsPrimary && wantPodsWithReplicaitonSlots != haveReplicationSlotsEnvVar {
+				return false
+			}
+
 			if resource.Pod.Metadata.Labels[template.LabelModeKey] != labelModeValue {
 				log.Println("Pod '" + resource.Pod.Name + "' doesn't have the expected label " + template.LabelModeKey + "=" + labelModeValue + ". Waiting...")
 				return false
@@ -476,4 +588,20 @@ func (r *StandByTest) thenCronJobExistsWithSpec(expectedConfigMapName,
 		return true
 
 	}, time.Second*10, time.Second*5).Should(BeTrue())
+}
+
+func (r *StandByTest) givenExistingKubegresSpecReplicationSlotsIsSetTo(slots postgresv1.ReplicationSlots) {
+	Eventually(func() bool {
+		var err error
+		r.kubegresResource, err = r.resourceRetriever.GetKubegres()
+
+		if err != nil {
+			log.Println("Error while getting Kubegres resource : ", err)
+			Expect(err).Should(Succeed())
+			return false
+		}
+		r.kubegresResource.Spec.ReplicationSlots = slots
+		return true
+
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
 }

@@ -38,6 +38,7 @@ import (
 	"reactive-tech.io/kubegres/controllers/spec/template"
 	"reactive-tech.io/kubegres/controllers/states"
 	"reactive-tech.io/kubegres/controllers/states/statefulset"
+	"reactive-tech.io/kubegres/internal/replicationslot"
 	replicationSlotRepo "reactive-tech.io/kubegres/internal/replicationslot/repo"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -51,16 +52,21 @@ type ReplicaDbCountSpecEnforcer struct {
 }
 
 type replicationSlotsCreateDeleter interface {
-	Create(*v1.StatefulSet) (*v1.StatefulSet, error)
-	Delete(*v1.StatefulSet) error
+	CreateFor(*v1.StatefulSet) (*v1.StatefulSet, error)
+	DeleteFor(*v1.StatefulSet) error
+	GetFor(*v1.StatefulSet) (replicationslot.ReplicationSlot, error)
 }
 
 type noopReplicationSlotsCreateDeleter struct{}
 
-func (n noopReplicationSlotsCreateDeleter) Create(ss *v1.StatefulSet) (*v1.StatefulSet, error) {
+func (n noopReplicationSlotsCreateDeleter) GetFor(_ *v1.StatefulSet) (replicationslot.ReplicationSlot, error) {
+	return replicationslot.ReplicationSlot{}, nil
+}
+
+func (n noopReplicationSlotsCreateDeleter) CreateFor(ss *v1.StatefulSet) (*v1.StatefulSet, error) {
 	return ss, nil
 }
-func (n noopReplicationSlotsCreateDeleter) Delete(*v1.StatefulSet) error { return nil }
+func (n noopReplicationSlotsCreateDeleter) DeleteFor(*v1.StatefulSet) error { return nil }
 
 func CreateReplicaDbCountSpecEnforcer(
 	kubegresContext kubegresCtx.KubegresContext,
@@ -102,7 +108,24 @@ type simpleReplicationSlotCreateDeleter struct {
 	clusterName     string
 }
 
-func (r *simpleReplicationSlotCreateDeleter) Create(statefulSet *v1.StatefulSet) (*v1.StatefulSet, error) {
+var errNotFound = errors.New("not found")
+
+func (r *simpleReplicationSlotCreateDeleter) GetFor(set *v1.StatefulSet) (replicationslot.ReplicationSlot, error) {
+	replicationSlotName, err := buildReplicationSlotName(r.kubegresContext.Kubegres.GetName(), r.clusterName, set.GetName(), r.kubegresContext.ClusterRole())
+	if err != nil {
+		return replicationslot.ReplicationSlot{}, fmt.Errorf("replication slot name: %v: %w", ctrlclient.ObjectKeyFromObject(set), err)
+	}
+	replicationSlot, err := r.repo.GetSlot(r.kubegresContext.Ctx, replicationSlotName)
+	if err != nil {
+		if errors.Is(err, replicationSlotRepo.ErrNotFound) {
+			return replicationslot.ReplicationSlot{}, errNotFound
+		}
+		return replicationslot.ReplicationSlot{}, err
+	}
+	return replicationSlot, nil
+}
+
+func (r *simpleReplicationSlotCreateDeleter) CreateFor(statefulSet *v1.StatefulSet) (*v1.StatefulSet, error) {
 	replicationSlotName, err := buildReplicationSlotName(r.kubegresContext.Kubegres.GetName(), r.clusterName, statefulSet.GetName(), r.kubegresContext.ClusterRole())
 	objKey := ctrlclient.ObjectKeyFromObject(statefulSet)
 	if err != nil {
@@ -111,6 +134,10 @@ func (r *simpleReplicationSlotCreateDeleter) Create(statefulSet *v1.StatefulSet)
 	}
 	slot, err := r.repo.CreateSlot(r.kubegresContext.Ctx, replicationSlotName)
 	if err != nil {
+		if errors.Is(err, replicationSlotRepo.ErrAlreadyExist) {
+			r.kubegresContext.Log.WarningEvent("ReplicationSlotCreate", fmt.Sprintf("Replication slot '%s' for statefulSet '%s' already exists, skipping creation.", replicationSlotName, statefulSet.GetName()))
+			return nil, nil
+		}
 		r.kubegresContext.Log.ErrorEvent("ReplicationSlotCreate", fmt.Errorf("replication slot: %v for statefulSet: %v: %w", slot, objKey, err), "Failed to create replication slot")
 		return nil, err
 	}
@@ -155,7 +182,7 @@ func buildReplicationSlotName(kubegresName, clusterName, statefulSetName string,
 	return replicationSlotName, nil
 }
 
-func (r *simpleReplicationSlotCreateDeleter) Delete(statefulSet *v1.StatefulSet) error {
+func (r *simpleReplicationSlotCreateDeleter) DeleteFor(statefulSet *v1.StatefulSet) error {
 	replicationSlotName, err := buildReplicationSlotName(r.kubegresContext.Kubegres.GetName(), r.clusterName, statefulSet.GetName(), r.kubegresContext.ClusterRole())
 	objKey := ctrlclient.ObjectKeyFromObject(statefulSet)
 	if err != nil {
@@ -419,7 +446,7 @@ func (r *ReplicaDbCountSpecEnforcer) deployReplicaStatefulSet() error {
 		return err
 	}
 
-	updatedStatefulSet, err := r.replicationSlotsCreateDeleter.Create(&replicaStatefulSet)
+	updatedStatefulSet, err := r.replicationSlotsCreateDeleter.CreateFor(&replicaStatefulSet)
 	if err != nil {
 		r.kubegresContext.Log.ErrorEvent("ReplicaStatefulSetReplicationSlotCreationErr", err, "Error while creating replication slot for the Replica StatefulSet.", "Replica name", replicaStatefulSet.Name)
 		r.blockingOperation.RemoveActiveOperation()
@@ -495,11 +522,12 @@ func (r *ReplicaDbCountSpecEnforcer) undeployReplicaStatefulSets(replicaToUndepl
 		return true
 	}, func() error {
 		attempt++
-		return r.replicationSlotsCreateDeleter.Delete(&replicaToUndeploy.StatefulSet)
+		return r.replicationSlotsCreateDeleter.DeleteFor(&replicaToUndeploy.StatefulSet)
 	})
 
 	if err != nil {
 		// exhausted all attempts to delete the replication slot
+		r.blockingOperation.RemoveActiveOperation()
 		r.kubegresContext.Log.ErrorEvent("ReplicaStatefulSetReplicationSlotDeletionErr", err, "Failed to delete replication slot for the Replica StatefulSet after all attempts.", "Replica name", replicaToUndeploy.StatefulSet.Name, "Attempt", attempt)
 	}
 
@@ -554,6 +582,19 @@ func (r *ReplicaDbCountSpecEnforcer) hasReplicationSlotsEnabled(statefulSet stat
 	for _, container := range statefulSet.StatefulSet.Spec.Template.Spec.Containers {
 		for _, envVar := range container.Env {
 			if envVar.Name == kubegresCtx.EnvVarReplicationSlotName && envVar.Value != "" {
+				// Also check if the replication slot actually exist in the database.
+				// If it does not, treat it as if replication slots are not enabled, so we'll trigger a rollout of the
+				// current replica.
+				// This could happen after a failover when the primary changes and the new primary does not have
+				// replication slots created for the already existing replicas.
+				// Causing the rollout of the replicas will make all of them to be registered in the new primary.
+				_, err := r.replicationSlotsCreateDeleter.GetFor(&statefulSet.StatefulSet)
+				if errors.Is(err, errNotFound) {
+					return false
+				}
+				if err != nil {
+					r.kubegresContext.Log.ErrorEvent("ReplicationSlotCheckErr", err, "Error while checking replication slot for the Replica StatefulSet.", "Replica name", statefulSet.StatefulSet.Name)
+				}
 				return true
 			}
 		}

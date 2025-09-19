@@ -23,8 +23,8 @@ package resourceConfigs
 import "time"
 
 const (
-	TestTimeout            = time.Second * 240
-	TestRetryInterval      = time.Second * 5
+	TestTimeout            = 240 * time.Second
+	TestRetryInterval      = 2 * time.Second
 	DefaultNamespace       = "default"
 	PrimaryReplicationRole = "primary"
 	DbPort                 = 5432
