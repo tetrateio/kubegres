@@ -147,7 +147,7 @@ func (r *CleanupReplicationSlotsReconciler) Reconcile(ctx context.Context, reque
 
 	if kubegres.Spec.ReplicationSlots.DisableCleanup || kubegres.Spec.ReplicationSlots.Enabled == false {
 		r.cleanupRoutinesHandler.stopCleanup(ctrlclient.ObjectKeyFromObject(&kubegres))
-		r.Recorder.Event(&kubegres, CleanupDisabledReason, v1.EventTypeNormal, "replication slots cleanup is disabled")
+		r.Recorder.Event(&kubegres, v1.EventTypeNormal, CleanupDisabledReason, "replication slots cleanup is disabled")
 		return reconcile.Result{}, nil
 	}
 
