@@ -55,6 +55,7 @@ func (r *VolumeSpecEnforcer) CheckForSpecDifference(statefulSet *apps.StatefulSe
 
 	currentCustomVolumeMountsInit, hasInitContainer := r.getVolumeMountsFromInitContainer(statefulSet)
 	currentCustomVolumeMounts := r.getCurrentCustomVolumeMounts(statefulSet)
+	currentCustomVolumeMountsSidecars := r.getVolumeMountsFromSidecar(statefulSet)
 	expectedCustomVolumeMounts := r.kubegresContext.Kubegres.Spec.Volume.VolumeMounts
 
 	if hasInitContainer && !r.compareVolumeMounts(currentCustomVolumeMountsInit, expectedCustomVolumeMounts) {
@@ -69,6 +70,13 @@ func (r *VolumeSpecEnforcer) CheckForSpecDifference(statefulSet *apps.StatefulSe
 		return StatefulSetSpecDifference{
 			SpecName: "Volume.VolumeMounts[container]",
 			Current:  r.volumeMountsToString(currentCustomVolumeMounts),
+			Expected: r.volumeMountsToString(expectedCustomVolumeMounts),
+		}
+	}
+	if !r.compareVolumeMounts(currentCustomVolumeMountsSidecars, expectedCustomVolumeMounts) {
+		return StatefulSetSpecDifference{
+			SpecName: "Volume.VolumeMounts[sidecar]",
+			Current:  r.volumeMountsToString(currentCustomVolumeMountsSidecars),
 			Expected: r.volumeMountsToString(expectedCustomVolumeMounts),
 		}
 	}
@@ -88,9 +96,7 @@ func (r *VolumeSpecEnforcer) EnforceSpec(statefulSet *apps.StatefulSet) (wasSpec
 
 	for i := range statefulSet.Spec.Template.Spec.Containers {
 		container := &statefulSet.Spec.Template.Spec.Containers[i]
-		if container.VolumeMounts != nil {
-			container.VolumeMounts = append(container.VolumeMounts, r.kubegresContext.Kubegres.Spec.Volume.VolumeMounts...)
-		}
+		container.VolumeMounts = append(container.VolumeMounts, r.kubegresContext.Kubegres.Spec.Volume.VolumeMounts...)
 	}
 
 	if len(statefulSet.Spec.Template.Spec.InitContainers) > 0 && statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts != nil {
@@ -292,4 +298,16 @@ func (r *VolumeSpecEnforcer) volumeMountsToString(volumeMounts []v1.VolumeMount)
 		toString += volumeMount.String() + " - "
 	}
 	return toString
+}
+
+func (r *VolumeSpecEnforcer) getVolumeMountsFromSidecar(statefulSet *apps.StatefulSet) []v1.VolumeMount {
+	var customVolumeMounts []v1.VolumeMount
+	for _, container := range statefulSet.Spec.Template.Spec.Containers[1:] {
+		for _, volumeMount := range container.VolumeMounts {
+			if !r.kubegresContext.IsReservedVolumeName(volumeMount.Name) {
+				customVolumeMounts = append(customVolumeMounts, volumeMount)
+			}
+		}
+	}
+	return customVolumeMounts
 }
