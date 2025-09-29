@@ -592,31 +592,45 @@ func (r *ReplicaDbCountSpecEnforcer) replicationSlotsEnabled() bool {
 }
 
 func (r *ReplicaDbCountSpecEnforcer) hasReplicationSlotsEnabled(statefulSet statefulset.StatefulSetWrapper) (bool, error) {
+	var hasEnvVar bool
 	for _, container := range statefulSet.StatefulSet.Spec.Template.Spec.Containers {
 		for _, envVar := range container.Env {
 			if envVar.Name == kubegresCtx.EnvVarReplicationSlotName && envVar.Value != "" {
-				// Also check if the replication slot actually exist in the database.
-				// If it does not, treat it as if replication slots are not enabled, so we'll trigger a rollout of the
-				// current replica.
-				// This could happen after a failover when the primary changes and the new primary does not have
-				// replication slots created for the already existing replicas.
-				// Causing the rollout of the replicas will make all of them to be registered in the new primary.
-				if !r.resourcesStates.StatefulSets.Primary.IsDeployed || !r.resourcesStates.StatefulSets.Primary.IsReady {
-					err := errors.New("primary is not ready to check replication slots")
-					r.kubegresContext.Log.ErrorEvent("ReplicationSlotCheck", err, "Cannot proceed without Ready primary", "Replica name", statefulSet.StatefulSet.Name)
-					return false, err
-				}
-				_, err := r.replicationSlotsCreateDeleter.GetFor(&statefulSet.StatefulSet)
-				if errors.Is(err, errNotFound) {
-					return false, nil
-				}
-				if err != nil {
-					r.kubegresContext.Log.ErrorEvent("ReplicationSlotCheck", err, "Error while checking replication slot for the Replica StatefulSet.", "Replica name", statefulSet.StatefulSet.Name)
-					return false, err
-				}
-				return true, nil
+				hasEnvVar = true
+				break
 			}
 		}
+		if hasEnvVar {
+			break
+		}
 	}
-	return false, nil
+
+	if !hasEnvVar {
+		return false, nil
+	}
+
+	// Also check if the replication slot actually exist in the database.
+	// If it does not, treat it as if replication slots are not enabled, so we'll trigger a rollout of the
+	// current replica.
+	// This could happen after a failover when the primary changes and the new primary does not have
+	// replication slots created for the already existing replicas.
+	// Causing the rollout of the replicas will make all of them to be registered in the new primary.
+	if !r.kubegresContext.Kubegres.Spec.Standby.Enabled {
+		if !r.resourcesStates.StatefulSets.Primary.IsDeployed || !r.resourcesStates.StatefulSets.Primary.IsReady {
+			err := errors.New("primary is not ready to check replication slots")
+			r.kubegresContext.Log.ErrorEvent("ReplicationSlotCheck", err, "Cannot proceed without Ready primary", "Replica name", statefulSet.StatefulSet.Name)
+			return false, err
+		}
+	}
+	_, err := r.replicationSlotsCreateDeleter.GetFor(&statefulSet.StatefulSet)
+	if err == nil {
+		return true, nil
+	}
+
+	if errors.Is(err, errNotFound) {
+		return false, nil
+	}
+
+	r.kubegresContext.Log.ErrorEvent("ReplicationSlotCheck", err, "Error while checking replication slot for the Replica StatefulSet.", "Replica name", statefulSet.StatefulSet.Name)
+	return false, err
 }
