@@ -307,6 +307,7 @@ func (r *TestResourceCreator) DeleteAllTestResources(resourceNamesToNotDelete ..
 	}
 
 	log.Println("Deleted all resources created during tests. Waiting for 30 seconds...")
+	// this is just a test
 	time.Sleep(30 * time.Second)
 
 	log.Println("Deleting all resources created during tests")
