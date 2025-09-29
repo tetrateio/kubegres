@@ -198,29 +198,31 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("standby"), func() {
 				log.Print("END OF: Test 'replica set to 1 should be running and replicating data from external postgres'")
 			})
 
-			It("THEN replica is set to 2 should be running a new instance replicating data from external postgres", func() {
+			// TODO (piotrkpc): make this test to deploy 2 replicas once the DBConnectionUtil connects to all pods under the service
+			It("THEN replica is set to 1 should be running a new instance replicating data from external postgres", func() {
 
-				log.Print("START OF: Test 'GIVEN replica is set to 2 should be running a new instance replicating data from external postgres'")
+				log.Print("START OF: Test 'GIVEN replica is set to 1 should be running a new instance replicating data from external postgres'")
 
-				test.givenExistingKubegresSpecIsSetTo(2)
+				test.givenExistingKubegresSpecIsSetTo(1)
 
 				test.whenKubegresIsUpdated()
 
-				test.thenPodsStatesShouldBe("external-postgres", 0, 2, template.LabelModelStandbyValue, false)
+				test.thenPodsStatesShouldBe("external-postgres", 0, 1, template.LabelModelStandbyValue, false)
 
 				test.standbyDBQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 				test.standbyDBQueryTestCases.ThenWeCanSqlQueryReplicaDb()
 
 				test.keepCreatedResourcesForNextTest = true
 
-				log.Print("END OF: Test 'GIVEN replica is set to 2 should be running a new instance replicating data from external postgres'")
+				log.Print("END OF: Test 'GIVEN replica is set to 1 should be running a new instance replicating data from external postgres'")
 			})
 
+			// TODO (piotrkpc): make this test to deploy 2 replicas once the DBConnectionUtil connects to all pods under the service
 			It("THEN 'standby.enabled' set to false should promote the replica to be primary", func() {
 
 				log.Print("START OF: Test 'GIVEN 'standby.enabled' set to false should promote the replica to be primary'")
 
-				test.givenExistingKubegresSpecStandbyEnabledIsSetTo(false)
+				test.givenExistingKubegresSpecStandbyEnabledIsSetTo(false, 2)
 
 				test.whenKubegresIsUpdated()
 
@@ -234,16 +236,17 @@ var _ = Describe("Setting Kubegres spec 'replica'", Label("standby"), func() {
 				log.Print("END OF: Test 'GIVEN 'standby.enabled' set to false should promote the replica to be primary'")
 			})
 
+			// TODO (piotrkpc): make this test to deploy 2 replicas once the DBConnectionUtil connects to all pods under the service
 			It("THEN 'standby.enabled' set to true again should kill the primary, the exising replica and create a new replicas to the external postgres", func() {
 
 				log.Print("START OF: Test 'GIVEN 'standby.enabled' set to true again should kill the primary, " +
 					"the exising replica and create a new replicas to the external postgres'")
 
-				test.givenExistingKubegresSpecStandbyEnabledIsSetTo(true)
+				test.givenExistingKubegresSpecStandbyEnabledIsSetTo(true, 1)
 
 				test.whenKubegresIsUpdated()
 
-				test.thenPodsStatesShouldBe("external-postgres", 0, 2, template.LabelModelStandbyValue, false)
+				test.thenPodsStatesShouldBe("external-postgres", 0, 1, template.LabelModelStandbyValue, false)
 
 				test.standbyDBQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
 				test.standbyDBQueryTestCases.ThenWeCanSqlQueryReplicaDb()
@@ -330,10 +333,11 @@ var _ = Describe("Setting Kubegres spec 'replica' with replication slots", Label
 			test.keepCreatedResourcesForNextTest = true
 		})
 
+		// TODO (piotrkpc): make this test to deploy 2 replicas once the DBConnectionUtil connects to all pods under the service
 		It("THEN 'standby.enabled' set to false should promote the replica to be primary", func() {
 			log.Print("START OF: Test 'GIVEN 'standby.enabled' set to false should promote the replica to be primary'")
 
-			test.givenExistingKubegresSpecStandbyEnabledIsSetTo(false)
+			test.givenExistingKubegresSpecStandbyEnabledIsSetTo(false, 1)
 			test.whenKubegresIsUpdated()
 
 			test.thenPodsStatesShouldBe("my-kubegres", 1, 0, template.LabelModelActiveValue, false)
@@ -406,7 +410,7 @@ func (r *StandByTest) givenExistingKubegresSpecIsSetTo(specNbreReplicas int32) {
 	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
 }
 
-func (r *StandByTest) givenExistingKubegresSpecStandbyEnabledIsSetTo(enabled bool) {
+func (r *StandByTest) givenExistingKubegresSpecStandbyEnabledIsSetTo(enabled bool, nbreReplicas int32) {
 	Eventually(func() bool {
 		var err error
 		r.kubegresResource, err = r.resourceRetriever.GetKubegres()
@@ -418,6 +422,7 @@ func (r *StandByTest) givenExistingKubegresSpecStandbyEnabledIsSetTo(enabled boo
 		}
 
 		r.kubegresResource.Spec.Standby.Enabled = enabled
+		r.kubegresResource.Spec.Replicas = &nbreReplicas
 		return true
 
 	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
