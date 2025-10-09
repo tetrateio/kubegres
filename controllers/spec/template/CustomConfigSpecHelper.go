@@ -110,20 +110,22 @@ func (r *CustomConfigSpecHelper) updateVolumeMountNameIfChanged(volumeName, conf
 		}
 	}
 
-	for i, sidecar := range statefulSet.Spec.Template.Spec.Containers[1:] {
+	// we don't want to check the main container because it's the checked above
+	for i := 1; i < len(statefulSet.Spec.Template.Spec.Containers[1:])+1; i++ {
+		sidecar := &statefulSet.Spec.Template.Spec.Containers[i]
 		var volumeFound bool
-		for i, volumeMount := range sidecar.VolumeMounts {
+		for j, volumeMount := range sidecar.VolumeMounts {
 			if volumeMount.SubPath == configMapDataKey {
 				volumeFound = true
 				if volumeMount.Name != volumeName {
-					sidecar.VolumeMounts[i].Name = volumeName
+					sidecar.VolumeMounts[j].Name = volumeName
 					updated = true
 				}
 			}
 		}
 		// Only append the volume mount if it is not already present and if it is part of the main container
 		if vol, ok := volumesBySubPath[configMapDataKey]; ok && !volumeFound {
-			statefulSet.Spec.Template.Spec.Containers[i+1].VolumeMounts = append(sidecar.VolumeMounts, vol)
+			sidecar.VolumeMounts = append(sidecar.VolumeMounts, vol)
 			updated = true
 		}
 	}

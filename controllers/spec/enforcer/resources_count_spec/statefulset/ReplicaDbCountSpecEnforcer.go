@@ -273,7 +273,11 @@ func (r *ReplicaDbCountSpecEnforcer) Enforce() error {
 	}
 
 	// Check if the number of deployed replicas == spec, if not then deploy one
-	nbreNewReplicaToDeploy := r.getExpectedNbreReplicasToDeploy() - r.getNbreDeployedReplicas()
+	nbreDeployedReplicas, err := r.getNbreDeployedReplicas()
+	if err != nil {
+		return err
+	}
+	nbreNewReplicaToDeploy := r.getExpectedNbreReplicasToDeploy() - nbreDeployedReplicas
 
 	if nbreNewReplicaToDeploy > 0 {
 
@@ -302,7 +306,11 @@ func (r *ReplicaDbCountSpecEnforcer) Enforce() error {
 	// Then undeploy replicas that don't match running configuration
 	replicationSlotDesired := r.replicationSlotsEnabled()
 	for _, deployedStatefulSet := range r.resourcesStates.StatefulSets.Replicas.All.GetAllReverseSortedByInstanceIndex() {
-		if r.hasReplicationSlotsEnabled(deployedStatefulSet) != replicationSlotDesired {
+		hasReplicationSlotsEnabled, err := r.hasReplicationSlotsEnabled(deployedStatefulSet)
+		if err != nil {
+			return err
+		}
+		if hasReplicationSlotsEnabled != replicationSlotDesired {
 			return r.undeployReplicaStatefulSets(deployedStatefulSet)
 		}
 	}
@@ -322,14 +330,18 @@ func (r *ReplicaDbCountSpecEnforcer) getDeployedReplicas() []statefulset.Statefu
 	return r.resourcesStates.StatefulSets.Replicas.All.GetAllSortedByInstanceIndex()
 }
 
-func (r *ReplicaDbCountSpecEnforcer) getNbreDeployedReplicas() int32 {
+func (r *ReplicaDbCountSpecEnforcer) getNbreDeployedReplicas() (int32, error) {
 	deployedReplicas := r.resourcesStates.StatefulSets.Replicas.NbreDeployed
 	for _, deployedReplica := range r.resourcesStates.StatefulSets.Replicas.All.GetAllReverseSortedByInstanceIndex() {
-		if r.hasReplicationSlotsEnabled(deployedReplica) != r.replicationSlotsEnabled() {
+		hasReplicationSlotsEnabled, err := r.hasReplicationSlotsEnabled(deployedReplica)
+		if err != nil {
+			return 0, err
+		}
+		if hasReplicationSlotsEnabled != r.replicationSlotsEnabled() {
 			deployedReplicas--
 		}
 	}
-	return deployedReplicas
+	return deployedReplicas, nil
 }
 
 func (r *ReplicaDbCountSpecEnforcer) getExpectedNbreReplicasToDeploy() int32 {
@@ -529,6 +541,7 @@ func (r *ReplicaDbCountSpecEnforcer) undeployReplicaStatefulSets(replicaToUndepl
 		// exhausted all attempts to delete the replication slot
 		r.blockingOperation.RemoveActiveOperation()
 		r.kubegresContext.Log.ErrorEvent("ReplicaStatefulSetReplicationSlotDeletionErr", err, "Failed to delete replication slot for the Replica StatefulSet after all attempts.", "Replica name", replicaToUndeploy.StatefulSet.Name, "Attempt", attempt)
+		return err
 	}
 
 	r.kubegresContext.Status.SetEnforcedReplicas(r.kubegresContext.Kubegres.Status.EnforcedReplicas - 1)
@@ -578,26 +591,46 @@ func (r *ReplicaDbCountSpecEnforcer) replicationSlotsEnabled() bool {
 	return r.kubegresContext.Kubegres.Spec.ReplicationSlots.Enabled
 }
 
-func (r *ReplicaDbCountSpecEnforcer) hasReplicationSlotsEnabled(statefulSet statefulset.StatefulSetWrapper) bool {
+func (r *ReplicaDbCountSpecEnforcer) hasReplicationSlotsEnabled(statefulSet statefulset.StatefulSetWrapper) (bool, error) {
+	var hasEnvVar bool
 	for _, container := range statefulSet.StatefulSet.Spec.Template.Spec.Containers {
 		for _, envVar := range container.Env {
 			if envVar.Name == kubegresCtx.EnvVarReplicationSlotName && envVar.Value != "" {
-				// Also check if the replication slot actually exist in the database.
-				// If it does not, treat it as if replication slots are not enabled, so we'll trigger a rollout of the
-				// current replica.
-				// This could happen after a failover when the primary changes and the new primary does not have
-				// replication slots created for the already existing replicas.
-				// Causing the rollout of the replicas will make all of them to be registered in the new primary.
-				_, err := r.replicationSlotsCreateDeleter.GetFor(&statefulSet.StatefulSet)
-				if errors.Is(err, errNotFound) {
-					return false
-				}
-				if err != nil {
-					r.kubegresContext.Log.ErrorEvent("ReplicationSlotCheckErr", err, "Error while checking replication slot for the Replica StatefulSet.", "Replica name", statefulSet.StatefulSet.Name)
-				}
-				return true
+				hasEnvVar = true
+				break
 			}
 		}
+		if hasEnvVar {
+			break
+		}
 	}
-	return false
+
+	if !hasEnvVar {
+		return false, nil
+	}
+
+	// Also check if the replication slot actually exist in the database.
+	// If it does not, treat it as if replication slots are not enabled, so we'll trigger a rollout of the
+	// current replica.
+	// This could happen after a failover when the primary changes and the new primary does not have
+	// replication slots created for the already existing replicas.
+	// Causing the rollout of the replicas will make all of them to be registered in the new primary.
+	if !r.kubegresContext.Kubegres.Spec.Standby.Enabled {
+		if !r.resourcesStates.StatefulSets.Primary.IsDeployed || !r.resourcesStates.StatefulSets.Primary.IsReady {
+			err := errors.New("primary is not ready to check replication slots")
+			r.kubegresContext.Log.ErrorEvent("ReplicationSlotCheck", err, "Cannot proceed without Ready primary", "Replica name", statefulSet.StatefulSet.Name)
+			return false, err
+		}
+	}
+	_, err := r.replicationSlotsCreateDeleter.GetFor(&statefulSet.StatefulSet)
+	if err == nil {
+		return true, nil
+	}
+
+	if errors.Is(err, errNotFound) {
+		return false, nil
+	}
+
+	r.kubegresContext.Log.ErrorEvent("ReplicationSlotCheck", err, "Error while checking replication slot for the Replica StatefulSet.", "Replica name", statefulSet.StatefulSet.Name)
+	return false, err
 }

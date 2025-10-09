@@ -97,6 +97,36 @@ var _ = Describe("Managing sidecar containers", Label("sidecars"), func() {
 			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec sidecarContainer and volumes'")
 
 		})
+		It("THEN replicationSlots are enabled and THEN attached sidecar container should have the defined volumes mounted", func() {
+			log.Print("START OF: Test 'GIVEN new Kubegres is created with spec sidecarContainer and volumes and replicationSlots enabled'")
+
+			shmVolume := volTest.givenVolumeWithMemory("dshm", "200Mi")
+			customVolumes := []corev1.Volume{shmVolume}
+
+			shmVolumeMount := volTest.givenVolumeMount("dshm", "/dev/shm")
+			customVolumeMounts := []corev1.VolumeMount{shmVolumeMount}
+
+			rs := postgresv1.ReplicationSlots{
+				Enabled: true,
+			}
+
+			test.givenExistingKubegresSpecReplicationSlotsIsSetTo(&rs)
+			test.whenKubegresIsUpdated()
+
+			test.thenReplicaShouldHaveReplicationSlotSetAndBeReady()
+			test.thenStatefulSetStatesShouldHaveContainer("sidecar", "busybox", []string{"/bin/sleep", "99999"}, nil)
+			test.thenStatefulSetStatesShouldHaveNbreContainers(2) // 1 main container + 1 sidecar container
+
+			volTest.thenStatefulSetsStatesShouldBe(customVolumes, customVolumeMounts, 1, 1)
+
+			test.dbQueryTestCases.ThenWeCanSqlQueryPrimaryDb()
+			test.dbQueryTestCases.ThenWeCanSqlQueryReplicaDb()
+
+			test.keepCreatedResourcesForNextTest = true
+
+			log.Print("END OF: Test 'GIVEN new Kubegres is created with spec sidecarContainer and volumes and replicationSlots enabled'")
+
+		})
 
 		It("THEN attached sidecar container should have the default config maps mounted", func() {
 
@@ -274,7 +304,7 @@ var _ = Describe("Managing sidecar containers", Label("sidecars"), func() {
 			log.Print("START OF: Test 'THEN modify `sidecarContainer` args and env should update the container in pod template spec")
 
 			containers := test.givenSidecarContainers("sidecar", "busybox:1.37.0")
-			newCommand := []string{"/bin/sleep", "99999"}
+			newCommand := []string{"/bin/sleep", "999991234"}
 			newEnv := []corev1.EnvVar{{Name: "FOO", Value: "BAR"}}
 			containers[0].Command = newCommand
 			containers[0].Env = newEnv
@@ -403,5 +433,51 @@ func (r *sidecarContainerSpec) assertStatefulSetsSidecarContainers(name, image s
 		}
 		return sidecarsFound == 0
 
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+}
+
+func (r *sidecarContainerSpec) givenExistingKubegresSpecReplicationSlotsIsSetTo(rs *postgresv1.ReplicationSlots) {
+	var err error
+	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
+	if err != nil {
+		log.Println("Error while getting Kubegres resource : ", err)
+		Expect(err).Should(Succeed())
+		return
+	}
+
+	r.kubegresResource.Spec.ReplicationSlots = *rs
+}
+
+func (r *sidecarContainerSpec) thenReplicaShouldHaveReplicationSlotSetAndBeReady() {
+	Eventually(func() bool {
+		kubegresResources, err := r.resourceRetriever.GetKubegresResources()
+		if err != nil && !apierrors.IsNotFound(err) {
+			log.Println("ERROR while retrieving Kubegres kubegresResources")
+			return false
+		}
+		for _, resource := range kubegresResources.Resources {
+			if resource.IsPrimary {
+				continue
+			}
+			// have env var with replication slot
+			var found bool
+			for _, container := range resource.StatefulSet.Spec.Template.Spec.Containers {
+				for _, envVar := range container.Env {
+					if envVar.Name == ctx.EnvVarReplicationSlotName {
+						found = true
+						break
+					}
+				}
+			}
+			if !found {
+				log.Printf("Replica StatefulSet '%s' doesn't have the env var for replication slot", resource.StatefulSet.Name)
+				return false
+			}
+			if !resource.IsReady {
+				log.Printf("Replica StatefulSet '%s' is not ready", resource.StatefulSet.Name)
+				return false
+			}
+		}
+		return true
 	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
 }
