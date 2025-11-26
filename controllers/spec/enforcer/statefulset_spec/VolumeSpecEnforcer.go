@@ -44,6 +44,9 @@ func (r *VolumeSpecEnforcer) CheckForSpecDifference(statefulSet *apps.StatefulSe
 
 	currentCustomVolumes := r.getCurrentCustomVolumes(statefulSet)
 	expectedCustomVolumes := r.kubegresContext.Kubegres.Spec.Volume.Volumes
+	if statefulSet.Labels[ctx.LabelReplicationRole] == ctx.PrimaryRoleName {
+		expectedCustomVolumes = append(expectedCustomVolumes, r.kubegresContext.Kubegres.Spec.Volume.Primary.Volumes...)
+	}
 
 	if !r.compareVolumes(currentCustomVolumes, expectedCustomVolumes) {
 		return StatefulSetSpecDifference{
@@ -57,6 +60,9 @@ func (r *VolumeSpecEnforcer) CheckForSpecDifference(statefulSet *apps.StatefulSe
 	currentCustomVolumeMounts := r.getCurrentCustomVolumeMounts(statefulSet)
 	currentCustomVolumeMountsSidecars := r.getVolumeMountsFromSidecars(statefulSet)
 	expectedCustomVolumeMounts := r.kubegresContext.Kubegres.Spec.Volume.VolumeMounts
+	if statefulSet.Labels[ctx.LabelReplicationRole] == ctx.PrimaryRoleName {
+		expectedCustomVolumeMounts = append(expectedCustomVolumeMounts, r.kubegresContext.Kubegres.Spec.Volume.Primary.VolumeMounts...)
+	}
 
 	if hasInitContainer && !r.compareVolumeMounts(currentCustomVolumeMountsInit, expectedCustomVolumeMounts) {
 		return StatefulSetSpecDifference{
@@ -97,13 +103,23 @@ func (r *VolumeSpecEnforcer) EnforceSpec(statefulSet *apps.StatefulSet) (wasSpec
 		statefulSet.Spec.Template.Spec.Volumes = append(statefulSet.Spec.Template.Spec.Volumes, r.kubegresContext.Kubegres.Spec.Volume.Volumes...)
 	}
 
+	if statefulSet.Labels[ctx.LabelReplicationRole] == ctx.PrimaryRoleName {
+		statefulSet.Spec.Template.Spec.Volumes = append(statefulSet.Spec.Template.Spec.Volumes, r.kubegresContext.Kubegres.Spec.Volume.Primary.Volumes...)
+	}
+
 	for i := range statefulSet.Spec.Template.Spec.Containers {
 		container := &statefulSet.Spec.Template.Spec.Containers[i]
 		container.VolumeMounts = append(container.VolumeMounts, r.kubegresContext.Kubegres.Spec.Volume.VolumeMounts...)
+		if statefulSet.Labels[ctx.LabelReplicationRole] == ctx.PrimaryRoleName {
+			container.VolumeMounts = append(container.VolumeMounts, r.kubegresContext.Kubegres.Spec.Volume.Primary.VolumeMounts...)
+		}
 	}
 
 	if len(statefulSet.Spec.Template.Spec.InitContainers) > 0 && statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts != nil {
 		statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts = append(statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts, r.kubegresContext.Kubegres.Spec.Volume.VolumeMounts...)
+		if statefulSet.Labels[ctx.LabelReplicationRole] == ctx.PrimaryRoleName {
+			statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts = append(statefulSet.Spec.Template.Spec.InitContainers[0].VolumeMounts, r.kubegresContext.Kubegres.Spec.Volume.Primary.VolumeMounts...)
+		}
 	}
 
 	return true, nil

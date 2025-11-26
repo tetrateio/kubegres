@@ -45,6 +45,7 @@ type KubegresContext struct {
 
 const (
 	PrimaryRoleName                        = "primary"
+	LabelReplicationRole                   = "replicationRole"
 	KindKubegres                           = "Kubegres"
 	DeploymentOwnerKey                     = ".metadata.controller"
 	DatabaseVolumeName                     = "postgres-db"

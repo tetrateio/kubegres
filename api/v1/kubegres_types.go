@@ -55,10 +55,19 @@ type VolumeClaimTemplate struct {
 	Spec v1.PersistentVolumeClaimSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
 }
 
+type PrimaryVolume struct {
+	VolumeMounts         []v1.VolumeMount      `json:"volumeMounts,omitempty"`
+	Volumes              []v1.Volume           `json:"volumes,omitempty"`
+	VolumeClaimTemplates []VolumeClaimTemplate `json:"volumeClaimTemplates,omitempty"`
+}
+
 type Volume struct {
 	VolumeMounts         []v1.VolumeMount      `json:"volumeMounts,omitempty"`
 	Volumes              []v1.Volume           `json:"volumes,omitempty"`
 	VolumeClaimTemplates []VolumeClaimTemplate `json:"volumeClaimTemplates,omitempty"`
+	// Primary defines volume settings specific to the primary database instance.
+	// These will be appended to the general volume settings defined above.
+	Primary PrimaryVolume `json:"primary,omitempty"`
 }
 
 type Probe struct {

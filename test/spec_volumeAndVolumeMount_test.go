@@ -26,7 +26,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	v12 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
@@ -34,6 +34,7 @@ import (
 	"reactive-tech.io/kubegres/test/resourceConfigs"
 	"reactive-tech.io/kubegres/test/util"
 	"reactive-tech.io/kubegres/test/util/testcases"
+	"sigs.k8s.io/yaml"
 )
 
 var _ = Describe("Setting Kubegres specs 'volume.volume' and 'volume.volumeMount'", Label("group:5"), func() {
@@ -57,6 +58,111 @@ var _ = Describe("Setting Kubegres specs 'volume.volume' and 'volume.volumeMount
 		}
 	})
 
+	Context("GIVEN new Kubegres is created with a 'volume.primary.volume' and 'volume.primary.volumeMount'", func() {
+
+		It("THEN only primary statefulset should have volume and volumeMount created", func() {
+			volume := test.givenVolumeWithEmptyDir("a-volume")
+			volumes := []corev1.Volume{volume}
+
+			volumeMount := test.givenVolumeMount("a-volume", "/mountpoint")
+			volumeMounts := []corev1.VolumeMount{volumeMount}
+
+			test.givenNewKubegresSpecPrimaryVolumesIsSetTo(volumes, volumeMounts, 3)
+
+			test.whenKubegresIsCreated()
+
+			test.thenNbreOfReplicasShouldBe(1, 2)
+
+			test.thenPrimaryStatefulSetsShouldHave(volumes, volumeMounts)
+			test.thenReplicasStatefulSetsShouldNotHave(volumes, volumeMounts)
+
+			test.keepCreatedResourcesForNextTest = true
+		})
+
+		It("THEN we update existing Kubegres by adding new custom 'volume.primary.volume' and 'volume.primary.volumeMount'", func() {
+			updatedVolume := test.givenVolumeWithEmptyDir("updated-volume")
+			volumes := []corev1.Volume{updatedVolume}
+			updatedVolumeMount := test.givenVolumeMount("updated-volume", "/updated-mountpoint")
+			volumeMounts := []corev1.VolumeMount{updatedVolumeMount}
+
+			test.givenExistingKubegresSpecPrimaryVolumesIsUpdatedTo(volumes, volumeMounts)
+
+			test.whenKubernetesIsUpdated()
+
+			test.thenNbreOfReplicasShouldBe(1, 2)
+
+			test.thenPrimaryStatefulSetsShouldHave(volumes, volumeMounts)
+			test.thenReplicasStatefulSetsShouldNotHave(volumes, volumeMounts)
+
+			test.keepCreatedResourcesForNextTest = true
+		})
+
+		It("THEN we update existing Kubegres by adding new custom 'volume.volumes' and 'volume.volumeMounts' to primary spec", func() {
+			exitingPrimaryVolume := test.givenVolumeWithEmptyDir("updated-volume")
+			primaryVolumes := []corev1.Volume{exitingPrimaryVolume}
+			existingPrimaryVolumeMount := test.givenVolumeMount("updated-volume", "/updated-mountpoint")
+			primaryVolumeMounts := []corev1.VolumeMount{existingPrimaryVolumeMount}
+
+			addedVolume := test.givenVolumeWithEmptyDir("added-volume")
+			volumes := []corev1.Volume{addedVolume}
+			addedVolumeMount := test.givenVolumeMount("added-volume", "/added-mountpoint")
+			volumeMounts := []corev1.VolumeMount{addedVolumeMount}
+
+			test.givenExistingKubegresSpecVolumesIsUpdatedTo(volumes, volumeMounts)
+			test.whenKubernetesIsUpdated()
+
+			test.thenNbreOfReplicasShouldBe(1, 2)
+
+			expectedPrimaryVolumes := append(primaryVolumes, volumes...)
+			expectedPrimaryVolumeMounts := append(primaryVolumeMounts, volumeMounts...)
+
+			test.thenPrimaryStatefulSetsShouldHave(expectedPrimaryVolumes, expectedPrimaryVolumeMounts)
+			test.thenReplicasStatefulSetsShouldHave(volumes, volumeMounts)
+
+			test.keepCreatedResourcesForNextTest = true
+		})
+
+		It("THEN we update existing Kubegres by removing custom 'volume.primary.volume' and 'volume.primary.volumeMount'", func() {
+			removedPrimaryVol := test.givenVolumeWithEmptyDir("updated-volume")
+			removedPrimaryVolumes := []corev1.Volume{removedPrimaryVol}
+			removedPrimaryVolumeMount := test.givenVolumeMount("updated-volume", "/updated-mountpoint")
+			removedPrimaryVolumeMounts := []corev1.VolumeMount{removedPrimaryVolumeMount}
+
+			existingVolume := test.givenVolumeWithEmptyDir("added-volume")
+			volumes := []corev1.Volume{existingVolume}
+			existingVolumeMount := test.givenVolumeMount("added-volume", "/added-mountpoint")
+			volumeMounts := []corev1.VolumeMount{existingVolumeMount}
+
+			test.givenExistingKubegresSpecPrimaryVolumesIsUpdatedTo(nil, nil)
+			test.whenKubernetesIsUpdated()
+
+			test.thenNbreOfReplicasShouldBe(1, 2)
+
+			test.thenPrimaryStatefulSetsShouldHave(volumes, volumeMounts)
+			test.thenReplicasStatefulSetsShouldHave(volumes, volumeMounts)
+
+			test.thenPrimaryStatefulSetsShouldNotHave(removedPrimaryVolumes, removedPrimaryVolumeMounts)
+
+			test.keepCreatedResourcesForNextTest = true
+		})
+
+		It("THEN we update existing Kubegres by removing all custom 'volume.volumes' and 'volume.volumeMounts' from primary spec", func() {
+			removedVolume := test.givenVolumeWithEmptyDir("added-volume")
+			removedVolumes := []corev1.Volume{removedVolume}
+			removedVolumeMount := test.givenVolumeMount("added-volume", "/added-mountpoint")
+			removedVolumeMounts := []corev1.VolumeMount{removedVolumeMount}
+
+			test.givenExistingKubegresSpecVolumesIsUpdatedTo(nil, nil)
+			test.whenKubernetesIsUpdated()
+
+			test.thenNbreOfReplicasShouldBe(1, 2)
+
+			test.thenPrimaryStatefulSetsShouldNotHave(removedVolumes, removedVolumeMounts)
+			test.thenReplicasStatefulSetsShouldNotHave(removedVolumes, removedVolumeMounts)
+
+		})
+	})
+
 	Context("GIVEN new Kubegres is created with a 'volume.volume' and 'volume.volumeMount' which have a reserved name", func() {
 
 		It("THEN 2 error events should be logged as it is not possible to use a reserved name", func() {
@@ -67,10 +173,10 @@ var _ = Describe("Setting Kubegres specs 'volume.volume' and 'volume.volumeMount
 			reservedVolumeName := ctx.DatabaseVolumeName
 
 			cacheVolume := test.givenVolumeWithEmptyDir(reservedVolumeName)
-			customVolumes := []v12.Volume{cacheVolume}
+			customVolumes := []corev1.Volume{cacheVolume}
 
 			cacheVolumeMount := test.givenVolumeMount(reservedVolumeName, "/cache")
-			customVolumeMounts := []v12.VolumeMount{cacheVolumeMount}
+			customVolumeMounts := []corev1.VolumeMount{cacheVolumeMount}
 
 			test.givenNewKubegresSpecIsSetTo(customVolumes, customVolumeMounts, 3)
 
@@ -93,11 +199,11 @@ var _ = Describe("Setting Kubegres specs 'volume.volume' and 'volume.volumeMount
 				"set to the path of Postgres database folder'")
 
 			cacheVolume := test.givenVolumeWithEmptyDir("cache-volume")
-			customVolumes := []v12.Volume{cacheVolume}
+			customVolumes := []corev1.Volume{cacheVolume}
 
 			postgresDatabasePath := test.kubegresResource.Spec.Database.VolumeMount
 			cacheVolumeMount := test.givenVolumeMount("cache-volume", postgresDatabasePath)
-			customVolumeMounts := []v12.VolumeMount{cacheVolumeMount}
+			customVolumeMounts := []corev1.VolumeMount{cacheVolumeMount}
 
 			test.givenNewKubegresSpecIsSetTo(customVolumes, customVolumeMounts, 3)
 
@@ -119,10 +225,10 @@ var _ = Describe("Setting Kubegres specs 'volume.volume' and 'volume.volumeMount
 			log.Print("GIVEN new Kubegres is created with a new custom 'volume.volume' and 'volume.volumeMount' and spec 'replica' set to 3")
 
 			shmVolume := test.givenVolumeWithMemory("dshm", "200Mi")
-			customVolumes := []v12.Volume{shmVolume}
+			customVolumes := []corev1.Volume{shmVolume}
 
 			shmVolumeMount := test.givenVolumeMount("dshm", "/dev/shm")
-			customVolumeMounts := []v12.VolumeMount{shmVolumeMount}
+			customVolumeMounts := []corev1.VolumeMount{shmVolumeMount}
 
 			test.givenNewKubegresSpecIsSetTo(customVolumes, customVolumeMounts, 3)
 
@@ -148,10 +254,10 @@ var _ = Describe("Setting Kubegres specs 'volume.volume' and 'volume.volumeMount
 
 			shmVolume := test.givenVolumeWithMemory("dshm", "300Mi")
 			cacheVolume := test.givenVolumeWithEmptyDir("cache-volume")
-			customVolumesToAddOrUpdate := []v12.Volume{shmVolume, cacheVolume}
+			customVolumesToAddOrUpdate := []corev1.Volume{shmVolume, cacheVolume}
 
 			cacheVolumeMount := test.givenVolumeMount("cache-volume", "/cache")
-			customVolumeMountsToAddOrUpdate := []v12.VolumeMount{cacheVolumeMount}
+			customVolumeMountsToAddOrUpdate := []corev1.VolumeMount{cacheVolumeMount}
 
 			test.givenVolumesAreUpdatedOrAddedToTheExistingKubegresSpec(customVolumesToAddOrUpdate, customVolumeMountsToAddOrUpdate)
 
@@ -159,11 +265,11 @@ var _ = Describe("Setting Kubegres specs 'volume.volume' and 'volume.volumeMount
 
 			shmVolume = test.givenVolumeWithMemory("dshm", "300Mi")
 			cacheVolume = test.givenVolumeWithEmptyDir("cache-volume")
-			expectedCustomVolumes := []v12.Volume{shmVolume, cacheVolume}
+			expectedCustomVolumes := []corev1.Volume{shmVolume, cacheVolume}
 
 			shmVolumeMount := test.givenVolumeMount("dshm", "/dev/shm")
 			cacheVolumeMount = test.givenVolumeMount("cache-volume", "/cache")
-			expectedCustomVolumeMounts := []v12.VolumeMount{shmVolumeMount, cacheVolumeMount}
+			expectedCustomVolumeMounts := []corev1.VolumeMount{shmVolumeMount, cacheVolumeMount}
 
 			test.thenStatefulSetsStatesShouldBe(expectedCustomVolumes, expectedCustomVolumeMounts, 1, 2)
 
@@ -183,20 +289,20 @@ var _ = Describe("Setting Kubegres specs 'volume.volume' and 'volume.volumeMount
 			log.Print("START OF: Test 'GIVEN existing Kubegres is updated with the removal of one custom 'volume.volume' and 'volume.volumeMount'")
 
 			shmVolume := test.givenVolumeWithMemory("dshm", "300Mi")
-			customVolumesToRemove := []v12.Volume{shmVolume}
+			customVolumesToRemove := []corev1.Volume{shmVolume}
 
 			shmVolumeMount := test.givenVolumeMount("dshm", "/dev/shm")
-			customVolumeMountsToRemove := []v12.VolumeMount{shmVolumeMount}
+			customVolumeMountsToRemove := []corev1.VolumeMount{shmVolumeMount}
 
 			test.givenVolumesAreRemovedFromTheExistingKubegresSpec(customVolumesToRemove, customVolumeMountsToRemove)
 
 			test.whenKubernetesIsUpdated()
 
 			cacheVolume := test.givenVolumeWithEmptyDir("cache-volume")
-			expectedCustomVolumes := []v12.Volume{cacheVolume}
+			expectedCustomVolumes := []corev1.Volume{cacheVolume}
 
 			cacheVolumeMount := test.givenVolumeMount("cache-volume", "/cache")
-			expectedCustomVolumeMounts := []v12.VolumeMount{cacheVolumeMount}
+			expectedCustomVolumeMounts := []corev1.VolumeMount{cacheVolumeMount}
 
 			test.thenStatefulSetsStatesShouldBe(expectedCustomVolumes, expectedCustomVolumeMounts, 1, 2)
 
@@ -216,17 +322,17 @@ var _ = Describe("Setting Kubegres specs 'volume.volume' and 'volume.volumeMount
 			log.Print("START OF: Test 'GIVEN existing Kubegres is updated with the removal of all custom 'volume.volume' and 'volume.volumeMount'")
 
 			cacheVolume := test.givenVolumeWithEmptyDir("cache-volume")
-			customVolumesToRemove := []v12.Volume{cacheVolume}
+			customVolumesToRemove := []corev1.Volume{cacheVolume}
 
 			cacheVolumeMount := test.givenVolumeMount("cache-volume", "/cache")
-			customVolumeMountsToRemove := []v12.VolumeMount{cacheVolumeMount}
+			customVolumeMountsToRemove := []corev1.VolumeMount{cacheVolumeMount}
 
 			test.givenVolumesAreRemovedFromTheExistingKubegresSpec(customVolumesToRemove, customVolumeMountsToRemove)
 
 			test.whenKubernetesIsUpdated()
 
-			expectedCustomVolumes := []v12.Volume{}
-			expectedCustomVolumeMounts := []v12.VolumeMount{}
+			expectedCustomVolumes := []corev1.Volume{}
+			expectedCustomVolumeMounts := []corev1.VolumeMount{}
 			test.thenStatefulSetsStatesShouldBe(expectedCustomVolumes, expectedCustomVolumeMounts, 1, 2)
 
 			test.thenDeployedKubegresSpecShouldBeSetTo(expectedCustomVolumes, expectedCustomVolumeMounts)
@@ -248,42 +354,49 @@ type SpecVolumeAndVolumeMountTest struct {
 	resourceRetriever               util.TestResourceRetriever
 }
 
-func (r *SpecVolumeAndVolumeMountTest) givenVolumeWithMemory(volumeName, memoryQuantity string) v12.Volume {
+func (r *SpecVolumeAndVolumeMountTest) givenVolumeWithMemory(volumeName, memoryQuantity string) corev1.Volume {
 
 	memQuantity := resource.MustParse(memoryQuantity)
 
-	return v12.Volume{
+	return corev1.Volume{
 		Name: volumeName,
-		VolumeSource: v12.VolumeSource{
-			EmptyDir: &v12.EmptyDirVolumeSource{
-				Medium:    v12.StorageMediumMemory,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{
+				Medium:    corev1.StorageMediumMemory,
 				SizeLimit: &memQuantity,
 			},
 		},
 	}
 }
 
-func (r *SpecVolumeAndVolumeMountTest) givenVolumeWithEmptyDir(volumeName string) v12.Volume {
+func (r *SpecVolumeAndVolumeMountTest) givenVolumeWithEmptyDir(volumeName string) corev1.Volume {
 
-	return v12.Volume{
+	return corev1.Volume{
 		Name: volumeName,
-		VolumeSource: v12.VolumeSource{
-			EmptyDir: &v12.EmptyDirVolumeSource{},
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 	}
 }
 
-func (r *SpecVolumeAndVolumeMountTest) givenVolumeMount(volumeName, mountPath string) v12.VolumeMount {
+func (r *SpecVolumeAndVolumeMountTest) givenVolumeMount(volumeName, mountPath string) corev1.VolumeMount {
 
-	return v12.VolumeMount{
+	return corev1.VolumeMount{
 		Name:      volumeName,
 		MountPath: mountPath,
 	}
 }
 
+func (r *SpecVolumeAndVolumeMountTest) givenNewKubegresSpecPrimaryVolumesIsSetTo(volumes []corev1.Volume, mounts []corev1.VolumeMount, specNbreReplicas int32) {
+	r.kubegresResource = resourceConfigs.LoadKubegresYaml()
+	r.kubegresResource.Spec.Volume.Primary.Volumes = volumes
+	r.kubegresResource.Spec.Volume.Primary.VolumeMounts = mounts
+	r.kubegresResource.Spec.Replicas = &specNbreReplicas
+}
+
 func (r *SpecVolumeAndVolumeMountTest) givenNewKubegresSpecIsSetTo(
-	customVolumes []v12.Volume,
-	customVolumeMounts []v12.VolumeMount,
+	customVolumes []corev1.Volume,
+	customVolumeMounts []corev1.VolumeMount,
 	specNbreReplicas int32) {
 
 	r.kubegresResource = resourceConfigs.LoadKubegresYaml()
@@ -293,8 +406,8 @@ func (r *SpecVolumeAndVolumeMountTest) givenNewKubegresSpecIsSetTo(
 }
 
 func (r *SpecVolumeAndVolumeMountTest) givenVolumesAreUpdatedOrAddedToTheExistingKubegresSpec(
-	customVolumesToAddOrReplace []v12.Volume,
-	customVolumeMountsToAddOrReplace []v12.VolumeMount) {
+	customVolumesToAddOrReplace []corev1.Volume,
+	customVolumeMountsToAddOrReplace []corev1.VolumeMount) {
 
 	var err error
 	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
@@ -324,8 +437,8 @@ func (r *SpecVolumeAndVolumeMountTest) givenVolumesAreUpdatedOrAddedToTheExistin
 }
 
 func (r *SpecVolumeAndVolumeMountTest) givenVolumesAreRemovedFromTheExistingKubegresSpec(
-	customVolumesToRemove []v12.Volume,
-	customVolumeMountsToRemove []v12.VolumeMount) {
+	customVolumesToRemove []corev1.Volume,
+	customVolumeMountsToRemove []corev1.VolumeMount) {
 
 	var err error
 	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
@@ -350,7 +463,7 @@ func (r *SpecVolumeAndVolumeMountTest) givenVolumesAreRemovedFromTheExistingKube
 	}
 }
 
-func (r *SpecVolumeAndVolumeMountTest) getVolumeIndex(customVolume v12.Volume) int {
+func (r *SpecVolumeAndVolumeMountTest) getVolumeIndex(customVolume corev1.Volume) int {
 	index := 0
 	for _, volume := range r.kubegresResource.Spec.Volume.Volumes {
 		if customVolume.Name == volume.Name {
@@ -361,7 +474,7 @@ func (r *SpecVolumeAndVolumeMountTest) getVolumeIndex(customVolume v12.Volume) i
 	return -1
 }
 
-func (r *SpecVolumeAndVolumeMountTest) getVolumeMountIndex(customVolumeMount v12.VolumeMount) int {
+func (r *SpecVolumeAndVolumeMountTest) getVolumeMountIndex(customVolumeMount corev1.VolumeMount) int {
 	index := 0
 	for _, volumeMount := range r.kubegresResource.Spec.Volume.VolumeMounts {
 		if customVolumeMount.Name == volumeMount.Name {
@@ -382,7 +495,7 @@ func (r *SpecVolumeAndVolumeMountTest) whenKubernetesIsUpdated() {
 
 func (r *SpecVolumeAndVolumeMountTest) thenErrorEventShouldBeLoggedAboutVolumeName() {
 	expectedErrorEvent := util.EventRecord{
-		Eventtype: v12.EventTypeWarning,
+		Eventtype: corev1.EventTypeWarning,
 		Reason:    "SpecCheckErr",
 		Message: "In the Resources Spec the value of 'spec.Volume.Volumes' has an entry with a volume name " +
 			"which is a reserved name: " + ctx.DatabaseVolumeName + " . That name cannot be used and it is reserved for " +
@@ -400,7 +513,7 @@ func (r *SpecVolumeAndVolumeMountTest) thenErrorEventShouldBeLoggedAboutVolumeNa
 
 func (r *SpecVolumeAndVolumeMountTest) thenErrorEventShouldBeLoggedAboutVolumeMountName() {
 	expectedErrorEvent := util.EventRecord{
-		Eventtype: v12.EventTypeWarning,
+		Eventtype: corev1.EventTypeWarning,
 		Reason:    "SpecCheckErr",
 		Message: "In the Resources Spec the value of 'spec.Volume.VolumeMounts' has an entry with a volume name " +
 			"which is a reserved name: " + ctx.DatabaseVolumeName + " . That name cannot be used and it is reserved for " +
@@ -418,7 +531,7 @@ func (r *SpecVolumeAndVolumeMountTest) thenErrorEventShouldBeLoggedAboutVolumeMo
 
 func (r *SpecVolumeAndVolumeMountTest) thenErrorEventShouldBeLoggedAboutVolumeMountPath() {
 	expectedErrorEvent := util.EventRecord{
-		Eventtype: v12.EventTypeWarning,
+		Eventtype: corev1.EventTypeWarning,
 		Reason:    "SpecCheckErr",
 		Message: "In the Resources Spec the value of 'spec.Volume.VolumeMounts' has an entry with a 'mountPath' value " +
 			"which is reserved for the Postgres database: " + r.kubegresResource.Spec.Database.VolumeMount + " . " +
@@ -435,8 +548,8 @@ func (r *SpecVolumeAndVolumeMountTest) thenErrorEventShouldBeLoggedAboutVolumeMo
 }
 
 func (r *SpecVolumeAndVolumeMountTest) thenStatefulSetsStatesShouldBe(
-	expectedCustomVolumes []v12.Volume,
-	expectedCustomVolumeMounts []v12.VolumeMount,
+	expectedCustomVolumes []corev1.Volume,
+	expectedCustomVolumeMounts []corev1.VolumeMount,
 	nbrePrimary,
 	nbreReplicas int) bool {
 
@@ -520,9 +633,59 @@ func (r *SpecVolumeAndVolumeMountTest) thenStatefulSetsStatesShouldBe(
 	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
 }
 
+func (r *SpecVolumeAndVolumeMountTest) thenPrimaryStatefulSetsShouldHave(volumes []corev1.Volume, mounts []corev1.VolumeMount) {
+	Eventually(func() bool {
+		resources, err := r.resourceRetriever.GetKubegresResources()
+		if err != nil {
+			log.Println("Error while getting Kubegres resources : ", err)
+			return false
+		}
+		if !resources.AreAllReady {
+			log.Println("Not all StatefulSets are ready yet")
+			return false
+		}
+		primaryStatefulset, err := r.resourceRetriever.GetPrimaryStatefulSet()
+		if err != nil {
+			log.Println("Error while getting Primary StatefulSet : ", err)
+			return false
+		}
+		for _, vol := range volumes {
+			if !r.doesCustomVolumeExistsInStatefulSet(vol, primaryStatefulset.Spec.Template.Spec.Volumes) {
+				got, err := yaml.Marshal(primaryStatefulset.Spec.Template.Spec.Volumes)
+				if err != nil {
+					log.Println("Error while marshalling volumes : ", err)
+				}
+				marshal, err := yaml.Marshal(vol)
+				if err != nil {
+					log.Println("Error while marshalling expected volume : ", err)
+				}
+				log.Println("Primary StatefulSet volumes are not as expected. Got: ", got, " Expected: ", marshal)
+				return false
+			}
+		}
+		for _, container := range primaryStatefulset.Spec.Template.Spec.Containers {
+			for _, mount := range mounts {
+				if !r.doesCustomVolumeMountExistsInStatefulSet(mount, container.VolumeMounts) {
+					got, err := yaml.Marshal(container.VolumeMounts)
+					if err != nil {
+						log.Println("Error while marshalling volumeMounts : ", err)
+					}
+					want, err := yaml.Marshal(mounts)
+					if err != nil {
+						log.Println("Error while marshalling expected volumeMounts : ", err)
+					}
+					log.Println("Primary StatefulSet volumeMounts are not as expected. Got: ", got, " Expected: ", want)
+					return false
+				}
+			}
+		}
+		return true
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+}
+
 func (r *SpecVolumeAndVolumeMountTest) thenDeployedKubegresSpecShouldBeSetTo(
-	expectedCustomVolumes []v12.Volume,
-	expectedCustomVolumeMounts []v12.VolumeMount) {
+	expectedCustomVolumes []corev1.Volume,
+	expectedCustomVolumeMounts []corev1.VolumeMount) {
 
 	var err error
 	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
@@ -541,15 +704,15 @@ func (r *SpecVolumeAndVolumeMountTest) thenDeployedKubegresSpecShouldBeSetTo(
 	Expect(r.kubegresResource.Spec.Volume.VolumeMounts).Should(Equal(expectedCustomVolumeMounts))
 }
 
-func (r *SpecVolumeAndVolumeMountTest) isCustomVolume(volume v12.Volume, kubegresContext ctx.KubegresContext) bool {
+func (r *SpecVolumeAndVolumeMountTest) isCustomVolume(volume corev1.Volume, kubegresContext ctx.KubegresContext) bool {
 	return !kubegresContext.IsReservedVolumeName(volume.Name)
 }
 
-func (r *SpecVolumeAndVolumeMountTest) isCustomVolumeMount(volumeMount v12.VolumeMount, kubegresContext ctx.KubegresContext) bool {
+func (r *SpecVolumeAndVolumeMountTest) isCustomVolumeMount(volumeMount corev1.VolumeMount, kubegresContext ctx.KubegresContext) bool {
 	return !kubegresContext.IsReservedVolumeName(volumeMount.Name)
 }
 
-func (r *SpecVolumeAndVolumeMountTest) doesCustomVolumeExistsInStatefulSet(customVolume v12.Volume, statefulSetVolumes []v12.Volume) bool {
+func (r *SpecVolumeAndVolumeMountTest) doesCustomVolumeExistsInStatefulSet(customVolume corev1.Volume, statefulSetVolumes []corev1.Volume) bool {
 	for _, statefulSetVolume := range statefulSetVolumes {
 		if reflect.DeepEqual(statefulSetVolume, customVolume) {
 			return true
@@ -558,7 +721,7 @@ func (r *SpecVolumeAndVolumeMountTest) doesCustomVolumeExistsInStatefulSet(custo
 	return false
 }
 
-func (r *SpecVolumeAndVolumeMountTest) isVolumeAnExpectedCustomVolume(volumeToCheck v12.Volume, expectedCustomVolumes []v12.Volume) bool {
+func (r *SpecVolumeAndVolumeMountTest) isVolumeAnExpectedCustomVolume(volumeToCheck corev1.Volume, expectedCustomVolumes []corev1.Volume) bool {
 	for _, expectedCustomVolume := range expectedCustomVolumes {
 		if reflect.DeepEqual(expectedCustomVolume, volumeToCheck) {
 			return true
@@ -567,7 +730,7 @@ func (r *SpecVolumeAndVolumeMountTest) isVolumeAnExpectedCustomVolume(volumeToCh
 	return false
 }
 
-func (r *SpecVolumeAndVolumeMountTest) isVolumeMountAnExpectedCustomVolumeMount(volumeMountToCheck v12.VolumeMount, expectedCustomVolumeMounts []v12.VolumeMount) bool {
+func (r *SpecVolumeAndVolumeMountTest) isVolumeMountAnExpectedCustomVolumeMount(volumeMountToCheck corev1.VolumeMount, expectedCustomVolumeMounts []corev1.VolumeMount) bool {
 	for _, expectedCustomVolumeMount := range expectedCustomVolumeMounts {
 		if reflect.DeepEqual(expectedCustomVolumeMount, volumeMountToCheck) {
 			return true
@@ -576,11 +739,180 @@ func (r *SpecVolumeAndVolumeMountTest) isVolumeMountAnExpectedCustomVolumeMount(
 	return false
 }
 
-func (r *SpecVolumeAndVolumeMountTest) doesCustomVolumeMountExistsInStatefulSet(customVolumeMount v12.VolumeMount, statefulSetVolumeMounts []v12.VolumeMount) bool {
+func (r *SpecVolumeAndVolumeMountTest) doesCustomVolumeMountExistsInStatefulSet(customVolumeMount corev1.VolumeMount, statefulSetVolumeMounts []corev1.VolumeMount) bool {
 	for _, statefulSetVolumeMount := range statefulSetVolumeMounts {
 		if reflect.DeepEqual(statefulSetVolumeMount, customVolumeMount) {
 			return true
 		}
 	}
 	return false
+}
+
+func (r *SpecVolumeAndVolumeMountTest) thenReplicasStatefulSetsShouldNotHave(volumes []corev1.Volume, mounts []corev1.VolumeMount) {
+	Eventually(func() bool {
+		resources, err := r.resourceRetriever.GetKubegresResources()
+		if err != nil {
+			log.Println("Error while getting Kubegres resources : ", err)
+			return false
+		}
+		if !resources.AreAllReady {
+			log.Println("Not all StatefulSets are ready yet")
+			return false
+		}
+		for _, resource := range resources.Resources {
+			role, found := resource.StatefulSet.Metadata.Labels["replicationRole"]
+			if !found {
+				log.Println("Statefulset does not have 'replicationRole' label")
+				return false
+			}
+			if role != "replica" {
+				log.Println("Skipping non-replica statefulset: ", resource.StatefulSet.Name)
+				continue
+			}
+			for _, vol := range volumes {
+				if r.doesCustomVolumeExistsInStatefulSet(vol, resource.StatefulSet.Spec.Template.Spec.Volumes) {
+					log.Println("Replica StatefulSet '" + resource.StatefulSet.Name + "' has custom volume with name: '" + vol.Name)
+					return false
+				}
+			}
+			for _, container := range resource.StatefulSet.Spec.Template.Spec.Containers {
+				for _, mount := range mounts {
+					if r.doesCustomVolumeMountExistsInStatefulSet(mount, container.VolumeMounts) {
+						log.Println("Replica StatefulSet '" + resource.StatefulSet.Name + "' has custom volumeMount with name: '" + mount.Name)
+						return false
+					}
+				}
+			}
+		}
+		return true
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+
+}
+
+func (r *SpecVolumeAndVolumeMountTest) thenNbreOfReplicasShouldBe(nbrePrimary, nbreReplicas int) {
+	Eventually(func() bool {
+		kubegresResources, err := r.resourceRetriever.GetKubegresResources()
+		if err != nil {
+			log.Println("Error while retrieving Kubegres kubegresResources")
+			return false
+		}
+		if kubegresResources.NbreDeployedPrimary != nbrePrimary {
+			log.Printf("Number of deployed primary is %d but expected %d. Waiting...\n", kubegresResources.NbreDeployedPrimary, nbrePrimary)
+			return false
+		}
+		if kubegresResources.NbreDeployedReplicas != nbreReplicas {
+			log.Printf("Number of deployed replicas is %d but expected %d. Waiting...\n", kubegresResources.NbreDeployedReplicas, nbreReplicas)
+			return false
+		}
+		if !kubegresResources.AreAllReady {
+			log.Println("Not all StatefulSets are ready yet. Waiting...")
+			return false
+		}
+		return true
+
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+
+}
+
+func (r *SpecVolumeAndVolumeMountTest) givenExistingKubegresSpecPrimaryVolumesIsUpdatedTo(volumes []corev1.Volume, mounts []corev1.VolumeMount) {
+	var err error
+	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
+	if err != nil {
+		log.Println("Error while getting Kubegres resource : ", err)
+		Expect(err).Should(Succeed())
+		return
+	}
+
+	r.kubegresResource.Spec.Volume.Primary.Volumes = volumes
+	r.kubegresResource.Spec.Volume.Primary.VolumeMounts = mounts
+}
+
+func (r *SpecVolumeAndVolumeMountTest) givenExistingKubegresSpecVolumesIsUpdatedTo(volumes []corev1.Volume, mounts []corev1.VolumeMount) {
+	var err error
+	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
+	if err != nil {
+		log.Println("Error while getting Kubegres resource : ", err)
+		Expect(err).Should(Succeed())
+		return
+	}
+
+	r.kubegresResource.Spec.Volume.Volumes = volumes
+	r.kubegresResource.Spec.Volume.VolumeMounts = mounts
+
+}
+
+func (r *SpecVolumeAndVolumeMountTest) thenReplicasStatefulSetsShouldHave(volumes []corev1.Volume, mounts []corev1.VolumeMount) {
+
+	Eventually(func() bool {
+		resources, err := r.resourceRetriever.GetKubegresResources()
+		if err != nil {
+			log.Println("Error while getting Kubegres resources : ", err)
+			return false
+		}
+		if !resources.AreAllReady {
+			log.Println("Not all StatefulSets are ready yet")
+			return false
+		}
+		for _, resource := range resources.Resources {
+			role, found := resource.StatefulSet.Metadata.Labels["replicationRole"]
+			if !found {
+				log.Println("Statefulset does not have 'replicationRole' label")
+				return false
+			}
+			if role != "replica" {
+				log.Println("Skipping non-replica statefulset: ", resource.StatefulSet.Name)
+				continue
+			}
+			for _, vol := range volumes {
+				if !r.doesCustomVolumeExistsInStatefulSet(vol, resource.StatefulSet.Spec.Template.Spec.Volumes) {
+					log.Println("Replica StatefulSet '" + resource.StatefulSet.Name + "' doesn't have the expected custom volume with name: '" + vol.Name + "'. Waiting...")
+					return false
+				}
+			}
+			for _, container := range resource.StatefulSet.Spec.Template.Spec.Containers {
+				for _, mount := range mounts {
+					if !r.doesCustomVolumeMountExistsInStatefulSet(mount, container.VolumeMounts) {
+						log.Println("Replica StatefulSet '" + resource.StatefulSet.Name + "' doesn't have the expected custom volumeMount with name: '" + mount.Name + "'. Waiting...")
+						return false
+					}
+				}
+			}
+		}
+		return true
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+}
+
+func (r *SpecVolumeAndVolumeMountTest) thenPrimaryStatefulSetsShouldNotHave(volumes []corev1.Volume, mounts []corev1.VolumeMount) {
+	Eventually(func() bool {
+		resources, err := r.resourceRetriever.GetKubegresResources()
+		if err != nil {
+			log.Println("Error while getting Kubegres resources : ", err)
+			return false
+		}
+		if !resources.AreAllReady {
+			log.Println("Not all StatefulSets are ready yet")
+			return false
+		}
+		primaryStatefulset, err := r.resourceRetriever.GetPrimaryStatefulSet()
+		if err != nil {
+			log.Println("Error while getting Primary StatefulSet : ", err)
+			return false
+		}
+		for _, vol := range volumes {
+			if r.doesCustomVolumeExistsInStatefulSet(vol, primaryStatefulset.Spec.Template.Spec.Volumes) {
+				log.Println("Primary StatefulSet has custom volume with name: '" + vol.Name + "'")
+				return false
+			}
+		}
+		for _, container := range primaryStatefulset.Spec.Template.Spec.Containers {
+			for _, mount := range mounts {
+				if r.doesCustomVolumeMountExistsInStatefulSet(mount, container.VolumeMounts) {
+					log.Println("Primary StatefulSet has custom volumeMount with name: '" + mount.Name + "'")
+					return false
+				}
+			}
+		}
+		return true
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+
 }
