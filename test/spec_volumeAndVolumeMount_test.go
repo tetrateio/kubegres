@@ -659,7 +659,7 @@ func (r *SpecVolumeAndVolumeMountTest) thenPrimaryStatefulSetsShouldHave(volumes
 				if err != nil {
 					log.Println("Error while marshalling expected volume : ", err)
 				}
-				log.Println("Primary StatefulSet volumes are not as expected. Got: ", got, " Expected: ", marshal)
+				log.Println("Primary StatefulSet volumes are not as expected. Got: ", string(got), " Expected: ", string(marshal))
 				return false
 			}
 		}
@@ -674,7 +674,7 @@ func (r *SpecVolumeAndVolumeMountTest) thenPrimaryStatefulSetsShouldHave(volumes
 					if err != nil {
 						log.Println("Error while marshalling expected volumeMounts : ", err)
 					}
-					log.Println("Primary StatefulSet volumeMounts are not as expected. Got: ", got, " Expected: ", want)
+					log.Println("Primary StatefulSet volumeMounts are not as expected. Got: ", string(got), " Expected: ", string(want))
 					return false
 				}
 			}
