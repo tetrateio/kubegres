@@ -22,6 +22,7 @@ package util
 
 import (
 	"context"
+	"errors"
 	"log"
 
 	v1 "k8s.io/api/apps/v1"
@@ -142,6 +143,22 @@ func (r *TestResourceRetriever) getResource(resourceNameToRetrieve string, resou
 	ctx := context.Background()
 	lookupKey := types.NamespacedName{Name: resourceNameToRetrieve, Namespace: r.namespace}
 	return r.client.Get(ctx, lookupKey, resourceToRetrieve)
+}
+
+func (r *TestResourceRetriever) GetPrimaryStatefulSet() (*v1.StatefulSet, error) {
+	ctx := context.Background()
+	statefulSets := &v1.StatefulSetList{}
+	err := r.client.List(ctx, statefulSets, client.MatchingLabels{"replicationRole": resourceConfigs.PrimaryReplicationRole})
+	if err != nil {
+		return nil, err
+	}
+	if len(statefulSets.Items) == 0 {
+		return nil, errors.New("no primary statefulset")
+	}
+	if len(statefulSets.Items) > 1 {
+		return nil, errors.New("more than one primary statefulset")
+	}
+	return &statefulSets.Items[0], nil
 }
 
 /*

@@ -264,8 +264,22 @@ func (r *ResourcesCreatorFromTemplate) initStatefulSet(
 		}
 	}
 
+	if statefulSetTemplate.Labels[ctx.LabelReplicationRole] == ctx.PrimaryRoleName {
+		for _, volumeClaimTemplate := range postgresSpec.Volume.Primary.VolumeClaimTemplates {
+			persistentVolumeClaim := core.PersistentVolumeClaim{}
+			persistentVolumeClaim.Name = volumeClaimTemplate.Name
+			persistentVolumeClaim.Namespace = r.kubegresContext.Kubegres.Namespace
+			persistentVolumeClaim.Spec = volumeClaimTemplate.Spec
+			statefulSetTemplate.Spec.VolumeClaimTemplates = append(statefulSetTemplate.Spec.VolumeClaimTemplates, persistentVolumeClaim)
+		}
+	}
+
 	if postgresSpec.Volume.Volumes != nil {
 		statefulSetTemplate.Spec.Template.Spec.Volumes = append(statefulSetTemplate.Spec.Template.Spec.Volumes, r.kubegresContext.Kubegres.Spec.Volume.Volumes...)
+	}
+
+	if statefulSetTemplate.Labels[ctx.LabelReplicationRole] == ctx.PrimaryRoleName {
+		statefulSetTemplate.Spec.Template.Spec.Volumes = append(statefulSetTemplate.Spec.Template.Spec.Volumes, postgresSpec.Volume.Primary.Volumes...)
 	}
 
 	if postgresSpec.Volume.VolumeMounts != nil {
@@ -276,6 +290,17 @@ func (r *ResourcesCreatorFromTemplate) initStatefulSet(
 		for i := range statefulSetTemplate.Spec.Template.Spec.InitContainers {
 			statefulSetTemplate.Spec.Template.Spec.InitContainers[i].VolumeMounts =
 				append(statefulSetTemplate.Spec.Template.Spec.InitContainers[i].VolumeMounts, r.kubegresContext.Kubegres.Spec.Volume.VolumeMounts...)
+		}
+	}
+
+	if statefulSetTemplate.Labels[ctx.LabelReplicationRole] == ctx.PrimaryRoleName {
+		for i := range statefulSetTemplate.Spec.Template.Spec.Containers {
+			statefulSetTemplate.Spec.Template.Spec.Containers[i].VolumeMounts =
+				append(statefulSetTemplate.Spec.Template.Spec.Containers[i].VolumeMounts, postgresSpec.Volume.Primary.VolumeMounts...)
+		}
+		for i := range statefulSetTemplate.Spec.Template.Spec.InitContainers {
+			statefulSetTemplate.Spec.Template.Spec.InitContainers[i].VolumeMounts =
+				append(statefulSetTemplate.Spec.Template.Spec.InitContainers[i].VolumeMounts, postgresSpec.Volume.Primary.VolumeMounts...)
 		}
 	}
 
