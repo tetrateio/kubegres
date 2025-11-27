@@ -2710,7 +2710,7 @@ spec:
                 properties:
                   primary:
                     description: |-
-                      Primary defines volume settings specific to the primary database instance.
+                      Primary defines volume settings specific only to the primary database instance.
                       These will be appended to the general volume settings defined above.
                     properties:
                       volumeClaimTemplates:
@@ -6389,7 +6389,7 @@ spec:
         - --leader-elect
         command:
         - /manager
-        image: tetrate/kubegres:v1.16.0-tetrate-v26
+        image: tetrate/kubegres:v1.16.0-tetrate-v27
         livenessProbe:
           httpGet:
             path: /healthz

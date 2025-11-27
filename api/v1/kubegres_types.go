@@ -65,7 +65,7 @@ type Volume struct {
 	VolumeMounts         []v1.VolumeMount      `json:"volumeMounts,omitempty"`
 	Volumes              []v1.Volume           `json:"volumes,omitempty"`
 	VolumeClaimTemplates []VolumeClaimTemplate `json:"volumeClaimTemplates,omitempty"`
-	// Primary defines volume settings specific to the primary database instance.
+	// Primary defines volume settings specific only to the primary database instance.
 	// These will be appended to the general volume settings defined above.
 	Primary PrimaryVolume `json:"primary,omitempty"`
 }
