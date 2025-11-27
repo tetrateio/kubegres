@@ -89,6 +89,8 @@ var _ = Describe("Setting Kubegres specs 'volume.volume' and 'volume.volumeMount
 
 			test.whenKubernetesIsUpdated()
 
+			test.waitForStatefulSetsToBeUpdated()
+
 			test.thenNbreOfReplicasShouldBe(1, 2)
 
 			test.thenPrimaryStatefulSetsShouldHave(volumes, volumeMounts)
@@ -110,6 +112,8 @@ var _ = Describe("Setting Kubegres specs 'volume.volume' and 'volume.volumeMount
 
 			test.givenExistingKubegresSpecVolumesIsUpdatedTo(volumes, volumeMounts)
 			test.whenKubernetesIsUpdated()
+
+			test.waitForStatefulSetsToBeUpdated()
 
 			test.thenNbreOfReplicasShouldBe(1, 2)
 
@@ -136,6 +140,8 @@ var _ = Describe("Setting Kubegres specs 'volume.volume' and 'volume.volumeMount
 			test.givenExistingKubegresSpecPrimaryVolumesIsUpdatedTo(nil, nil)
 			test.whenKubernetesIsUpdated()
 
+			test.waitForStatefulSetsToBeUpdated()
+
 			test.thenNbreOfReplicasShouldBe(1, 2)
 
 			test.thenPrimaryStatefulSetsShouldHave(volumes, volumeMounts)
@@ -154,6 +160,8 @@ var _ = Describe("Setting Kubegres specs 'volume.volume' and 'volume.volumeMount
 
 			test.givenExistingKubegresSpecVolumesIsUpdatedTo(nil, nil)
 			test.whenKubernetesIsUpdated()
+
+			test.waitForStatefulSetsToBeUpdated()
 
 			test.thenNbreOfReplicasShouldBe(1, 2)
 
@@ -914,5 +922,21 @@ func (r *SpecVolumeAndVolumeMountTest) thenPrimaryStatefulSetsShouldNotHave(volu
 		}
 		return true
 	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+
+}
+
+func (r *SpecVolumeAndVolumeMountTest) waitForStatefulSetsToBeUpdated() {
+	Eventually(func() bool {
+		resources, err := r.resourceRetriever.GetKubegresResources()
+		if err != nil {
+			log.Println("Error while getting Kubegres resources : ", err)
+			return false
+		}
+		if resources.AreAllReady {
+			log.Println("resources are ready, waiting for update to take effect")
+			return false
+		}
+		return true
+	}, resourceConfigs.TestTimeout, 500*time.Millisecond).Should(BeTrue())
 
 }
