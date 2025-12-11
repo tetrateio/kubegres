@@ -426,8 +426,9 @@ func (r *ReplicaDbCountSpecEnforcer) isReplicaDbReady(operation postgresV1.Kubeg
 	statefulSetInstanceIndex := operation.StatefulSetOperation.InstanceIndex
 	statefulSetWrapper, err := r.resourcesStates.StatefulSets.Replicas.All.GetByInstanceIndex(statefulSetInstanceIndex)
 	if err != nil {
-		r.kubegresContext.Log.InfoEvent("A replica StatefulSet's instanceIndex does not exist. As a result "+
-			"we will return false inside a blocking operation completion checker 'isReplicaDbReady()'",
+		r.kubegresContext.Log.InfoEvent("ReplicaDbInstanceNotFound",
+			"A replica StatefulSet's instanceIndex does not exist. As a result "+
+				"we will return false inside a blocking operation completion checker 'isReplicaDbReady()'",
 			"instanceIndex", statefulSetInstanceIndex)
 		return false
 	}

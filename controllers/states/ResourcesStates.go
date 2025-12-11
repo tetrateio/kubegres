@@ -22,6 +22,8 @@ package states
 
 import (
 	"errors"
+	"strconv"
+	"strings"
 
 	"reactive-tech.io/kubegres/controllers/ctx"
 	"reactive-tech.io/kubegres/controllers/states/statefulset"
@@ -99,6 +101,23 @@ func (r *ResourcesStates) loadBackUpStates() (err error) {
 }
 
 func (r *ResourcesStates) PrimaryConnectionDetails() (svcName string, port int32, err error) {
+	if r.kubegresContext.Kubegres.Spec.Standby.Enabled {
+		split := strings.Split(r.kubegresContext.Kubegres.Spec.Standby.PrimaryEndpoint, ":")
+		if len(split) != 2 {
+			return r.kubegresContext.Kubegres.Spec.Standby.PrimaryEndpoint, 5432, nil
+		}
+		svcName = split[0]
+		if split[1] == "" {
+			return "", 0, errors.New("primary endpoint port is empty")
+		}
+		var portParsed int
+		portParsed, err = strconv.Atoi(split[1])
+		if err != nil {
+			return "", 0, errors.New("primary endpoint port is not a valid number")
+		}
+		port = int32(portParsed)
+		return svcName, port, nil
+	}
 	if !r.Services.Primary.IsDeployed {
 		return "", 0, errors.New("primary service is not deployed")
 	}
