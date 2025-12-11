@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -258,19 +257,9 @@ func updateDSNData(ctx context.Context, k8sClient client.Client, logger logr.Log
 		port = testPort
 	} else {
 		if kubegresContext.ClusterRole() == kubegresCtx.StandbyRoleName {
-			split := strings.Split(kubegresContext.Kubegres.Spec.Standby.PrimaryEndpoint, ":")
-			if len(split) != 2 {
-				err := fmt.Errorf("invalid primary endpoint format: %s", kubegresContext.Kubegres.Spec.Standby.PrimaryEndpoint)
-				wrappedLogger.Error(err, "Failed to parse primary endpoint", "connectionID", connID)
-				return nil, err
-			}
-			_, err = strconv.ParseInt(split[1], 10, 0)
-			if err != nil {
-				wrappedLogger.Error(err, "Failed to parse port from primary endpoint", "connectionID", connID)
-				return nil, fmt.Errorf("parse port from primary endpoint: %w", err)
-			}
-			port = split[1]
-			svcName = split[0]
+			// We currently don't have API to define port for primary endpoing in standby mode
+			port = "5432"
+			svcName = kubegresContext.Kubegres.Spec.Standby.PrimaryEndpoint
 		}
 
 		if kubegresContext.ClusterRole() == kubegresCtx.ActiveRoleName {
