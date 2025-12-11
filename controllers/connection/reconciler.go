@@ -256,27 +256,19 @@ func updateDSNData(ctx context.Context, k8sClient client.Client, logger logr.Log
 		svcName = testHost
 		port = testPort
 	} else {
-		if kubegresContext.ClusterRole() == kubegresCtx.StandbyRoleName {
-			// We currently don't have API to define port for primary endpoing in standby mode
-			port = "5432"
-			svcName = kubegresContext.Kubegres.Spec.Standby.PrimaryEndpoint
+		var resourcesStates states.ResourcesStates
+		resourcesStates, err = states.LoadResourcesStates(kubegresContext)
+		if err != nil {
+			wrappedLogger.Error(err, "Failed to load resources states", "connectionID", connID)
+			return nil, fmt.Errorf("load resources states: %w", err)
 		}
-
-		if kubegresContext.ClusterRole() == kubegresCtx.ActiveRoleName {
-			var resourcesStates states.ResourcesStates
-			resourcesStates, err = states.LoadResourcesStates(kubegresContext)
-			if err != nil {
-				wrappedLogger.Error(err, "Failed to load resources states", "connectionID", connID)
-				return nil, fmt.Errorf("load resources states: %w", err)
-			}
-			var aPort int32
-			svcName, aPort, err = resourcesStates.PrimaryConnectionDetails()
-			if err != nil {
-				wrappedLogger.Error(err, "Failed to get primary connection details", "connectionID", connID)
-				return nil, fmt.Errorf("get primary connection details: %w", err)
-			}
-			port = strconv.Itoa(int(aPort))
+		var aPort int32
+		svcName, aPort, err = resourcesStates.PrimaryConnectionDetails()
+		if err != nil {
+			wrappedLogger.Error(err, "Failed to get primary connection details", "connectionID", connID)
+			return nil, fmt.Errorf("get primary connection details: %w", err)
 		}
+		port = strconv.Itoa(int(aPort))
 	}
 
 	if svcName == "" || port == "" {
