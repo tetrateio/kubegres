@@ -127,7 +127,6 @@ docker-build/%: docker-buildx ## Build docker image with ARCH as image tag suffi
 .PHONY: scan-local
 scan-local: IMG=kubegres:scan
 scan-local: build/linux/${LOCAL_ARCH} docker-build/linux/${LOCAL_ARCH} ## Scan the docker image for vulnerabilities locally.
-	docker build --builder $(DOCKER_BUILDER_NAME) -t ${IMG} .
 	grype ${IMG}-${LOCAL_ARCH} --by-cve
 
 ##@ Deployment
