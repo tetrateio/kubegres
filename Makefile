@@ -122,12 +122,13 @@ docker-build/%: DOCKER_ARCH=$(notdir $(PLATFORM))
 docker-build/%: docker-buildx ## Build docker image with ARCH as image tag suffix.
 	docker buildx build --builder $(DOCKER_BUILDER_NAME) --platform ${PLATFORM} -t ${IMG}-${DOCKER_ARCH} --load .
 
+# If your using other docker enines like Orbstak you may have grype failing due to image not found.
+# Export the `DOCKER_HOST=unix://$HOME/.orbstack/run/docker.sock` env var to fix it.
 .PHONY: scan-local
-scan-local: IMG=build/bin/image/kubegres:scan-${LOCAL_ARCH}
-scan-local: build/linux/${LOCAL_ARCH} docker-buildx ## Scan the docker image for vulnerabilities locally.
-	@rm -rf ${IMG}
-	docker build --builder $(DOCKER_BUILDER_NAME) -t ${IMG} . --output type=local,dest=${IMG}
-	grype ${IMG} --by-cve
+scan-local: IMG=kubegres:scan
+scan-local: build/linux/${LOCAL_ARCH} docker-build/linux/${LOCAL_ARCH} ## Scan the docker image for vulnerabilities locally.
+	docker build --builder $(DOCKER_BUILDER_NAME) -t ${IMG} .
+	grype ${IMG}-${LOCAL_ARCH} --by-cve
 
 ##@ Deployment
 
