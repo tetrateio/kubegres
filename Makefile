@@ -122,7 +122,7 @@ docker-build/%: DOCKER_ARCH=$(notdir $(PLATFORM))
 docker-build/%: docker-buildx ## Build docker image with ARCH as image tag suffix.
 	docker buildx build --builder $(DOCKER_BUILDER_NAME) --platform ${PLATFORM} -t ${IMG}-${DOCKER_ARCH} --load .
 
-# If your using other docker enines like Orbstak you may have grype failing due to image not found.
+# If your using other Docker engines like OrbStack you may have Grype failing due to image not found.
 # Export the `DOCKER_HOST=unix://$HOME/.orbstack/run/docker.sock` env var to fix it.
 .PHONY: scan-local
 scan-local: IMG=kubegres:scan
