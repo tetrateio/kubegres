@@ -195,19 +195,19 @@ YQ ?= $(LOCALBIN)/yq
 KUSTOMIZE_VERSION ?= v3.8.7
 CONTROLLER_TOOLS_VERSION ?= v0.19.0
 KIND_VERSION ?= v0.19.0
-KUBEBUILDER_TOOLS_VERSION := 1.24.2
+KUBEBUILDER_TOOLS_VERSION := 1.28.0
 YQ_VERSION ?= v4.45.4
 
 ## Kubebuilder Tools (etcd, kube-apiserver)
-# using tar instead of go install to be able to pin the version, since latest versions are not always compatible with 1.20 go version
+# using tar instead of go install to be able to pin the version.
 KUBEBUILDER_TOOLS_OS ?= $(shell go env GOOS)
 KUBEBUILDER_TOOLS_ARCH ?= $(shell go env GOARCH)
-KUBEBUILDER_TOOLS_TGZ := $(LOCALBIN)/kubebuilder-tools-$(KUBEBUILDER_TOOLS_VERSION)-$(KUBEBUILDER_TOOLS_OS)-$(KUBEBUILDER_TOOLS_ARCH).tar.gz
+KUBEBUILDER_TOOLS_TGZ := $(LOCALBIN)/envtest-v$(KUBEBUILDER_TOOLS_VERSION)-$(KUBEBUILDER_TOOLS_OS)-$(KUBEBUILDER_TOOLS_ARCH).tar.gz
 KUBEBUILDER_TOOLS_DIR := $(LOCALBIN)/kubebuilder-tools-$(KUBEBUILDER_TOOLS_VERSION)-$(KUBEBUILDER_TOOLS_OS)-$(KUBEBUILDER_TOOLS_ARCH)
-KUBEBUILDER_TOOLS_BINARIES := bin/etcd bin/kube-apiserver
+KUBEBUILDER_TOOLS_BINARIES := etcd kube-apiserver
 KUBEBUILDER_TOOLS := $(foreach binary,$(KUBEBUILDER_TOOLS_BINARIES),$(KUBEBUILDER_TOOLS_DIR)/$(binary))
 # KUBEBUILDER_ASSETS environment variable will be recognized by the `controller-runtime` test framework
-export KUBEBUILDER_ASSETS=$(KUBEBUILDER_TOOLS_DIR)/bin
+export KUBEBUILDER_ASSETS=$(KUBEBUILDER_TOOLS_DIR)
 
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
@@ -231,9 +231,9 @@ $(KUBEBUILDER_TOOLS):
 	@echo "(re)installing kubebuilder-tools-$(KUBEBUILDER_TOOLS_VERSION)"
 	@mkdir -p $(dir $(KUBEBUILDER_TOOLS_TGZ))
 	@curl -Lo $(KUBEBUILDER_TOOLS_TGZ) \
-	  "https://storage.googleapis.com/kubebuilder-tools/kubebuilder-tools-$(KUBEBUILDER_TOOLS_VERSION)-$(KUBEBUILDER_TOOLS_OS)-$(KUBEBUILDER_TOOLS_ARCH).tar.gz"
+	  "https://github.com/kubernetes-sigs/controller-tools/releases/download/envtest-v$(KUBEBUILDER_TOOLS_VERSION)/envtest-v$(KUBEBUILDER_TOOLS_VERSION)-$(KUBEBUILDER_TOOLS_OS)-$(KUBEBUILDER_TOOLS_ARCH).tar.gz"
 	@mkdir -p $(KUBEBUILDER_TOOLS_DIR)
-	@tar -xvf $(KUBEBUILDER_TOOLS_TGZ) -C $(KUBEBUILDER_TOOLS_DIR) --strip-components 1
+	@tar -xvf $(KUBEBUILDER_TOOLS_TGZ) -C $(KUBEBUILDER_TOOLS_DIR) --strip-components 2
 
 .PHONY: yq
 yq:

@@ -35,7 +35,7 @@ jobs:
         with:
           go-version-file: go.mod
       - run: make docker-build
-      - uses: anchore/scan-action@v3
+      - uses: anchore/scan-action@v6
         id: scan
         with:
           image: local/kubegres:scan-amd64
