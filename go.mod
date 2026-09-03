@@ -1,6 +1,6 @@
 module reactive-tech.io/kubegres
 
-go 1.26.6
+go 1.26.7
 
 require (
 	github.com/go-logr/logr v1.4.3
