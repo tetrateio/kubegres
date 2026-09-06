@@ -64,6 +64,14 @@ and on [https://www.kubegres.io](https://www.kubegres.io). More details in the [
 * Google talked about Kubegres in their [Kubernetes Podcast #146](https://kubernetespodcast.com/episode/146-kubernetes-1.21/).
 
 
+**Failover**
+
+Kubegres promotes a Replica when the Primary stops being ready. By default that choice is made on
+Kubernetes readiness alone, which does not tell you whether the chosen Replica's replication
+stream is intact or how far behind the failed Primary it is. Opt-in gates for WAL-aware
+promotion, failover debouncing and post-failover redundancy are documented in
+[docs/reliable-failover.md](docs/reliable-failover.md).
+
 **Tetrate CVE builds**
 
 While waiting for PRs to be accepted in the upstream repository and a new version to be released, follow the next instructions to publish our own builds:

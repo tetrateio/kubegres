@@ -113,6 +113,11 @@ func (r *PrimaryDbCountSpecEnforcer) Enforce() error {
 		return r.deployNewPrimaryStatefulSet()
 	}
 
+	// The cluster is steady. Record how far the Primary has got in its WAL — the reference point
+	// for measuring Replica lag once the Primary can no longer be asked — and report whether a
+	// failover would actually succeed if it died right now.
+	r.primaryToReplicaFailOver.ObserveClusterFailOverReadiness()
+
 	return nil
 }
 

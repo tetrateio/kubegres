@@ -27,6 +27,7 @@ import (
 	core "k8s.io/api/core/v1"
 	v1 "reactive-tech.io/kubegres/api/v1"
 	"reactive-tech.io/kubegres/controllers/ctx"
+	"reactive-tech.io/kubegres/controllers/metrics"
 	"reactive-tech.io/kubegres/controllers/operation"
 	"reactive-tech.io/kubegres/controllers/states"
 	"reactive-tech.io/kubegres/controllers/states/statefulset"
@@ -36,16 +37,37 @@ type PrimaryToReplicaFailOver struct {
 	kubegresContext   ctx.KubegresContext
 	resourcesStates   states.ResourcesStates
 	blockingOperation *operation.BlockingOperation
+
+	config  Config
+	prober  Prober
+	requeue *requeueRequest
 }
 
 func CreatePrimaryToReplicaFailOver(kubegresContext ctx.KubegresContext,
 	resourcesStates states.ResourcesStates,
 	blockingOperation *operation.BlockingOperation) PrimaryToReplicaFailOver {
 
+	config := ResolveConfig(kubegresContext.Kubegres.Spec.Failover)
+
+	return CreatePrimaryToReplicaFailOverWithProber(kubegresContext, resourcesStates, blockingOperation,
+		config, NewProber(kubegresContext, config.HealthCheckTimeout))
+}
+
+// CreatePrimaryToReplicaFailOverWithProber builds the failover logic against an explicit
+// replication-state source, so that selection behaviour can be exercised without a database.
+func CreatePrimaryToReplicaFailOverWithProber(kubegresContext ctx.KubegresContext,
+	resourcesStates states.ResourcesStates,
+	blockingOperation *operation.BlockingOperation,
+	config Config,
+	prober Prober) PrimaryToReplicaFailOver {
+
 	return PrimaryToReplicaFailOver{
 		kubegresContext:   kubegresContext,
 		resourcesStates:   resourcesStates,
 		blockingOperation: blockingOperation,
+		config:            config,
+		prober:            prober,
+		requeue:           &requeueRequest{},
 	}
 }
 
@@ -71,12 +93,19 @@ func (r *PrimaryToReplicaFailOver) ShouldWeFailOver() bool {
 
 	if !r.hasPrimaryEverBeenDeployed() {
 		return false
+	}
 
-	} else if !r.isThereReadyReplica() {
+	if !r.isNewPrimaryRequired() {
+		r.recordPrimaryIsHealthy()
+	}
+
+	if !r.isThereReadyReplica() {
 		r.logFailoverCannotHappenAsNoReplicaDeployed()
 		return false
 
 	} else if r.isManualFailoverRequested() {
+		// A human asked for this promotion. The stability window exists to filter out failovers
+		// triggered by a readiness blip, so it must not delay an explicit request.
 		return true
 
 	} else if r.isNewPrimaryRequired() {
@@ -85,7 +114,7 @@ func (r *PrimaryToReplicaFailOver) ShouldWeFailOver() bool {
 			r.logFailoverCannotHappenAsAutomaticFailoverIsDisabled()
 			return false
 		}
-		return true
+		return r.hasPrimaryBeenUnhealthyLongEnough()
 	}
 
 	return false
@@ -102,7 +131,7 @@ func (r *PrimaryToReplicaFailOver) FailOver() error {
 		return nil
 	}
 
-	var newPrimary, err = r.selectReplicaToPromote()
+	newPrimary, decisionReason, err := r.selectReplicaToPromote()
 	if err != nil {
 		return err
 	}
@@ -110,7 +139,7 @@ func (r *PrimaryToReplicaFailOver) FailOver() error {
 	if !r.isWaitingBeforeStartingFailOver() {
 		return r.waitBeforePromotingReplicaToPrimary(newPrimary)
 	} else {
-		return r.promoteReplicaToPrimary(newPrimary)
+		return r.promoteReplicaToPrimary(newPrimary, decisionReason)
 	}
 }
 
@@ -126,7 +155,59 @@ func (r *PrimaryToReplicaFailOver) isFailOverCompleted(operation v1.KubegresBloc
 		return false
 	}
 
-	return r.isPrimaryDbReady()
+	if !r.isPrimaryDbReady() {
+		return false
+	}
+
+	if !r.hasEnoughHealthyReplicas() {
+		return false
+	}
+
+	r.reportDurabilityAfterFailOver()
+
+	metrics.FailOverDuration.
+		WithLabelValues(r.kubegresContext.Kubegres.Namespace, r.kubegresContext.Kubegres.Name).
+		Observe(float64(r.blockingOperation.GetNbreSecondsSinceOperationHasStarted()))
+
+	return true
+}
+
+// hasEnoughHealthyReplicas holds the failover operation open until the cluster has rebuilt the
+// redundancy configured through 'failover.minHealthyReplicas'.
+//
+// A promoted Primary with no Replica behind it has no failover target left: a second failure in
+// that window cannot be recovered automatically at all. Keeping the blocking operation active
+// also keeps the other enforcers out of the way while the Replicas are rebuilt.
+func (r *PrimaryToReplicaFailOver) hasEnoughHealthyReplicas() bool {
+	required := r.config.MinHealthyReplicas
+	if required <= 0 {
+		return true
+	}
+
+	ready := r.resourcesStates.StatefulSets.Replicas.NbreReady
+	if ready >= required {
+		return true
+	}
+
+	r.kubegresContext.Log.Info("FailOver: the new Primary is ready, but the cluster does not yet have "+
+		"the minimum number of healthy Replicas required to complete the failover.",
+		"Ready Replicas", ready, "Required", required)
+
+	return false
+}
+
+// reportDurabilityAfterFailOver warns when a failover completes leaving the new Primary
+// unreplicated, whatever 'failover.minHealthyReplicas' is set to. Even when an operator has
+// chosen to accept that window, it should be visible that the cluster is in it.
+func (r *PrimaryToReplicaFailOver) reportDurabilityAfterFailOver() {
+	if r.resourcesStates.StatefulSets.Replicas.NbreReady > 0 {
+		return
+	}
+
+	r.kubegresContext.Log.WarningEvent("FailOverReducedDurability",
+		"FailOver completed, but the new Primary has no ready Replica behind it. Until a Replica is "+
+			"deployed and caught up, another Primary failure cannot be recovered automatically. Set "+
+			"'failover.minHealthyReplicas' to hold the failover open until redundancy is restored.")
 }
 
 func (r *PrimaryToReplicaFailOver) isNewPrimaryRequired() bool {
@@ -209,14 +290,33 @@ func (r *PrimaryToReplicaFailOver) getStatefulSetByInstanceIndex(newPrimaryInsta
 	return r.resourcesStates.StatefulSets.All.GetByInstanceIndex(newPrimaryInstanceIndex)
 }
 
-func (r *PrimaryToReplicaFailOver) selectReplicaToPromote() (statefulset.StatefulSetWrapper, error) {
+// selectReplicaToPromote picks the Replica to promote and reports how it was chosen. The
+// selection runs again after the waiting phase, so that the decision is made against the
+// freshest replication state available rather than a ten-second-old snapshot.
+func (r *PrimaryToReplicaFailOver) selectReplicaToPromote() (statefulset.StatefulSetWrapper, string, error) {
 
 	if r.isManualFailoverRequested() {
 		return r.manuallySelectReplicaToPromote()
 	}
 
+	if r.config.IntelligentFailoverEnabled {
+		return r.selectReplicaByReplicationState()
+	}
+
+	newPrimary, err := r.legacySelectReplicaToPromote()
+	return newPrimary, metrics.DecisionReasonLegacy, err
+}
+
+// legacySelectReplicaToPromote is the original selection: the lowest-indexed ready Replica whose
+// replication-slot configuration matches the cluster's.
+//
+// Kubernetes readiness only means the Pod is accepting connections, so this can promote a
+// Replica whose WAL stream is broken or that is far behind the failed Primary. It remains the
+// default, and the fallback when replication state cannot be read.
+func (r *PrimaryToReplicaFailOver) legacySelectReplicaToPromote() (statefulset.StatefulSetWrapper, error) {
+
 	for _, statefulSetWrapper := range r.resourcesStates.StatefulSets.Replicas.All.GetAllSortedByInstanceIndex() {
-		if statefulSetWrapper.IsReady && statefulSetWrapper.HaveReplicationSlotSet == r.kubegresContext.Kubegres.Spec.ReplicationSlots.Enabled {
+		if r.isStructurallyEligible(statefulSetWrapper) {
 			return statefulSetWrapper, nil
 		}
 	}
@@ -225,22 +325,36 @@ func (r *PrimaryToReplicaFailOver) selectReplicaToPromote() (statefulset.Statefu
 	return statefulset.StatefulSetWrapper{}, errors.New(errorMsg)
 }
 
-func (r *PrimaryToReplicaFailOver) manuallySelectReplicaToPromote() (statefulset.StatefulSetWrapper, error) {
+func (r *PrimaryToReplicaFailOver) manuallySelectReplicaToPromote() (statefulset.StatefulSetWrapper, string, error) {
 
 	replicaInstanceIndexToPromote := r.getInstanceIndexToManuallyPromote()
 	r.logManualFailoverIsRequested()
 
 	for _, statefulSetWrapper := range r.resourcesStates.StatefulSets.Replicas.All.GetAllSortedByInstanceIndex() {
-		if statefulSetWrapper.IsReady && statefulSetWrapper.InstanceIndex == replicaInstanceIndexToPromote {
-			return statefulSetWrapper, nil
+		if !statefulSetWrapper.IsReady || statefulSetWrapper.InstanceIndex != replicaInstanceIndexToPromote {
+			continue
 		}
+
+		// The automatic path has always required the candidate's replication-slot configuration
+		// to match the cluster's; a manually named Pod is checked the same way, so that a manual
+		// promotion is never less safe than an automatic one.
+		if statefulSetWrapper.HaveReplicationSlotSet != r.kubegresContext.Kubegres.Spec.ReplicationSlots.Enabled {
+			errorMsg := r.logManualFailoverCannotHappenAsReplicationSlotMismatch()
+			return statefulset.StatefulSetWrapper{}, "", errors.New(errorMsg)
+		}
+
+		if err := r.verifyManualPromotionCandidate(statefulSetWrapper); err != nil {
+			return statefulset.StatefulSetWrapper{}, "", err
+		}
+
+		return statefulSetWrapper, metrics.DecisionReasonManual, nil
 	}
 
 	errorMsg := r.logManualFailoverCannotHappenAsConfigErr()
-	return statefulset.StatefulSetWrapper{}, errors.New(errorMsg)
+	return statefulset.StatefulSetWrapper{}, "", errors.New(errorMsg)
 }
 
-func (r *PrimaryToReplicaFailOver) promoteReplicaToPrimary(newPrimary statefulset.StatefulSetWrapper) error {
+func (r *PrimaryToReplicaFailOver) promoteReplicaToPrimary(newPrimary statefulset.StatefulSetWrapper, decisionReason string) error {
 
 	newPrimary.StatefulSet.Labels["replicationRole"] = ctx.PrimaryRoleName
 	newPrimary.StatefulSet.Spec.Template.Labels["replicationRole"] = ctx.PrimaryRoleName
@@ -263,7 +377,9 @@ func (r *PrimaryToReplicaFailOver) promoteReplicaToPrimary(newPrimary statefulse
 	}
 
 	r.kubegresContext.Log.InfoEvent("FailOver", "FailOver: Promoting Replica to Primary.",
-		"Replica to promote", newPrimary.StatefulSet.Name)
+		"Replica to promote", newPrimary.StatefulSet.Name, "Selected by", decisionReason)
+
+	r.recordPromotion(newPrimary, decisionReason)
 
 	err2 := r.kubegresContext.Client.Update(r.kubegresContext.Ctx, &newPrimary.StatefulSet)
 	if err2 != nil {
@@ -356,6 +472,21 @@ func (r *PrimaryToReplicaFailOver) logFailoverCannotHappenAsNoHealthyReplica() s
 	errorMsg := "We cannot Failover to a Replica because there are not any Replicas which are ready to serve requests. " +
 		"Primary has to be fixed manually."
 	r.kubegresContext.Log.ErrorEvent(errorReason, errors.New(""), errorMsg)
+	return errorMsg
+}
+
+func (r *PrimaryToReplicaFailOver) logManualFailoverCannotHappenAsReplicationSlotMismatch() string {
+	expected := "disabled"
+	if r.kubegresContext.Kubegres.Spec.ReplicationSlots.Enabled {
+		expected = "enabled"
+	}
+
+	errorMsg := "The value of the field 'failover.promotePod' is set to '" + r.getPodToManuallyPromote() + "'. " +
+		"That Replica's replication-slot configuration does not match the cluster's, where replication slots are " +
+		expected + ". It belongs to an earlier generation of Replicas and promoting it would lose the data " +
+		"written through the current replication slots. Wait for the Replicas to finish rotating, then request " +
+		"the promotion again."
+	r.kubegresContext.Log.WarningEvent("ManualFailoverCannotHappenAsReplicationSlotMismatch", errorMsg)
 	return errorMsg
 }
 

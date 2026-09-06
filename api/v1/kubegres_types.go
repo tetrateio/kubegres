@@ -43,6 +43,107 @@ type KubegresBackUp struct {
 type KubegresFailover struct {
 	IsDisabled bool   `json:"isDisabled,omitempty"`
 	PromotePod string `json:"promotePod,omitempty"`
+
+	// +optional
+	// IntelligentFailover enables replica selection based on PostgreSQL replication state
+	// rather than Kubernetes readiness alone. Disabled by default.
+	IntelligentFailover *IntelligentFailoverConfig `json:"intelligentFailover,omitempty"`
+
+	// +kubebuilder:validation:Type:=string
+	// +kubebuilder:validation:Pattern:="^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+	// +nullable
+	// +optional
+	// PrimaryStabilityWindow is how long the Primary must be continuously unhealthy before an
+	// automatic failover is started. It debounces transient readiness blips — an aggressive
+	// probe, a brief restart, momentary resource pressure — that a Primary would recover from
+	// on its own, so that the cluster does not pay the data-loss risk of an unnecessary
+	// promotion. The value is specified as 10s, 1m, etc.
+	//
+	// It applies on top of, not instead of, the readiness probe's own failureThreshold. When
+	// unset or zero, a failover starts as soon as the Primary is seen not-ready, which is the
+	// behaviour of Kubegres before this field existed.
+	//
+	// A manual failover requested through 'failover.promotePod' is never debounced.
+	PrimaryStabilityWindow *metav1.Duration `json:"primaryStabilityWindow,omitempty"`
+
+	// +kubebuilder:validation:Minimum:=0
+	// +optional
+	// MinHealthyReplicas is how many Replicas must be ready before a failover is considered
+	// complete. A promoted Primary with no Replica behind it has no failover target left, so a
+	// second failure requires manual intervention; setting this holds the failover operation
+	// open — keeping other enforcers blocked — until the cluster has rebuilt that redundancy.
+	//
+	// When unset or zero, a failover completes as soon as the new Primary is ready, which is
+	// the behaviour of Kubegres before this field existed. Kubegres always emits a
+	// 'FailOverReducedDurability' warning event when a failover completes with no ready
+	// Replica, whatever this field is set to.
+	//
+	// Note that the failover operation still times out after 300 seconds; if the Replicas
+	// cannot be rebuilt within that window the cluster reports a failover time-out.
+	MinHealthyReplicas *int32 `json:"minHealthyReplicas,omitempty"`
+}
+
+// IntelligentFailoverConfig configures WAL-aware replica selection.
+//
+// Kubernetes readiness means a Pod is accepting connections; it says nothing about whether that
+// Pod's replication stream is intact or how far behind the failed Primary it is. When enabled,
+// Kubegres queries each candidate Replica's PostgreSQL replication state and promotes the one
+// carrying the most of the failed Primary's history.
+type IntelligentFailoverConfig struct {
+	// Enabled controls whether to use replication-state-based Replica selection.
+	// Default: false (use readiness-based selection).
+	Enabled bool `json:"enabled"`
+
+	// +optional
+	// MaxReplicationLag is the maximum acceptable replication lag, in bytes, of the Replica
+	// being promoted. A Replica lagging further than this is not promoted and Kubegres reports
+	// that manual intervention is required, rather than silently discarding that much
+	// committed history.
+	//
+	// Lag is measured against the last WAL position Kubegres observed on the Primary while it
+	// was healthy. If no such observation is available — for instance because the operator was
+	// restarted since — lag is measured against the furthest-advanced candidate instead, which
+	// bounds divergence between Replicas but not against the failed Primary.
+	//
+	// Default: 16Mi. Set to 0 to promote the best available candidate however far behind it is.
+	MaxReplicationLag *resource.Quantity `json:"maxReplicationLag,omitempty"`
+
+	// +kubebuilder:validation:Type:=string
+	// +kubebuilder:validation:Pattern:="^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+	// +nullable
+	// +optional
+	// HealthCheckTimeout bounds how long Kubegres waits for a Replica to report its
+	// replication state. Candidates are queried concurrently, so this is close to the total
+	// added latency of a failover. Default: 5s.
+	HealthCheckTimeout *metav1.Duration `json:"healthCheckTimeout,omitempty"`
+
+	// +optional
+	// FallbackToLegacy controls what happens when Kubegres cannot read the replication state
+	// of any candidate — typically a network partition between the operator and the Replicas.
+	//
+	// When true, Kubegres falls back to readiness-based selection, preferring availability:
+	// the cluster recovers, at the risk of promoting a Replica that is behind. When false,
+	// Kubegres refuses to promote and reports that manual intervention is required, preferring
+	// durability. Default: true.
+	FallbackToLegacy *bool `json:"fallbackToLegacy,omitempty"`
+
+	// +optional
+	// RequireStreamingReplica requires the promoted Replica to have a live WAL stream from the
+	// Primary at the moment it is inspected. This excludes Replicas whose stream has broken —
+	// for example after "requested WAL segment has already been removed" — which are frozen at
+	// whatever they last replayed even though they stay Kubernetes-ready.
+	//
+	// It is not enabled by default: when the Primary has already gone, every surviving Replica
+	// has lost its stream, and requiring one would block every failover. It is useful when
+	// Replicas are expected to remain streaming from a Primary that is unhealthy but alive.
+	RequireStreamingReplica bool `json:"requireStreamingReplica,omitempty"`
+
+	// +optional
+	// AllowUnsafeManualPromotion lets a manual failover requested through
+	// 'failover.promotePod' proceed even when the requested Pod fails the same replication
+	// health checks that gate automatic selection. Default: false, i.e. a manual promotion of
+	// an unhealthy or behind Replica is refused and reported.
+	AllowUnsafeManualPromotion bool `json:"allowUnsafeManualPromotion,omitempty"`
 }
 
 type KubegresScheduler struct {
@@ -174,6 +275,38 @@ type KubegresStatus struct {
 	BlockingOperation         KubegresBlockingOperation `json:"blockingOperation,omitempty"`
 	PreviousBlockingOperation KubegresBlockingOperation `json:"previousBlockingOperation,omitempty"`
 	EnforcedReplicas          int32                     `json:"enforcedReplicas,omitempty"`
+	FailOver                  KubegresFailOverStatus    `json:"failOver,omitempty"`
+}
+
+// KubegresFailOverStatus records what the operator knows about failover readiness and about the
+// most recent promotion. It is durable state: the stability window and the lag reference point
+// both have to survive an operator restart to be meaningful.
+type KubegresFailOverStatus struct {
+	// PrimaryUnhealthySinceEpochInSeconds is when the Primary was first observed not-ready
+	// during the current unhealthy stretch, and 0 while the Primary is healthy. It is what
+	// 'failover.primaryStabilityWindow' is measured against.
+	PrimaryUnhealthySinceEpochInSeconds int64 `json:"primaryUnhealthySinceEpochInSeconds,omitempty"`
+
+	// LastKnownPrimaryWalLsn is the last WAL position observed on a healthy Primary, in
+	// PostgreSQL's "X/Y" notation. It is the reference point against which a candidate
+	// Replica's replication lag is measured once the Primary is gone.
+	LastKnownPrimaryWalLsn string `json:"lastKnownPrimaryWalLsn,omitempty"`
+
+	// LastKnownPrimaryWalLsnEpochInSeconds is when LastKnownPrimaryWalLsn was observed.
+	LastKnownPrimaryWalLsnEpochInSeconds int64 `json:"lastKnownPrimaryWalLsnEpochInSeconds,omitempty"`
+
+	// LastPromotedPod is the name of the Pod promoted by the most recent failover.
+	LastPromotedPod string `json:"lastPromotedPod,omitempty"`
+
+	// LastPromotionReason explains why that Pod was chosen, e.g. "highest_lsn" or "fallback".
+	LastPromotionReason string `json:"lastPromotionReason,omitempty"`
+
+	// LastPromotionEpochInSeconds is when that promotion was started.
+	LastPromotionEpochInSeconds int64 `json:"lastPromotionEpochInSeconds,omitempty"`
+
+	// BlockedReason is set when Kubegres refused to promote any candidate and the cluster needs
+	// manual intervention, and is cleared once a promotion succeeds.
+	BlockedReason string `json:"blockedReason,omitempty"`
 }
 
 // ----------------------- RESOURCE ---------------------------------------

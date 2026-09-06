@@ -101,7 +101,10 @@ func WaitUntilReady(c ConnectionSupplier, timeout, interval time.Duration) error
 	}
 }
 
-var _ ConnectionSupplier = (*DynamicDSNConnection)(nil)
+var (
+	_ ConnectionSupplier = (*DynamicDSNConnection)(nil)
+	_ DSNDataSupplier    = (*DynamicDSNConnection)(nil)
+)
 
 // DynamicDSNConnection is a thread-safe connection supplier that allows dynamic updates to the DSN.
 // It embeds the Connection struct and provides additional functionality to handle dynamic DSN changes.
@@ -124,6 +127,18 @@ func NewDynamicDSNConnection(data *DSNData) (*DynamicDSNConnection, error) {
 	return d, nil
 }
 
+// DSNDataSupplier is implemented by connections whose parameters can be read back, so that a
+// connection to one instance of a cluster can be derived from a connection to another (same
+// credentials, database and TLS material; different endpoint).
+type DSNDataSupplier interface {
+	Data() *DSNData
+}
+
+// Data returns the mutable DSN parameters backing this connection.
+func (d *DynamicDSNConnection) Data() *DSNData {
+	return d.DSNData
+}
+
 func (d *DynamicDSNConnection) DB() *sql.DB {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -138,7 +153,13 @@ func (d *DynamicDSNConnection) DB() *sql.DB {
 }
 
 // DSNData holds the data required to build a Data Source Name (DSN) for connecting to a PostgreSQL database.
+//
+// A single DSNData is shared between the goroutine that reconciles it (the Kubegres and Secret
+// reconcilers) and the goroutines that read it to open connections, so every field access goes
+// through mu. Use Apply to mutate it.
 type DSNData struct {
+	mu *sync.RWMutex
+
 	HostAddr       string
 	Host           string
 	Port           string
@@ -154,6 +175,7 @@ type DSNData struct {
 // NewDSNData is a constructor for DSNData with default values.
 func NewDSNData() *DSNData {
 	return &DSNData{
+		mu:       &sync.RWMutex{},
 		Host:     "localhost",
 		Port:     "5432",
 		Username: "postgres",
@@ -162,8 +184,50 @@ func NewDSNData() *DSNData {
 	}
 }
 
+// lock returns the guard, tolerating a DSNData built as a bare struct literal rather than
+// through NewDSNData. Such a value is not yet shared with any other goroutine, so lazily
+// attaching a guard here is safe.
+func (b *DSNData) lock() *sync.RWMutex {
+	if b.mu == nil {
+		b.mu = &sync.RWMutex{}
+	}
+	return b.mu
+}
+
+// Apply mutates the DSNData under its write lock.
+func (b *DSNData) Apply(mutate func(*DSNData)) {
+	mu := b.lock()
+	mu.Lock()
+	defer mu.Unlock()
+
+	mutate(b)
+}
+
+// Snapshot returns an unguarded copy of the connection parameters, safe to mutate freely.
+//
+// It is how a replica connection is derived from the primary's: the credentials, database and
+// TLS material are identical and only the endpoint differs.
+func (b *DSNData) Snapshot() *DSNData {
+	mu := b.lock()
+	mu.RLock()
+	defer mu.RUnlock()
+
+	clone := *b
+	clone.mu = &sync.RWMutex{}
+	return &clone
+}
+
 // Build constructs the Data Source Name (DSN) string from the DSNData fields.
 func (b *DSNData) Build() string {
+	mu := b.lock()
+	mu.RLock()
+	defer mu.RUnlock()
+
+	return b.build()
+}
+
+// build assumes the caller holds at least a read lock.
+func (b *DSNData) build() string {
 	var sb strings.Builder
 	if b.HostAddr != "" {
 		sb.WriteString("hostaddr=")
@@ -209,10 +273,9 @@ func (b *DSNData) Build() string {
 }
 
 func (b *DSNData) String() string {
-	// Create a copy to avoid modifying the original
-	bb := *b
-	if bb.Password != "" {
-		bb.Password = "******" // Mask the password for security
+	masked := b.Snapshot()
+	if masked.Password != "" {
+		masked.Password = "******" // Mask the password for security
 	}
-	return bb.Build()
+	return masked.build()
 }
