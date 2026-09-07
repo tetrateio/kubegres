@@ -233,8 +233,13 @@ all. Fix the connectivity, or set `fallbackToLegacy: true` to accept an unverifi
 
 Both Kubegres Services are headless, and the Replica Service fans out across every Replica, so
 there is no stable name addressing one specific instance. Replica connections therefore use the
-Pod IP directly as the DSN `hostaddr`; everything else — credentials, database, TLS material — is
+Pod IP directly as the DSN host; everything else — credentials, database, TLS material — is
 inherited from the primary connection the `DBConnectionReconciler` already maintains.
+
+Because the Replica is addressed by IP, `spec.tls.mode: verify-full` will reject these
+connections unless the server certificate carries a matching IP SAN. The probes then fail, every
+Replica looks unreachable, and selection follows `fallbackToLegacy`. Watch
+`kubegres_replica_query_errors_total` after enabling the feature on a TLS cluster.
 
 Connections are created on demand, cached per instance index in the shared `ConnectionStore`, and
 re-pointed rather than replaced when a Replica is rescheduled onto a new Pod IP. Connections and
@@ -254,3 +259,5 @@ credentials it already holds for replication-slot management, over the same TLS 
   fresh basebackup.
 * **The lag ceiling degrades gracefully rather than strictly.** See "Where the lag reference
   point comes from" above.
+* **`verify-full` TLS is not supported for Replica probing**, because Replicas are addressed by
+  Pod IP. See "How the operator reaches Replicas" above.

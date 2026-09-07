@@ -128,9 +128,13 @@ func (r *KubegresContext) ClusterRole() ClusterRole {
 // keeping it in the shared ConnectionStore.
 //
 // A Service cannot reach one specific replica: both Kubegres Services are headless and the
-// replica Service covers every replica. So the Pod IP goes straight into the DSN as "hostaddr".
+// replica Service covers every replica. So the Pod IP goes straight into the DSN as the host.
 // Everything else - credentials, database, TLS material - is copied from the primary connection,
 // which the DBConnectionReconciler already keeps up to date.
+//
+// The IP goes in "host" rather than "hostaddr": pgx does not recognise "hostaddr", and silently
+// treats it as a server runtime parameter, leaving the host empty and falling back to a Unix
+// socket.
 //
 // The connection is a DynamicDSNConnection, so a replica that moves to a new Pod IP reconnects
 // on next use instead of going stale.
@@ -153,8 +157,8 @@ func (r *KubegresContext) GetReplicaSQLConnection(instanceIndex int32, hostAddr 
 	}
 
 	replicaDsn := template.Data().Snapshot()
-	replicaDsn.HostAddr = hostAddr
-	replicaDsn.Host = ""
+	replicaDsn.Host = hostAddr
+	replicaDsn.HostAddr = ""
 	replicaDsn.Port = strconv.Itoa(int(port))
 
 	connID := sql.ReplicaConnectionID(r.Kubegres.Namespace, r.Kubegres.Name, instanceIndex)

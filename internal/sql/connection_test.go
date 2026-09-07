@@ -1,12 +1,18 @@
 package sql_test
 
 import (
+	"context"
 	"database/sql"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	_ "github.com/jackc/pgx/v5/stdlib" // PostgreSQL driver
 	"github.com/stretchr/testify/require"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/modules/postgres"
+	"github.com/testcontainers/testcontainers-go/wait"
 	kubegresSQL "reactive-tech.io/kubegres/internal/sql"
 )
 
@@ -31,11 +37,10 @@ func TestSnapshotDetachesFromTheOriginal(t *testing.T) {
 	})
 
 	replica := primary.Snapshot()
-	replica.Host = ""
-	replica.HostAddr = "10.1.2.3"
+	replica.Host = "10.1.2.3"
 
 	require.Equal(t, "postgres", primary.Snapshot().Host)
-	require.Contains(t, replica.Build(), "hostaddr=10.1.2.3")
+	require.Contains(t, replica.Build(), "host=10.1.2.3")
 	require.Contains(t, replica.Build(), "password=s3cret")
 	require.Contains(t, replica.Build(), "dbname=appdb")
 	require.Contains(t, replica.Build(), "sslrootcert=/certs/ca.crt")
@@ -84,4 +89,51 @@ func TestABareDSNDataStillBuilds(t *testing.T) {
 	dsnData := &kubegresSQL.DSNData{Host: "localhost", Port: "5432", Username: "postgres", Database: "postgres", SSLMode: "disable"}
 
 	require.Equal(t, "host=localhost port=5432 user=postgres dbname=postgres sslmode=disable", dsnData.Build())
+}
+
+// TestAReplicaShapedDSNConnects builds a DSN the way GetReplicaSQLConnection does - the primary's
+// settings with the endpoint swapped for a bare IP - and connects with it.
+//
+// The unit tests above only check the DSN string, which is not enough: the driver has its own
+// idea of which keywords mean something. Putting the IP in "hostaddr", as libpq would accept,
+// produces a DSN that looks right and silently dials a Unix socket instead.
+func TestAReplicaShapedDSNConnects(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping testcontainers test in short mode")
+	}
+
+	container, err := postgres.Run(t.Context(), "postgres:14.5",
+		postgres.WithDatabase("postgres"),
+		postgres.WithUsername("postgres"),
+		postgres.WithPassword("probe-password"),
+		testcontainers.WithWaitStrategy(
+			wait.ForLog("database system is ready to accept connections").
+				WithOccurrence(2).
+				WithStartupTimeout(time.Minute)))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
+
+	mappedPort, err := container.MappedPort(t.Context(), "5432")
+	require.NoError(t, err)
+
+	// Stand in for the primary connection the DBConnectionReconciler maintains.
+	primary := kubegresSQL.NewDSNData()
+	primary.Apply(func(d *kubegresSQL.DSNData) {
+		d.Host = "postgres-service"
+		d.Port = "5432"
+		d.Password = "probe-password"
+	})
+
+	// Derive the replica connection: same credentials, endpoint replaced by the Pod IP.
+	replica := primary.Snapshot()
+	replica.Host = "127.0.0.1"
+	replica.Port = mappedPort.Port()
+
+	conn, err := kubegresSQL.NewDynamicDSNConnection(replica)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	require.NoError(t, conn.DB().PingContext(ctx), "a replica-shaped DSN must actually connect")
 }

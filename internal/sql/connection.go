@@ -159,6 +159,9 @@ func (d *DynamicDSNConnection) DB() *sql.DB {
 type DSNData struct {
 	mu *sync.RWMutex
 
+	// HostAddr is not used by anything, and connections built with it do not work: the pgx
+	// driver does not recognise "hostaddr", so it passes it to the server as a runtime
+	// parameter and dials the default Unix socket instead. Put the address in Host.
 	HostAddr       string
 	Host           string
 	Port           string
