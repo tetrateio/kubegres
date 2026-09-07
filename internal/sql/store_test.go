@@ -9,7 +9,7 @@ import (
 
 func TestAPrimaryConnectionIDIsUnchangedByTheReplicaAddressing(t *testing.T) {
 	// Every existing call site builds ConnectionID{Name, Namespace} and means "the primary".
-	// Adding replica addressing must leave those keys byte-identical.
+	// Adding replica addressing must leave those keys identical.
 	primary := kubegresSQL.ConnectionID{Name: "postgres", Namespace: "default"}
 
 	require.True(t, primary.IsPrimary())
@@ -67,8 +67,8 @@ func TestReplicaKeysScopesToOneCluster(t *testing.T) {
 }
 
 func TestDeleteClosesTheConnection(t *testing.T) {
-	// Kubegres numbers every new replica with a fresh index, so a cluster that has failed over
-	// often would otherwise leak one live *sql.DB per replica it has ever had.
+	// Kubegres gives every new replica a higher index, so without this a cluster that has failed
+	// over often would leak one live *sql.DB per replica it ever had.
 	store := kubegresSQL.NewConnectionStore()
 	replicaID := kubegresSQL.ReplicaConnectionID("default", "postgres", 2)
 

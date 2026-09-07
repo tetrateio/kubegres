@@ -18,9 +18,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package metrics exposes the Prometheus metrics that make failover behaviour observable:
-// which Replica was promoted and why, how far behind each candidate was, and — crucially —
-// whether a failover would succeed if the Primary died right now.
+// Package metrics exposes the Prometheus metrics for failover: which Replica was promoted and
+// why, how far behind each candidate was, and whether a failover would work right now.
 package metrics
 
 import (
@@ -32,14 +31,13 @@ import (
 
 // Reasons reported by FailOverDecisions.
 const (
-	// DecisionReasonHighestLsn: the candidate carrying the most WAL was promoted.
+	// DecisionReasonHighestLsn: the candidate holding the most WAL was promoted.
 	DecisionReasonHighestLsn = "highest_lsn"
-	// DecisionReasonFallback: replication state was unreadable, so readiness-based selection
-	// was used instead.
+	// DecisionReasonFallback: replication state could not be read, so readiness was used.
 	DecisionReasonFallback = "fallback"
 	// DecisionReasonLegacy: WAL-aware selection is not enabled on this cluster.
 	DecisionReasonLegacy = "legacy"
-	// DecisionReasonManual: an operator named the Pod through spec.failover.promotePod.
+	// DecisionReasonManual: a user named the Pod through spec.failover.promotePod.
 	DecisionReasonManual = "manual"
 )
 
@@ -47,13 +45,13 @@ const (
 const (
 	// BlockReasonLagExceeded: the best candidate was further behind than maxReplicationLag.
 	BlockReasonLagExceeded = "lag_exceeded"
-	// BlockReasonStaleTimeline: every reachable candidate was on an abandoned timeline.
+	// BlockReasonStaleTimeline: every reachable candidate was on an old timeline.
 	BlockReasonStaleTimeline = "stale_timeline"
 	// BlockReasonNoHealthyCandidate: no candidate passed the replication health checks.
 	BlockReasonNoHealthyCandidate = "no_healthy_candidate"
 	// BlockReasonUnreachable: no candidate could be reached and fallback is disabled.
 	BlockReasonUnreachable = "unreachable"
-	// BlockReasonUnsafeManualPromotion: the Pod named in promotePod failed its health checks.
+	// BlockReasonUnsafeManualPromotion: the Pod named in promotePod failed its checks.
 	BlockReasonUnsafeManualPromotion = "unsafe_manual_promotion"
 )
 
@@ -62,34 +60,34 @@ var (
 	replicaLabels  = []string{"namespace", "cluster", "instance_index"}
 	decisionLabels = []string{"namespace", "cluster", "reason"}
 
-	// FailOverDecisions counts promotions by why the winner was chosen.
+	// FailOverDecisions counts promotions by how the winner was chosen.
 	FailOverDecisions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "kubegres_failover_decision_total",
 		Help: "Number of Replica promotions, labelled by how the promoted Replica was selected.",
 	}, decisionLabels)
 
-	// FailOverCandidates records how many Replicas were eligible at the last election. Zero
-	// explains why a failover could not happen.
+	// FailOverCandidates is how many Replicas were eligible at the last election. Zero explains
+	// why a failover could not happen.
 	FailOverCandidates = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "kubegres_failover_candidates",
 		Help: "Number of Replicas eligible for promotion at the last failover election.",
 	}, clusterLabels)
 
-	// FailOverDuration measures detection through to the new Primary being ready.
+	// FailOverDuration measures the start of a failover through to the new Primary being ready.
 	FailOverDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "kubegres_failover_duration_seconds",
 		Help:    "Time from starting a failover to the promoted Primary being ready.",
 		Buckets: []float64{5, 10, 20, 30, 45, 60, 90, 120, 180, 240, 300},
 	}, clusterLabels)
 
-	// FailOverBlocked counts refusals to promote, by which guardrail refused.
+	// FailOverBlocked counts refusals to promote, by which check refused.
 	FailOverBlocked = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "kubegres_failover_blocked_total",
 		Help: "Number of times Kubegres refused to promote a Replica because a safety check failed.",
 	}, decisionLabels)
 
-	// ClusterFailOverReady is the steady-state answer to "would a failover work right now?".
-	// 1 means at least one Replica is on the current timeline and within the lag threshold.
+	// ClusterFailOverReady answers "would a failover work right now?". 1 means at least one
+	// Replica is on the current timeline and within the lag limit.
 	ClusterFailOverReady = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "kubegres_cluster_failover_ready",
 		Help: "1 if at least one Replica could be safely promoted right now, 0 otherwise.",
@@ -101,7 +99,7 @@ var (
 		Help: "Number of failures to query a Replica's replication state.",
 	}, replicaLabels)
 
-	// ReplicaWalLagBytes is how far each Replica trails the last known Primary WAL position.
+	// ReplicaWalLagBytes is how far each Replica trails the last known Primary position.
 	ReplicaWalLagBytes = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "kubegres_replica_wal_lag_bytes",
 		Help: "WAL bytes by which a Replica trails the last known Primary WAL position.",
@@ -120,16 +118,15 @@ func init() {
 	)
 }
 
-// InstanceIndexLabel renders a StatefulSet instance index as a metric label value.
+// InstanceIndexLabel formats a StatefulSet instance index as a metric label.
 func InstanceIndexLabel(instanceIndex int32) string {
 	return strconv.Itoa(int(instanceIndex))
 }
 
-// PruneReplicaSeries drops the per-Replica series of instances that are no longer deployed.
+// PruneReplicaSeries drops the series of Replicas that are gone.
 //
-// Kubegres assigns every new Replica a fresh, monotonically increasing instance index, so a
-// cluster that has failed over many times would otherwise leave one permanently frozen lag
-// series behind per Replica it has ever had.
+// Kubegres gives every new Replica a higher index, so without this a cluster that has failed
+// over often would leave one frozen lag series behind per Replica it ever had.
 func PruneReplicaSeries(namespace, cluster string, liveInstanceIndexes []int32) {
 	live := make(map[string]struct{}, len(liveInstanceIndexes))
 	for _, instanceIndex := range liveInstanceIndexes {
@@ -144,8 +141,7 @@ func PruneReplicaSeries(namespace, cluster string, liveInstanceIndexes []int32) 
 	}
 }
 
-// collectReplicaLagLabels lists the instance indexes currently carrying a lag series for one
-// cluster, by reading them back out of the collector.
+// collectReplicaLagLabels reads back the instance indexes that currently have a lag series.
 func collectReplicaLagLabels(namespace, cluster string) []string {
 	ch := make(chan prometheus.Metric, 128)
 	go func() {

@@ -28,16 +28,16 @@ import (
 	"reactive-tech.io/kubegres/internal/postgres"
 )
 
-// Config is spec.failover with every optional field resolved to the value the failover logic
-// will actually use, so that defaulting lives in one place instead of at each read site.
+// Config is spec.failover with every optional field filled in, so defaulting lives in one place
+// instead of at each read site.
 type Config struct {
-	// IntelligentFailoverEnabled turns on replication-state-based Replica selection.
+	// IntelligentFailoverEnabled turns on selection by replication state.
 	IntelligentFailoverEnabled bool
 
-	// MaxReplicationLagBytes is the ceiling on the promoted Replica's lag. Zero disables it.
+	// MaxReplicationLagBytes is how far behind the promoted Replica may be. Zero turns it off.
 	MaxReplicationLagBytes int64
 
-	// HealthCheckTimeout bounds each replication-state query.
+	// HealthCheckTimeout limits each replication-state query.
 	HealthCheckTimeout time.Duration
 
 	// FallbackToLegacy allows readiness-based selection when no Replica can be reached.
@@ -46,22 +46,22 @@ type Config struct {
 	// RequireStreaming rejects candidates whose WAL stream has broken.
 	RequireStreaming bool
 
-	// AllowUnsafeManualPromotion lets spec.failover.promotePod override the health checks.
+	// AllowUnsafeManualPromotion lets spec.failover.promotePod skip the health checks.
 	AllowUnsafeManualPromotion bool
 
 	// PrimaryStabilityWindow is how long the Primary must stay unhealthy before an automatic
-	// failover starts. Zero means start immediately.
+	// failover starts. Zero starts immediately.
 	PrimaryStabilityWindow time.Duration
 
-	// MinHealthyReplicas is how many Replicas must be ready before a failover is complete.
-	// Zero means the new Primary being ready is enough.
+	// MinHealthyReplicas is how many Replicas must be ready before a failover is complete. Zero
+	// means the new Primary being ready is enough.
 	MinHealthyReplicas int32
 }
 
-// ResolveConfig applies the documented defaults to spec.failover.
+// ResolveConfig applies the defaults to spec.failover.
 //
-// Every gate defaults to off, so a Kubegres resource written before these fields existed keeps
-// exactly the behaviour it had.
+// Every gate is off by default, so a Kubegres resource written before these fields existed
+// behaves exactly as it did.
 func ResolveConfig(spec v1.KubegresFailover) Config {
 	config := Config{
 		FallbackToLegacy:   ctx.DefaultFailOverFallbackToLegacy,
@@ -93,8 +93,7 @@ func ResolveConfig(spec v1.KubegresFailover) Config {
 		config.FallbackToLegacy = *intelligent.FallbackToLegacy
 	}
 
-	// A nil quantity means "unset", which takes the default; an explicit zero means the user
-	// asked for no lag ceiling at all.
+	// Nil means unset and takes the default. An explicit zero means no lag limit at all.
 	maxLag := ctx.DefaultFailOverMaxReplicationLag
 	if intelligent.MaxReplicationLag != nil {
 		maxLag = *intelligent.MaxReplicationLag
@@ -106,8 +105,8 @@ func ResolveConfig(spec v1.KubegresFailover) Config {
 	return config
 }
 
-// SelectionConstraints projects the config onto the guardrails the election applies, against
-// the last WAL position observed on the healthy Primary.
+// SelectionConstraints turns the config into the limits the election applies, measured against
+// the last WAL position seen on the healthy Primary.
 func (c Config) SelectionConstraints(referenceLSN postgres.LSN) SelectionConstraints {
 	return SelectionConstraints{
 		MaxReplicationLagBytes: c.MaxReplicationLagBytes,

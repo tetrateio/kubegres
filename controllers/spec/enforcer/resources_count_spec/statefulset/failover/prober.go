@@ -35,23 +35,23 @@ import (
 	replicaHealthRepo "reactive-tech.io/kubegres/internal/replicahealth/repo"
 )
 
-// Prober reads the PostgreSQL replication state of database instances.
+// Prober reads the replication state of database instances.
 type Prober interface {
-	// ProbeReplicas queries every given Replica concurrently and returns one Candidate each,
-	// carrying either its replication state or the error that prevented reading it.
+	// ProbeReplicas queries the given Replicas at the same time and returns one Candidate each,
+	// holding either its replication state or the error that stopped us reading it.
 	ProbeReplicas(replicas []statefulset.StatefulSetWrapper) []Candidate
 
-	// ProbePrimaryWalPosition returns pg_current_wal_lsn() from the cluster's Primary.
+	// ProbePrimaryWalPosition returns pg_current_wal_lsn() from the Primary.
 	ProbePrimaryWalPosition() (postgres.LSN, error)
 }
 
-// connectionProber is the Prober backed by the operator's PostgreSQL connections.
+// connectionProber is the Prober that uses the operator's PostgreSQL connections.
 type connectionProber struct {
 	kubegresContext ctx.KubegresContext
 	timeout         time.Duration
 }
 
-// NewProber builds a Prober that reaches Replicas over the shared ConnectionStore.
+// NewProber builds a Prober that reaches Replicas through the shared ConnectionStore.
 func NewProber(kubegresContext ctx.KubegresContext, timeout time.Duration) Prober {
 	return &connectionProber{kubegresContext: kubegresContext, timeout: timeout}
 }
@@ -59,8 +59,8 @@ func NewProber(kubegresContext ctx.KubegresContext, timeout time.Duration) Probe
 func (p *connectionProber) ProbeReplicas(replicas []statefulset.StatefulSetWrapper) []Candidate {
 	candidates := make([]Candidate, len(replicas))
 
-	// Query the Replicas concurrently: a failover is already an outage, and probing a wedged
-	// Replica serially would add the full timeout per Replica to the recovery time.
+	// Query the Replicas at the same time. A failover is already an outage, and doing this one
+	// at a time would add the full timeout per stuck Replica.
 	var waitGroup sync.WaitGroup
 	for i, replicaStatefulSet := range replicas {
 		candidates[i] = Candidate{

@@ -7,17 +7,16 @@ import (
 
 // ConnectionID identifies a database connection held in the ConnectionStore.
 //
-// Name and Namespace address the Kubegres resource. Instance addresses one database instance
-// within it: it is empty for the cluster's primary connection — the only kind that existed
-// before replica health checks — and holds the StatefulSet instance index for a replica. That
-// keeps every existing ConnectionID{Name, Namespace} literal pointing at the primary.
+// Name and Namespace address the Kubegres resource. Instance picks one database within it: it
+// is empty for the primary and holds the StatefulSet instance index for a replica. That keeps
+// every existing ConnectionID{Name, Namespace} literal pointing at the primary.
 type ConnectionID struct {
 	Name      string
 	Namespace string
 	Instance  string
 }
 
-// ReplicaConnectionID builds the ConnectionID addressing one replica of a Kubegres resource.
+// ReplicaConnectionID builds the ConnectionID for one replica of a Kubegres resource.
 func ReplicaConnectionID(namespace, name string, instanceIndex int32) ConnectionID {
 	return ConnectionID{
 		Namespace: namespace,
@@ -33,7 +32,7 @@ func (c ConnectionID) String() string {
 	return c.Namespace + "/" + c.Name + "#" + c.Instance
 }
 
-// IsPrimary reports whether the ID addresses a cluster's primary connection.
+// IsPrimary reports whether the ID addresses a primary connection.
 func (c ConnectionID) IsPrimary() bool {
 	return c.Instance == ""
 }
@@ -65,10 +64,9 @@ func (s *ConnectionStore) Set(key ConnectionID, conn ConnectionSupplier) {
 	s.dbConns[key] = conn
 }
 
-// Delete removes a connection from the store and closes it. Removing an absent key is a no-op.
+// Delete removes a connection and closes it. Deleting an absent key does nothing.
 //
-// Replica connections are torn down when their StatefulSet goes away, so without this the
-// store would grow a dead *sql.DB for every replica a cluster has ever had.
+// Without this the store would keep a dead *sql.DB for every replica the cluster ever had.
 func (s *ConnectionStore) Delete(key ConnectionID) error {
 	s.mu.Lock()
 	conn, exists := s.dbConns[key]
@@ -81,7 +79,7 @@ func (s *ConnectionStore) Delete(key ConnectionID) error {
 	return conn.Close()
 }
 
-// Keys returns the IDs currently held, in no particular order.
+// Keys returns the IDs held, in no particular order.
 func (s *ConnectionStore) Keys() []ConnectionID {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -93,7 +91,7 @@ func (s *ConnectionStore) Keys() []ConnectionID {
 	return keys
 }
 
-// ReplicaKeys returns the IDs of every replica connection held for one Kubegres resource.
+// ReplicaKeys returns the replica connection IDs held for one Kubegres resource.
 func (s *ConnectionStore) ReplicaKeys(namespace, name string) []ConnectionID {
 	s.mu.Lock()
 	defer s.mu.Unlock()

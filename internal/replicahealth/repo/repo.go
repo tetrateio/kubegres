@@ -31,8 +31,8 @@ import (
 	"reactive-tech.io/kubegres/internal/replicahealth"
 )
 
-// Querier abstracts the subset of *sql.DB this repository needs, mirroring the replication
-// slot repository so that both can be unit-tested against a fake.
+// Querier is the subset of *sql.DB this repository needs, matching the replication slot
+// repository so both can be tested against a fake.
 type Querier interface {
 	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
@@ -56,12 +56,11 @@ type repo struct {
 	now func() time.Time
 }
 
-// coreStateStmt reads the facts that are always available, whether or not a WAL receiver is
-// running. pg_control_checkpoint() is the authoritative source for the timeline because it is
-// read from the control file and therefore survives a torn-down WAL receiver.
+// coreStateStmt reads what is available whether or not a WAL receiver is running. The timeline
+// comes from pg_control_checkpoint() because it reads the control file and so survives a dead
+// WAL receiver.
 //
-// The LSN functions return NULL on an instance that is not in recovery, so they are cast to
-// text and coalesced rather than scanned as a nullable type.
+// The LSN functions return NULL outside recovery, so they are cast to text and coalesced.
 const coreStateStmt = `
 	SELECT
 		pg_is_in_recovery(),
@@ -70,8 +69,8 @@ const coreStateStmt = `
 		COALESCE(pg_last_wal_receive_lsn()::text, '')
 	`
 
-// walReceiverStmt reads the streaming state. It returns no rows when no WAL receiver process
-// is running, which is exactly the "broken WAL stream" case we need to detect.
+// walReceiverStmt reads the streaming state. It returns no rows when no WAL receiver is
+// running, which is the broken-stream case we need to detect.
 const walReceiverStmt = `
 	SELECT
 		status,
@@ -121,8 +120,8 @@ func (r *repo) readWalReceiver(ctx context.Context, status *replicahealth.Status
 
 	err := r.db.QueryRowContext(ctx, walReceiverStmt).Scan(&receiverStatus, &receivedTli, &lastMsgAgeSecs)
 	if errors.Is(err, sql.ErrNoRows) {
-		// No WAL receiver: either this instance is a primary, or its replication stream is
-		// broken. Either way there is nothing more to read and it is not an error.
+		// No WAL receiver: this instance is either a primary or has a broken stream. Nothing
+		// more to read, and not an error.
 		return nil
 	}
 	if err != nil {
@@ -135,9 +134,9 @@ func (r *repo) readWalReceiver(ctx context.Context, status *replicahealth.Status
 		status.LastMsgReceiptAge = time.Duration(lastMsgAgeSecs * float64(time.Second))
 	}
 
-	// A streaming replica can already be following a newer timeline than the one recorded in
-	// its control file, which is only rewritten at the next checkpoint. Take the higher of the
-	// two so that a replica is never wrongly discarded as being on a stale timeline.
+	// A streaming replica can be on a newer timeline than its control file says, since that is
+	// only rewritten at the next checkpoint. Take the higher of the two so we never discard a
+	// replica as stale by mistake.
 	if receivedTli > status.TimelineID {
 		status.TimelineID = receivedTli
 	}

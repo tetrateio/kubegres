@@ -14,9 +14,9 @@ import (
 	replicaHealthRepo "reactive-tech.io/kubegres/internal/replicahealth/repo"
 )
 
-// TestProbeAgainstRealPostgres pins the probe's SQL against a real server. The queries reach
-// into pg_control_checkpoint() and pg_stat_wal_receiver, so a typo or a column that does not
-// exist on the supported PostgreSQL versions would otherwise only surface during a failover.
+// TestProbeAgainstRealPostgres runs the probe's SQL against a real server. The queries use
+// pg_control_checkpoint() and pg_stat_wal_receiver, so a typo or a missing column would
+// otherwise only show up during a failover.
 func TestProbeAgainstRealPostgres(t *testing.T) {
 	// This test requires Docker to be running.
 	if testing.Short() {
@@ -54,7 +54,7 @@ func TestProbeAgainstRealPostgres(t *testing.T) {
 	status, err := repo.Probe(t.Context())
 	require.NoError(t, err)
 
-	// A freshly initialised primary: out of recovery, on timeline 1, with no WAL receiver.
+	// A fresh primary: out of recovery, on timeline 1, with no WAL receiver.
 	require.False(t, status.InRecovery)
 	require.Equal(t, uint32(1), status.TimelineID)
 	require.False(t, status.WalReceiverPresent)
@@ -62,8 +62,8 @@ func TestProbeAgainstRealPostgres(t *testing.T) {
 	require.Equal(t, time.Duration(-1), status.LastMsgReceiptAge)
 	require.False(t, status.ObservedAt.IsZero())
 
-	// pg_last_wal_replay_lsn() is NULL outside recovery; the probe must map that to zero
-	// rather than failing to scan.
+	// pg_last_wal_replay_lsn() is NULL outside recovery. The probe must read that as zero rather
+	// than failing to scan.
 	require.True(t, status.ReplayLSN.IsZero())
 	require.True(t, status.ReceiveLSN.IsZero())
 	require.True(t, status.PromotionLSN().IsZero())
@@ -72,8 +72,8 @@ func TestProbeAgainstRealPostgres(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, currentLSN.IsZero(), "a running primary always has a current WAL position")
 
-	// Writing moves the primary's WAL position forward, which is what the operator records as
-	// the reference point for measuring replica lag.
+	// Writing moves the primary's WAL position forward. That is what the operator records as the
+	// reference point for replica lag.
 	_, err = db.ExecContext(t.Context(), `CREATE TABLE probe_moves_wal (id int)`)
 	require.NoError(t, err)
 

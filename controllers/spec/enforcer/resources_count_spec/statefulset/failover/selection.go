@@ -30,8 +30,8 @@ import (
 	"reactive-tech.io/kubegres/internal/replicahealth"
 )
 
-// Rejection reasons, reported per candidate so that an operator can see why each Replica was
-// passed over rather than only which one won.
+// Rejection reasons, reported per candidate so you can see why each Replica was passed over,
+// not just which one won.
 const (
 	RejectionProbeFailed   = "probe_failed"
 	RejectionNotInRecovery = "not_in_recovery"
@@ -42,34 +42,34 @@ const (
 	RejectionNotBestLsn    = "behind_selected_replica"
 )
 
-// Candidate is one Replica considered for promotion, together with whatever Kubegres managed to
-// learn about its PostgreSQL replication state.
+// Candidate is one Replica considered for promotion, plus what Kubegres learned about its
+// replication state.
 type Candidate struct {
 	InstanceIndex   int32
 	StatefulSetName string
 	PodName         string
 
-	// Health is the observed replication state; only meaningful when ProbeErr is nil.
+	// Health is the replication state. It only means anything when ProbeErr is nil.
 	Health replicahealth.Status
-	// ProbeErr is non-nil when the Replica could not be reached or queried.
+	// ProbeErr is set when the Replica could not be reached or queried.
 	ProbeErr error
 }
 
-// SelectionConstraints are the guardrails applied on top of "furthest advanced wins".
+// SelectionConstraints are the limits applied on top of "furthest advanced wins".
 type SelectionConstraints struct {
-	// MaxReplicationLagBytes is the ceiling on how far behind the reference position the
-	// promoted Replica may be. Zero disables the check.
+	// MaxReplicationLagBytes is how far behind the reference position the promoted Replica may
+	// be. Zero turns the check off.
 	MaxReplicationLagBytes int64
 
-	// ReferenceLSN is the last WAL position observed on the healthy Primary. Zero means no
-	// observation is available, in which case lag is measured against the best candidate.
+	// ReferenceLSN is the last WAL position seen on the healthy Primary. Zero means we have
+	// none, and lag is measured against the best candidate instead.
 	ReferenceLSN postgres.LSN
 
 	// RequireStreaming rejects candidates without a live WAL stream.
 	RequireStreaming bool
 }
 
-// Rejection records one candidate that was not promoted, and why.
+// Rejection records a candidate that was not promoted, and why.
 type Rejection struct {
 	InstanceIndex int32
 	Reason        string
@@ -83,24 +83,24 @@ func (r Rejection) String() string {
 	return "index " + strconv.Itoa(int(r.InstanceIndex)) + ": " + r.Reason + " (" + r.Detail + ")"
 }
 
-// SelectionOutcome is the result of a WAL-aware election.
+// SelectionOutcome is the result of an election.
 type SelectionOutcome struct {
-	// Winner is the Replica to promote, or nil when none may be promoted.
+	// Winner is the Replica to promote, or nil if none may be.
 	Winner *Candidate
 
 	// Reason is the metrics.DecisionReason* explaining a win.
 	Reason string
 
-	// BlockedReason is the metrics.BlockReason* explaining a refusal. It is empty when Winner
-	// is set. It is also empty when no candidate could be reached at all: that case is
-	// signalled by AllProbesFailed, because whether it blocks depends on the fallback policy.
+	// BlockedReason is the metrics.BlockReason* explaining a refusal. It is empty when Winner is
+	// set, and also when no candidate could be reached: that case is reported by
+	// AllProbesFailed instead, since whether it blocks depends on the fallback setting.
 	BlockedReason string
 
-	// AllProbesFailed reports that every candidate was unreachable, which is the one outcome
-	// the caller may choose to answer by falling back to readiness-based selection.
+	// AllProbesFailed means every candidate was unreachable. It is the one outcome the caller
+	// may answer by falling back to readiness-based selection.
 	AllProbesFailed bool
 
-	// Explanation is a human-readable summary for logs, Events and the Kubegres status.
+	// Explanation is a readable summary for logs, Events and the Kubegres status.
 	Explanation string
 
 	// Rejections lists every candidate that was passed over.
@@ -113,23 +113,20 @@ type SelectionOutcome struct {
 	WinnerLagBytes int64
 }
 
-// SelectByWalPosition picks the Replica that would lose the least committed history if promoted.
+// SelectByWalPosition picks the Replica that would lose the least data if promoted.
 //
-// The rule is not simply "highest LSN". Every promotion forks a new PostgreSQL timeline, so
-// after an earlier emergency failover the surviving Replicas can sit on different timelines
-// carrying divergent histories. An LSN on an abandoned timeline is not comparable with an LSN
-// on the current one, and a Replica that is numerically ahead on a superseded lineage is
-// carrying data that the cluster has already agreed to discard. Promoting it would resurrect
-// that lineage as authoritative — a worse outcome than today's readiness-only selection.
+// The rule is not just "highest LSN". Each promotion starts a new PostgreSQL timeline, so after
+// an earlier failover the surviving Replicas can sit on different ones. LSNs from different
+// timelines are not comparable, and a Replica that is ahead on an old timeline holds data the
+// cluster already threw away. Promoting it would make that data authoritative again, which is
+// worse than today's readiness-only selection.
 //
-// So candidates are first grouped by timeline and everything below the highest observed
-// timeline is discarded; only within that surviving group does the furthest-advanced position
-// win.
+// So candidates are grouped by timeline and everything below the highest is dropped first. Only
+// within the survivors does the furthest-advanced position win.
 func SelectByWalPosition(candidates []Candidate, constraints SelectionConstraints) SelectionOutcome {
 	outcome := SelectionOutcome{}
 
-	// Iterate in instance-index order throughout, so that a tie resolves the same way on every
-	// reconciliation rather than following Go's map or slice ordering of the moment.
+	// Work in instance-index order so a tie resolves the same way every time.
 	ordered := make([]Candidate, len(candidates))
 	copy(ordered, candidates)
 	sort.SliceStable(ordered, func(i, j int) bool {
@@ -178,10 +175,10 @@ func SelectByWalPosition(candidates []Candidate, constraints SelectionConstraint
 		})
 	}
 
-	// Lag is measured against the last position seen on the healthy Primary. When that is
-	// unknown — the operator never observed it, or was restarted since — fall back to the best
-	// candidate's own position. That still bounds divergence between Replicas, but it cannot
-	// detect that every surviving Replica is equally far behind the Primary that died.
+	// Lag is measured against the last position seen on the healthy Primary. If we have none -
+	// the operator never saw it, or restarted since - fall back to the best candidate's own
+	// position. That still limits how far apart the Replicas are, but it cannot tell that they
+	// are all equally far behind the Primary that died.
 	reference := postgres.Max(constraints.ReferenceLSN, winner.Health.PromotionLSN())
 	outcome.WinnerLagBytes = reference.Distance(winner.Health.PromotionLSN())
 
@@ -210,8 +207,8 @@ func SelectByWalPosition(candidates []Candidate, constraints SelectionConstraint
 	return outcome
 }
 
-// filterUnhealthy drops candidates that must never be promoted, recording why, and counts how
-// many reported their state at all.
+// filterUnhealthy drops candidates that must not be promoted, records why, and counts how many
+// reported their state at all.
 func (o *SelectionOutcome) filterUnhealthy(candidates []Candidate, constraints SelectionConstraints) []Candidate {
 	var healthy []Candidate
 
@@ -227,9 +224,8 @@ func (o *SelectionOutcome) filterUnhealthy(candidates []Candidate, constraints S
 
 		o.ProbedCount++
 
-		// An instance that has left recovery has already been promoted and has forked its own
-		// timeline. Promoting it again would make that fork authoritative, so it is excluded
-		// before timeline comparison rather than winning it on a spuriously higher timeline.
+		// An instance that left recovery was already promoted and started its own timeline.
+		// Exclude it before comparing timelines, so it cannot win on that higher timeline.
 		if !candidate.Health.InRecovery {
 			o.Rejections = append(o.Rejections, Rejection{
 				InstanceIndex: candidate.InstanceIndex,
@@ -267,7 +263,7 @@ func (o *SelectionOutcome) filterUnhealthy(candidates []Candidate, constraints S
 	return healthy
 }
 
-// discardStaleTimelines keeps only the candidates on the highest timeline observed.
+// discardStaleTimelines keeps only the candidates on the highest timeline seen.
 func (o *SelectionOutcome) discardStaleTimelines(candidates []Candidate) []Candidate {
 	var highestTimeline uint32
 	for _, candidate := range candidates {
@@ -294,8 +290,8 @@ func (o *SelectionOutcome) discardStaleTimelines(candidates []Candidate) []Candi
 	return current
 }
 
-// furthestAdvanced returns the candidate holding the most WAL, breaking ties on the lower
-// instance index so that repeated elections agree.
+// furthestAdvanced returns the candidate holding the most WAL. Ties go to the lower instance
+// index so repeated elections agree.
 func furthestAdvanced(candidates []Candidate) Candidate {
 	winner := candidates[0]
 	for _, candidate := range candidates[1:] {

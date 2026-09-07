@@ -19,7 +19,7 @@ func TestAnEmptySpecKeepsEveryGateOff(t *testing.T) {
 	require.Zero(t, config.PrimaryStabilityWindow)
 	require.Zero(t, config.MinHealthyReplicas)
 	require.Zero(t, config.MaxReplicationLagBytes,
-		"the lag ceiling only applies once WAL-aware selection is enabled")
+		"the lag limit only applies once WAL-aware selection is on")
 	require.True(t, config.FallbackToLegacy)
 	require.Equal(t, 5*time.Second, config.HealthCheckTimeout)
 }
@@ -60,7 +60,7 @@ func TestExplicitIntelligentFailoverValuesAreHonoured(t *testing.T) {
 }
 
 func TestAnExplicitZeroLagMeansNoCeiling(t *testing.T) {
-	// Unset takes the default; an explicit zero is the user asking for no ceiling at all.
+	// Unset takes the default. An explicit zero means the user wants no limit at all.
 	noCeiling := resource.MustParse("0")
 
 	config := failover.ResolveConfig(v1.KubegresFailover{
@@ -89,8 +89,7 @@ func TestZeroDurationsAndCountsFallBackToTheDefaults(t *testing.T) {
 }
 
 func TestStabilityWindowAndReplicaGateAreIndependentOfTheFeatureFlag(t *testing.T) {
-	// Both gates are useful without WAL-aware selection, so they sit next to it rather than
-	// underneath it.
+	// Both gates are useful without WAL-aware selection, so they sit beside it, not under it.
 	config := failover.ResolveConfig(v1.KubegresFailover{
 		PrimaryStabilityWindow: &metav1.Duration{Duration: 45 * time.Second},
 		MinHealthyReplicas:     ptr(int32(2)),

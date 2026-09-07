@@ -28,15 +28,13 @@ import (
 
 // LSN is a PostgreSQL Log Sequence Number: a byte offset into the WAL stream.
 //
-// PostgreSQL renders it as two hexadecimal halves separated by a slash, e.g. "16/B374D848",
-// where the left half is the high 32 bits and the right half the low 32 bits. Holding it as a
-// single uint64 makes ordering and byte-distance arithmetic trivial, which is what replica
-// selection needs.
+// PostgreSQL writes it as two hex halves, e.g. "16/B374D848". Storing it as one uint64 makes
+// comparing positions and measuring the gap between them straightforward.
 type LSN uint64
 
-// ParseLSN parses PostgreSQL's "X/Y" textual LSN representation.
+// ParseLSN parses PostgreSQL's "X/Y" LSN text.
 //
-// An empty string parses to 0: PostgreSQL returns NULL from pg_last_wal_replay_lsn() on an
+// An empty string parses to 0. PostgreSQL returns NULL from pg_last_wal_replay_lsn() on an
 // instance that has never replayed WAL, and callers scan that NULL into an empty string.
 func ParseLSN(s string) (LSN, error) {
 	s = strings.TrimSpace(s)
@@ -62,20 +60,18 @@ func ParseLSN(s string) (LSN, error) {
 	return LSN(highBits<<32 | lowBits), nil
 }
 
-// String renders the LSN the way PostgreSQL does, so that logs and events can be
-// cross-referenced against psql output directly.
+// String formats the LSN the way PostgreSQL does, so logs match psql output.
 func (l LSN) String() string {
 	return fmt.Sprintf("%X/%X", uint32(l>>32), uint32(l))
 }
 
-// IsZero reports whether the LSN is unset, which for our purposes means the replica has not
-// replayed or received any WAL at all.
+// IsZero reports whether the LSN is unset, meaning the instance holds no WAL.
 func (l LSN) IsZero() bool {
 	return l == 0
 }
 
-// Distance returns the number of WAL bytes separating l from other. The result is always
-// non-negative; callers that need the direction should compare the LSNs first.
+// Distance returns the WAL bytes between l and other. It is always non-negative; compare the
+// LSNs first if you need to know which way round they are.
 func (l LSN) Distance(other LSN) int64 {
 	if l > other {
 		return int64(l - other)

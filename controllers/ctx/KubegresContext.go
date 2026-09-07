@@ -70,19 +70,17 @@ var (
 	DefaultReplicationSlotsInactiveSlotGracePeriod = metav1.Duration{Duration: 10 * time.Minute}
 	DefaultReplicationSlotsHealthCheckInterval     = metav1.Duration{Duration: 30 * time.Second}
 
-	// DefaultFailOverHealthCheckTimeout bounds how long a Replica has to report its
-	// replication state before it is treated as unreachable during a failover.
+	// DefaultFailOverHealthCheckTimeout is how long a Replica has to report its replication
+	// state before it counts as unreachable.
 	DefaultFailOverHealthCheckTimeout = metav1.Duration{Duration: 5 * time.Second}
 
-	// DefaultFailOverMaxReplicationLag is the default ceiling on how far behind the promoted
-	// Replica may be. 16Mi is one PostgreSQL WAL segment: a Replica further behind than a
-	// whole segment is not merely lagging, it has fallen out of step with the Primary.
+	// DefaultFailOverMaxReplicationLag is how far behind the promoted Replica may be. 16Mi is
+	// one WAL segment: a Replica further behind than that is out of step with the Primary.
 	DefaultFailOverMaxReplicationLag = resource.MustParse("16Mi")
 )
 
-// DefaultFailOverFallbackToLegacy prefers availability over durability when the operator cannot
-// reach any Replica: the cluster recovers on readiness-based selection rather than waiting for
-// a human.
+// DefaultFailOverFallbackToLegacy prefers availability over durability: if the operator cannot
+// reach any Replica, the cluster recovers on readiness alone rather than waiting for a human.
 const DefaultFailOverFallbackToLegacy = true
 
 func (r *KubegresContext) GetServiceResourceName(isPrimary bool) string {
@@ -126,18 +124,16 @@ func (r *KubegresContext) ClusterRole() ClusterRole {
 	return ActiveRoleName
 }
 
-// GetReplicaSQLConnection returns a connection to one replica instance of this Kubegres
-// resource, creating it on first use and keeping it in the shared ConnectionStore.
+// GetReplicaSQLConnection returns a connection to one replica, creating it on first use and
+// keeping it in the shared ConnectionStore.
 //
-// Replica endpoints cannot be reached through a Service: both Kubegres Services are headless
-// and the replica Service fans out across every replica, so there is no stable name that
-// addresses one specific instance. The Pod IP is therefore passed straight through as the DSN
-// "hostaddr". Everything else — credentials, database and TLS material — is inherited from the
-// primary connection, which the DBConnectionReconciler already keeps reconciled against the
-// Kubegres spec and its Secrets.
+// A Service cannot reach one specific replica: both Kubegres Services are headless and the
+// replica Service covers every replica. So the Pod IP goes straight into the DSN as "hostaddr".
+// Everything else - credentials, database, TLS material - is copied from the primary connection,
+// which the DBConnectionReconciler already keeps up to date.
 //
-// The returned connection is backed by a DynamicDSNConnection, so a replica that is rescheduled
-// onto a new Pod IP reconnects on the next use rather than going permanently stale.
+// The connection is a DynamicDSNConnection, so a replica that moves to a new Pod IP reconnects
+// on next use instead of going stale.
 func (r *KubegresContext) GetReplicaSQLConnection(instanceIndex int32, hostAddr string, port int32) (sql.ConnectionSupplier, error) {
 	if r.ConnectionStore == nil {
 		return nil, errors.New("the connection store is not available")
@@ -165,8 +161,8 @@ func (r *KubegresContext) GetReplicaSQLConnection(instanceIndex int32, hostAddr 
 
 	if existing, found := r.ConnectionStore.Get(connID); found {
 		if dsnSupplier, ok := existing.(sql.DSNDataSupplier); ok {
-			// Re-point the existing connection rather than replacing it, so that a Pod IP change
-			// does not leak the old *sql.DB. DynamicDSNConnection reconnects when the DSN moves.
+			// Re-point the existing connection instead of replacing it, so a Pod IP change does
+			// not leak the old *sql.DB. DynamicDSNConnection reconnects when the DSN changes.
 			dsnSupplier.Data().Apply(func(d *sql.DSNData) {
 				d.HostAddr = replicaDsn.HostAddr
 				d.Host = replicaDsn.Host
@@ -182,7 +178,7 @@ func (r *KubegresContext) GetReplicaSQLConnection(instanceIndex int32, hostAddr 
 			return existing, nil
 		}
 
-		// An unexpected connection type is under this key; drop it and build a fresh one.
+		// Unexpected connection type under this key: drop it and build a fresh one.
 		if err := r.ConnectionStore.Delete(connID); err != nil {
 			r.Log.Error(err, "Failed to close a stale replica connection", "connectionID", connID.String())
 		}
@@ -199,9 +195,10 @@ func (r *KubegresContext) GetReplicaSQLConnection(instanceIndex int32, hostAddr 
 	return conn, nil
 }
 
-// PruneReplicaSQLConnections closes and forgets replica connections whose instance index is no
-// longer deployed. Kubegres gives every new replica a fresh, monotonically increasing index, so
-// without this a long-lived cluster would accumulate one dead *sql.DB per replica ever created.
+// PruneReplicaSQLConnections closes and forgets connections to replicas that are gone.
+//
+// Kubegres gives every new replica a higher index, so without this a long-lived cluster would
+// collect one dead *sql.DB per replica it ever had.
 func (r *KubegresContext) PruneReplicaSQLConnections(liveInstanceIndexes []int32) {
 	if r.ConnectionStore == nil {
 		return

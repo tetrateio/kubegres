@@ -106,9 +106,8 @@ func (r *KubegresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	err = r.enforceSpec(resourcesContext)
 
-	// A failover that is waiting out the Primary stability window has no Kubernetes event to
-	// wake it: a Pod that stays not-ready stops producing updates. Requeue on its timer so the
-	// debounced decision is actually revisited.
+	// A failover waiting out the Primary stability window has nothing to wake it: a Pod that
+	// stays not-ready stops producing events. Requeue on its timer so we look again.
 	result := ctrl.Result{}
 	if requeueAfter := resourcesContext.PrimaryToReplicaFailOver.RequeueAfter(); requeueAfter > 0 {
 		result.RequeueAfter = requeueAfter

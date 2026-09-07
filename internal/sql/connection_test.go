@@ -20,8 +20,8 @@ func (c *fakeConnection) Close() error             { c.closed = true; return nil
 func (c *fakeConnection) Reconnect(_ string) error { return nil }
 
 func TestSnapshotDetachesFromTheOriginal(t *testing.T) {
-	// A replica connection is derived from the primary's: same credentials, database and TLS
-	// material, different endpoint. Mutating the copy must not disturb the reconciled original.
+	// A replica connection is copied from the primary's: same credentials, database and TLS
+	// material, different endpoint. Changing the copy must not touch the original.
 	primary := kubegresSQL.NewDSNData()
 	primary.Apply(func(d *kubegresSQL.DSNData) {
 		d.Host = "postgres"
@@ -53,7 +53,7 @@ func TestStringMasksThePassword(t *testing.T) {
 
 func TestConcurrentReadsAndWritesAreSafe(t *testing.T) {
 	// The Kubegres and Secret reconcilers write this while connection users read it. Run under
-	// -race to catch a regression in the guarding.
+	// -race to catch a regression in the locking.
 	dsnData := kubegresSQL.NewDSNData()
 
 	var waitGroup sync.WaitGroup
@@ -80,8 +80,7 @@ func TestConcurrentReadsAndWritesAreSafe(t *testing.T) {
 }
 
 func TestABareDSNDataStillBuilds(t *testing.T) {
-	// Nothing in the tree builds one this way today, but a struct literal must not panic on a
-	// nil guard.
+	// Nothing builds one this way today, but a struct literal must not panic on a nil guard.
 	dsnData := &kubegresSQL.DSNData{Host: "localhost", Port: "5432", Username: "postgres", Database: "postgres", SSLMode: "disable"}
 
 	require.Equal(t, "host=localhost port=5432 user=postgres dbname=postgres sslmode=disable", dsnData.Build())

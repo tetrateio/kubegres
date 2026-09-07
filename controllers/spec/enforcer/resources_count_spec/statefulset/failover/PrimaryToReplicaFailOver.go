@@ -53,8 +53,8 @@ func CreatePrimaryToReplicaFailOver(kubegresContext ctx.KubegresContext,
 		config, NewProber(kubegresContext, config.HealthCheckTimeout))
 }
 
-// CreatePrimaryToReplicaFailOverWithProber builds the failover logic against an explicit
-// replication-state source, so that selection behaviour can be exercised without a database.
+// CreatePrimaryToReplicaFailOverWithProber builds the failover logic against a given
+// replication-state source, so selection can be tested without a database.
 func CreatePrimaryToReplicaFailOverWithProber(kubegresContext ctx.KubegresContext,
 	resourcesStates states.ResourcesStates,
 	blockingOperation *operation.BlockingOperation,
@@ -104,8 +104,8 @@ func (r *PrimaryToReplicaFailOver) ShouldWeFailOver() bool {
 		return false
 
 	} else if r.isManualFailoverRequested() {
-		// A human asked for this promotion. The stability window exists to filter out failovers
-		// triggered by a readiness blip, so it must not delay an explicit request.
+		// A human asked for this. The window is there to filter out failovers caused by a
+		// readiness blip, so it must not delay an explicit request.
 		return true
 
 	} else if r.isNewPrimaryRequired() {
@@ -172,12 +172,12 @@ func (r *PrimaryToReplicaFailOver) isFailOverCompleted(operation v1.KubegresBloc
 	return true
 }
 
-// hasEnoughHealthyReplicas holds the failover operation open until the cluster has rebuilt the
-// redundancy configured through 'failover.minHealthyReplicas'.
+// hasEnoughHealthyReplicas holds the failover open until the cluster has rebuilt the redundancy
+// set by 'failover.minHealthyReplicas'.
 //
-// A promoted Primary with no Replica behind it has no failover target left: a second failure in
-// that window cannot be recovered automatically at all. Keeping the blocking operation active
-// also keeps the other enforcers out of the way while the Replicas are rebuilt.
+// A promoted Primary with nothing behind it has no failover target left, so a second failure
+// cannot be recovered automatically. Keeping the operation active also keeps the other enforcers
+// out of the way while the Replicas are rebuilt.
 func (r *PrimaryToReplicaFailOver) hasEnoughHealthyReplicas() bool {
 	required := r.config.MinHealthyReplicas
 	if required <= 0 {
@@ -196,9 +196,9 @@ func (r *PrimaryToReplicaFailOver) hasEnoughHealthyReplicas() bool {
 	return false
 }
 
-// reportDurabilityAfterFailOver warns when a failover completes leaving the new Primary
-// unreplicated, whatever 'failover.minHealthyReplicas' is set to. Even when an operator has
-// chosen to accept that window, it should be visible that the cluster is in it.
+// reportDurabilityAfterFailOver warns when a failover finishes leaving the new Primary with no
+// Replica, whatever 'failover.minHealthyReplicas' says. Even if you accept that window, you
+// should be able to see that the cluster is in it.
 func (r *PrimaryToReplicaFailOver) reportDurabilityAfterFailOver() {
 	if r.resourcesStates.StatefulSets.Replicas.NbreReady > 0 {
 		return
@@ -290,9 +290,9 @@ func (r *PrimaryToReplicaFailOver) getStatefulSetByInstanceIndex(newPrimaryInsta
 	return r.resourcesStates.StatefulSets.All.GetByInstanceIndex(newPrimaryInstanceIndex)
 }
 
-// selectReplicaToPromote picks the Replica to promote and reports how it was chosen. The
-// selection runs again after the waiting phase, so that the decision is made against the
-// freshest replication state available rather than a ten-second-old snapshot.
+// selectReplicaToPromote picks the Replica to promote and reports how it was chosen. It runs
+// again after the waiting phase, so the decision uses the freshest state rather than a
+// ten-second-old snapshot.
 func (r *PrimaryToReplicaFailOver) selectReplicaToPromote() (statefulset.StatefulSetWrapper, string, error) {
 
 	if r.isManualFailoverRequested() {
@@ -308,11 +308,11 @@ func (r *PrimaryToReplicaFailOver) selectReplicaToPromote() (statefulset.Statefu
 }
 
 // legacySelectReplicaToPromote is the original selection: the lowest-indexed ready Replica whose
-// replication-slot configuration matches the cluster's.
+// replication-slot setup matches the cluster's.
 //
-// Kubernetes readiness only means the Pod is accepting connections, so this can promote a
-// Replica whose WAL stream is broken or that is far behind the failed Primary. It remains the
-// default, and the fallback when replication state cannot be read.
+// Readiness only means the Pod accepts connections, so this can promote a Replica whose WAL
+// stream is broken or that is far behind. It is still the default, and the fallback when
+// replication state cannot be read.
 func (r *PrimaryToReplicaFailOver) legacySelectReplicaToPromote() (statefulset.StatefulSetWrapper, error) {
 
 	for _, statefulSetWrapper := range r.resourcesStates.StatefulSets.Replicas.All.GetAllSortedByInstanceIndex() {
@@ -335,9 +335,8 @@ func (r *PrimaryToReplicaFailOver) manuallySelectReplicaToPromote() (statefulset
 			continue
 		}
 
-		// The automatic path has always required the candidate's replication-slot configuration
-		// to match the cluster's; a manually named Pod is checked the same way, so that a manual
-		// promotion is never less safe than an automatic one.
+		// The automatic path has always required a matching replication-slot setup. Check a
+		// manually named Pod the same way, so manual promotion is never the less safe option.
 		if statefulSetWrapper.HaveReplicationSlotSet != r.kubegresContext.Kubegres.Spec.ReplicationSlots.Enabled {
 			errorMsg := r.logManualFailoverCannotHappenAsReplicationSlotMismatch()
 			return statefulset.StatefulSetWrapper{}, "", errors.New(errorMsg)

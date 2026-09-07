@@ -42,8 +42,8 @@ func TestParseLSN(t *testing.T) {
 }
 
 func TestLSNOrderingIsNumericNotLexicographic(t *testing.T) {
-	// "0/9" sorts after "0/10" as a string but before it as an LSN. Selection compares
-	// parsed values precisely so that this cannot pick the wrong replica.
+	// "0/9" sorts after "0/10" as a string but before it as an LSN. Selection compares parsed
+	// values, so this cannot pick the wrong replica.
 	smaller, err := postgres.ParseLSN("0/9")
 	require.NoError(t, err)
 	larger, err := postgres.ParseLSN("0/10")

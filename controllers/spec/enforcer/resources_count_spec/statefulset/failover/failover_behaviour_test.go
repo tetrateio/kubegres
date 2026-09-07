@@ -22,8 +22,8 @@ import (
 	"reactive-tech.io/kubegres/internal/replicahealth"
 )
 
-// fakeProber returns canned replication state, keyed by instance index, so that selection
-// behaviour can be exercised without a PostgreSQL server.
+// fakeProber returns fixed replication state, keyed by instance index, so selection can be
+// tested without a PostgreSQL server.
 type fakeProber struct {
 	health      map[int32]replicahealth.Status
 	probeErrs   map[int32]error
@@ -68,8 +68,8 @@ func streamingAt(t *testing.T, timeline uint32, lsnText string) replicahealth.St
 	}
 }
 
-// clusterBuilder assembles the minimal KubegresContext and ResourcesStates the failover logic
-// reads, without a Kubernetes API server.
+// clusterBuilder builds the smallest KubegresContext and ResourcesStates the failover logic
+// reads, with no Kubernetes API server.
 type clusterBuilder struct {
 	kubegres *v1.Kubegres
 	states   states.ResourcesStates
@@ -169,24 +169,23 @@ func TestFailoverWaitsOutTheStabilityWindow(t *testing.T) {
 	cluster := newCluster(t).withPrimary(1, false).withReplica(2, true)
 	failOver, kubegres := cluster.build(t, Config{PrimaryStabilityWindow: time.Minute}, nil)
 
-	// First sighting of an unhealthy Primary only starts the clock.
+	// The first sighting of an unhealthy Primary only starts the clock.
 	require.False(t, failOver.ShouldWeFailOver())
 	require.NotZero(t, kubegres.Status.FailOver.PrimaryUnhealthySinceEpochInSeconds)
 
-	// A Pod that stays not-ready produces no further events, so the decision has to be
-	// revisited on a timer.
+	// A Pod that stays not-ready produces no more events, so we have to look again on a timer.
 	require.InDelta(t, time.Minute.Seconds(), failOver.RequeueAfter().Seconds(), 1)
 
 	// Still inside the window on the next reconciliation.
 	require.False(t, failOver.ShouldWeFailOver())
 
-	// Once the Primary has been unhealthy for longer than the window, the failover proceeds.
+	// Once it has been unhealthy for longer than the window, the failover goes ahead.
 	kubegres.Status.FailOver.PrimaryUnhealthySinceEpochInSeconds = time.Now().Add(-90 * time.Second).Unix()
 	require.True(t, failOver.ShouldWeFailOver())
 }
 
 func TestAPrimaryThatRecoversResetsTheStabilityWindow(t *testing.T) {
-	// A readiness blip must not accumulate towards a later, unrelated unhealthy stretch.
+	// A readiness blip must not count towards a later, unrelated problem.
 	unhealthy := newCluster(t).withPrimary(1, false).withReplica(2, true)
 	failOver, kubegres := unhealthy.build(t, Config{PrimaryStabilityWindow: time.Minute}, nil)
 
@@ -202,8 +201,8 @@ func TestAPrimaryThatRecoversResetsTheStabilityWindow(t *testing.T) {
 }
 
 func TestManualFailoverIsNotDebounced(t *testing.T) {
-	// The window filters out failovers triggered by a readiness blip; an operator asking for a
-	// specific Pod is not a blip.
+	// The window filters out failovers caused by a readiness blip. Someone asking for a specific
+	// Pod is not a blip.
 	cluster := newCluster(t).withPrimary(1, true).withReplica(2, true)
 	cluster.kubegres.Spec.Failover.PromotePod = "postgres-replica-2-0"
 
@@ -241,8 +240,8 @@ func TestFailoverCompletesOnPrimaryReadinessAloneByDefault(t *testing.T) {
 }
 
 func TestFailoverIsHeldOpenUntilRedundancyIsRestored(t *testing.T) {
-	// A promoted Primary with nothing behind it has no failover target left, so a second
-	// failure in that window cannot be recovered automatically at all.
+	// A promoted Primary with nothing behind it has no failover target left, so a second failure
+	// cannot be recovered automatically.
 	unreplicated := newCluster(t).withPrimary(1, true)
 	failOver, _ := unreplicated.build(t, Config{MinHealthyReplicas: 1}, nil)
 	require.False(t, failOver.hasEnoughHealthyReplicas())
@@ -263,8 +262,8 @@ func TestFailoverIsHeldOpenUntilRedundancyIsRestored(t *testing.T) {
 func TestLegacySelectionIsUsedWhenIntelligentFailoverIsDisabled(t *testing.T) {
 	cluster := newCluster(t).withPrimary(1, false).withReplica(2, true).withReplica(3, true)
 
-	// The furthest-advanced Replica is index 3, but with the feature off the lowest-indexed
-	// ready Replica still wins, exactly as before.
+	// Index 3 is furthest ahead, but with the feature off the lowest-indexed ready Replica still
+	// wins, exactly as before.
 	prober := &fakeProber{health: map[int32]replicahealth.Status{
 		2: streamingAt(t, 1, "0/10"),
 		3: streamingAt(t, 1, "0/FF"),
@@ -299,7 +298,7 @@ func TestUnreadyAndSlotMismatchedReplicasAreNeverCandidates(t *testing.T) {
 	cluster := newCluster(t).withPrimary(1, false).withReplica(2, false).withReplica(3, true)
 	cluster.kubegres.Spec.ReplicationSlots.Enabled = true
 
-	// Only index 3 carries a replication slot, matching the cluster's configuration.
+	// Only index 3 has a replication slot, matching the cluster's setup.
 	replicas := cluster.states.StatefulSets.Replicas.All.GetAllSortedByInstanceIndex()
 	require.Len(t, replicas, 2)
 	cluster.states.StatefulSets.Replicas.All = statefulset.StatefulSetWrappers{}
@@ -376,10 +375,9 @@ func TestRefusesToPromoteAReplicaBeyondTheLagThreshold(t *testing.T) {
 // ---------------------------------------------------------------------------------------
 
 func TestManualPromotionIsRefusedWhenTheReplicationSlotGenerationDoesNotMatch(t *testing.T) {
-	// The race from the umbrella issue: with replication slots enabled, new Replicas are
-	// created before the old ones are deleted. Promoting an old Replica loses everything
-	// written through the new slots. The automatic path has always rejected these; the manual
-	// path did not check at all.
+	// The race from the umbrella issue: with replication slots on, new Replicas are created
+	// before the old ones are deleted, and promoting an old one loses everything written through
+	// the new slots. The automatic path always rejected these; the manual path did not check.
 	cluster := newCluster(t).withPrimary(1, true).withReplica(2, true)
 	cluster.kubegres.Spec.ReplicationSlots.Enabled = true
 	cluster.kubegres.Spec.Failover.PromotePod = "postgres-replica-2-0"
@@ -433,8 +431,8 @@ func TestManualPromotionOfAHealthyReplicaIsHonoured(t *testing.T) {
 	cluster := newCluster(t).withPrimary(1, true).withReplica(2, true).withReplica(3, true)
 	cluster.kubegres.Spec.Failover.PromotePod = "postgres-replica-3-0"
 
-	// Index 2 holds more WAL, but a manual request names the Pod to promote and that request
-	// is honoured once it passes the health checks.
+	// Index 2 holds more WAL, but a manual request names the Pod, and that is honoured once it
+	// passes the health checks.
 	prober := &fakeProber{health: map[int32]replicahealth.Status{
 		2: streamingAt(t, 1, "0/FF"),
 		3: streamingAt(t, 1, "0/10"),
@@ -453,8 +451,8 @@ func TestManualPromotionOfAHealthyReplicaIsHonoured(t *testing.T) {
 // ---------------------------------------------------------------------------------------
 
 func TestSteadyStateObservationRecordsThePrimaryWalPosition(t *testing.T) {
-	// The recorded position is the only reference point available for measuring replica lag
-	// once the Primary is gone and can no longer be asked.
+	// The recorded position is the only thing left to measure replica lag against once the
+	// Primary is gone and cannot be asked.
 	cluster := newCluster(t).withPrimary(1, true).withReplica(2, true)
 	cluster.kubegres.Name = "steady-state-observation"
 
@@ -487,8 +485,8 @@ func TestSteadyStateObservationIsSkippedWhenTheFeatureIsOff(t *testing.T) {
 }
 
 func TestSteadyStateObservationIsThrottled(t *testing.T) {
-	// Reconciliations arrive in bursts; without throttling every unrelated Pod update would
-	// open a round of queries against every Replica.
+	// Reconciliations arrive in bursts. Without throttling, every unrelated Pod update would
+	// query every Replica.
 	cluster := newCluster(t).withPrimary(1, true).withReplica(2, true)
 	cluster.kubegres.Name = "steady-state-throttled"
 
@@ -504,8 +502,8 @@ func TestSteadyStateObservationIsThrottled(t *testing.T) {
 }
 
 func TestADeletedPrimaryIsNotDebounced(t *testing.T) {
-	// The window buys time for a Primary that might still recover. A Primary whose StatefulSet
-	// is gone will not, so waiting on it would only extend the outage.
+	// The window gives a Primary time to recover. One whose StatefulSet is gone will not, so
+	// waiting would only make the outage longer.
 	cluster := newCluster(t).withoutPrimary().withReplica(2, true)
 	failOver, _ := cluster.build(t, Config{PrimaryStabilityWindow: time.Hour}, nil)
 

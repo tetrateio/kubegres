@@ -127,9 +127,9 @@ func NewDynamicDSNConnection(data *DSNData) (*DynamicDSNConnection, error) {
 	return d, nil
 }
 
-// DSNDataSupplier is implemented by connections whose parameters can be read back, so that a
-// connection to one instance of a cluster can be derived from a connection to another (same
-// credentials, database and TLS material; different endpoint).
+// DSNDataSupplier is implemented by connections whose parameters can be read back, so a
+// connection to one instance can be derived from another's: same credentials, different
+// endpoint.
 type DSNDataSupplier interface {
 	Data() *DSNData
 }
@@ -154,9 +154,8 @@ func (d *DynamicDSNConnection) DB() *sql.DB {
 
 // DSNData holds the data required to build a Data Source Name (DSN) for connecting to a PostgreSQL database.
 //
-// A single DSNData is shared between the goroutine that reconciles it (the Kubegres and Secret
-// reconcilers) and the goroutines that read it to open connections, so every field access goes
-// through mu. Use Apply to mutate it.
+// One DSNData is shared between the reconcilers that write it and the goroutines that read it
+// to open connections, so every field access goes through mu. Use Apply to change it.
 type DSNData struct {
 	mu *sync.RWMutex
 
@@ -184,9 +183,8 @@ func NewDSNData() *DSNData {
 	}
 }
 
-// lock returns the guard, tolerating a DSNData built as a bare struct literal rather than
-// through NewDSNData. Such a value is not yet shared with any other goroutine, so lazily
-// attaching a guard here is safe.
+// lock returns the guard, allowing a DSNData built as a bare struct literal. Such a value is
+// not shared with any other goroutine yet, so attaching the guard lazily is safe.
 func (b *DSNData) lock() *sync.RWMutex {
 	if b.mu == nil {
 		b.mu = &sync.RWMutex{}
@@ -194,7 +192,7 @@ func (b *DSNData) lock() *sync.RWMutex {
 	return b.mu
 }
 
-// Apply mutates the DSNData under its write lock.
+// Apply changes the DSNData under its write lock.
 func (b *DSNData) Apply(mutate func(*DSNData)) {
 	mu := b.lock()
 	mu.Lock()
@@ -203,10 +201,10 @@ func (b *DSNData) Apply(mutate func(*DSNData)) {
 	mutate(b)
 }
 
-// Snapshot returns an unguarded copy of the connection parameters, safe to mutate freely.
+// Snapshot returns a copy of the connection parameters, safe to change freely.
 //
-// It is how a replica connection is derived from the primary's: the credentials, database and
-// TLS material are identical and only the endpoint differs.
+// It is how a replica connection is derived from the primary's: same credentials, database and
+// TLS material, different endpoint.
 func (b *DSNData) Snapshot() *DSNData {
 	mu := b.lock()
 	mu.RLock()
@@ -226,7 +224,7 @@ func (b *DSNData) Build() string {
 	return b.build()
 }
 
-// build assumes the caller holds at least a read lock.
+// build requires the caller to hold at least a read lock.
 func (b *DSNData) build() string {
 	var sb strings.Builder
 	if b.HostAddr != "" {

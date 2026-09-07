@@ -11,7 +11,7 @@ import (
 	"reactive-tech.io/kubegres/internal/replicahealth"
 )
 
-// replica builds a healthy streaming standby candidate at the given timeline and WAL position.
+// replica builds a healthy streaming standby at the given timeline and WAL position.
 func replica(t *testing.T, instanceIndex int32, timeline uint32, lsn string) failover.Candidate {
 	t.Helper()
 
@@ -49,8 +49,8 @@ func rejectionFor(outcome failover.SelectionOutcome, instanceIndex int32) (failo
 }
 
 func TestPromotesTheFurthestAdvancedReplica(t *testing.T) {
-	// The scenario from the design document: three ready Replicas, the middle one holds the
-	// most WAL. Readiness-based selection would take index 1 simply because it sorts first.
+	// Three ready Replicas, the middle one holds the most WAL. Selection on readiness would take
+	// index 1 just because it sorts first.
 	candidates := []failover.Candidate{
 		replica(t, 1, 1, "0/3A"),
 		replica(t, 2, 1, "0/3C"),
@@ -66,16 +66,15 @@ func TestPromotesTheFurthestAdvancedReplica(t *testing.T) {
 	require.Equal(t, 3, outcome.ProbedCount)
 	require.False(t, outcome.AllProbesFailed)
 
-	// The losers are reported so an operator can see the election, not just its winner.
+	// The losers are reported too, so you can see the whole election.
 	rejection, found := rejectionFor(outcome, 1)
 	require.True(t, found)
 	require.Equal(t, failover.RejectionNotBestLsn, rejection.Reason)
 }
 
-// TestNeverPromotesAcrossAnAbandonedTimeline is the regression test for the failure mode that
-// naive LSN comparison introduces: the numerically highest position belongs to a Replica left
-// on a superseded timeline by an earlier promotion. Picking it would resurrect a history the
-// cluster already abandoned.
+// TestNeverPromotesAcrossAnAbandonedTimeline covers the failure mode that plain LSN comparison
+// would introduce: the highest position belongs to a Replica left on an old timeline by an
+// earlier promotion. Picking it would bring back data the cluster already dropped.
 func TestNeverPromotesAcrossAnAbandonedTimeline(t *testing.T) {
 	candidates := []failover.Candidate{
 		replica(t, 1, 1, "0/FF00"), // furthest ahead in raw bytes, but on the old timeline
@@ -97,8 +96,8 @@ func TestNeverPromotesAcrossAnAbandonedTimeline(t *testing.T) {
 }
 
 func TestBlocksWhenEveryCandidateIsOnAStaleTimeline(t *testing.T) {
-	// A Replica that has already left recovery is excluded before timelines are compared, so
-	// what is left here are two standbys both trailing a timeline nobody is serving.
+	// A Replica that already left recovery is dropped before timelines are compared, leaving two
+	// standbys that share a timeline.
 	promoted := replica(t, 3, 3, "0/50")
 	promoted.Health.InRecovery = false
 
@@ -110,8 +109,8 @@ func TestBlocksWhenEveryCandidateIsOnAStaleTimeline(t *testing.T) {
 
 	outcome := failover.SelectByWalPosition(candidates, failover.SelectionConstraints{})
 
-	// Both surviving standbys share timeline 1, so one of them is still promotable: the
-	// already-promoted instance is excluded, not treated as raising the bar.
+	// Both survivors are on timeline 1, so one of them can still be promoted: the
+	// already-promoted instance is dropped, not treated as raising the bar.
 	require.NotNil(t, outcome.Winner)
 	require.Equal(t, int32(2), outcome.Winner.InstanceIndex)
 
@@ -121,8 +120,8 @@ func TestBlocksWhenEveryCandidateIsOnAStaleTimeline(t *testing.T) {
 }
 
 func TestPrefersTheReceivedPositionOverTheReplayedOne(t *testing.T) {
-	// Promotion replays whatever WAL is already on disk, so a Replica that has received more
-	// than it has replayed will end up further ahead than its replay position suggests.
+	// Promotion replays whatever WAL is on disk, so a Replica that has received more than it has
+	// replayed ends up further ahead than its replay position suggests.
 	behindOnReplay := replica(t, 1, 1, "0/10")
 	behindOnReplay.Health.ReceiveLSN = lsn(t, "0/FF")
 
@@ -157,8 +156,8 @@ func TestUnreachableReplicasAreReportedRatherThanPromoted(t *testing.T) {
 }
 
 func TestAllProbesFailedIsSignalledSeparatelyFromBlocking(t *testing.T) {
-	// Whether "nothing could be reached" blocks the failover depends on the fallback policy,
-	// which is the caller's decision, so selection reports the fact rather than the verdict.
+	// Whether "nothing could be reached" blocks the failover depends on the fallback setting,
+	// which is the caller's call, so selection reports the fact and not the verdict.
 	first := replica(t, 1, 1, "0/3A")
 	first.ProbeErr = errors.New("connection refused")
 	second := replica(t, 2, 1, "0/3C")
@@ -173,8 +172,8 @@ func TestAllProbesFailedIsSignalledSeparatelyFromBlocking(t *testing.T) {
 }
 
 func TestBlocksWhenTheBestReplicaExceedsTheLagThreshold(t *testing.T) {
-	// The Primary got to 0/2000000 before dying; the best Replica only reached 0/1000000, so
-	// promoting it would silently discard 16 MiB of committed history.
+	// The Primary reached 0/2000000 before dying; the best Replica only got to 0/1000000, so
+	// promoting it would quietly drop 16 MiB of committed data.
 	candidates := []failover.Candidate{
 		replica(t, 1, 1, "0/1000000"),
 		replica(t, 2, 1, "0/900000"),
@@ -204,10 +203,9 @@ func TestPromotesWhenTheLagIsWithinTheThreshold(t *testing.T) {
 }
 
 func TestLagIsMeasuredAgainstTheBestCandidateWhenThePrimaryPositionIsUnknown(t *testing.T) {
-	// Without a reference position the winner is by definition zero bytes behind, so the
-	// threshold can bound divergence between Replicas but cannot detect that they are all
-	// equally far behind the Primary that died. This degradation is deliberate: refusing every
-	// failover after an operator restart would be worse.
+	// With no reference position the winner is zero bytes behind by definition, so the limit can
+	// tell how far apart the Replicas are but not how far behind the dead Primary they all are.
+	// That is on purpose: blocking every failover after an operator restart would be worse.
 	candidates := []failover.Candidate{
 		replica(t, 1, 1, "0/1000"),
 		replica(t, 2, 1, "0/2000"),
@@ -223,8 +221,8 @@ func TestLagIsMeasuredAgainstTheBestCandidateWhenThePrimaryPositionIsUnknown(t *
 }
 
 func TestAReferencePositionBehindEveryReplicaIsIgnored(t *testing.T) {
-	// A stale recorded Primary position must never make the winner look "ahead" and skew the
-	// lag arithmetic negative.
+	// An old recorded Primary position must not make the winner look "ahead" and turn the lag
+	// negative.
 	candidates := []failover.Candidate{replica(t, 1, 1, "0/9000")}
 
 	outcome := failover.SelectByWalPosition(candidates, failover.SelectionConstraints{
@@ -251,8 +249,8 @@ func TestReplicasWithNoWalPositionAreExcluded(t *testing.T) {
 }
 
 func TestRequireStreamingExcludesReplicasWithABrokenWalStream(t *testing.T) {
-	// The exact shape reported in the issue: a Replica is Kubernetes-ready but its WAL
-	// receiver has died on "requested WAL segment has already been removed", freezing it.
+	// The case from the issue: a Replica is Kubernetes-ready but its WAL receiver died on
+	// "requested WAL segment has already been removed", leaving it stuck.
 	brokenStream := replica(t, 1, 1, "0/FF00")
 	brokenStream.Health.WalReceiverPresent = false
 	brokenStream.Health.WalReceiverStatus = ""
@@ -262,7 +260,7 @@ func TestRequireStreamingExcludesReplicasWithABrokenWalStream(t *testing.T) {
 	withoutRequirement := failover.SelectByWalPosition(candidates, failover.SelectionConstraints{})
 	require.NotNil(t, withoutRequirement.Winner)
 	require.Equal(t, int32(1), withoutRequirement.Winner.InstanceIndex,
-		"by default a frozen Replica still competes, because after the Primary dies every Replica loses its stream")
+		"by default a stuck Replica still competes: once the Primary dies every Replica loses its stream")
 
 	withRequirement := failover.SelectByWalPosition(candidates, failover.SelectionConstraints{RequireStreaming: true})
 	require.NotNil(t, withRequirement.Winner)
@@ -299,8 +297,8 @@ func TestNoCandidatesAtAll(t *testing.T) {
 }
 
 func TestTiesResolveDeterministicallyOnTheLowerInstanceIndex(t *testing.T) {
-	// Two Replicas at exactly the same position must always yield the same winner, otherwise
-	// consecutive reconciliations could disagree about who is being promoted.
+	// Two Replicas at the same position must always give the same winner, or two reconciliations
+	// in a row could disagree about who is being promoted.
 	forward := []failover.Candidate{replica(t, 5, 1, "0/3A"), replica(t, 2, 1, "0/3A")}
 	reversed := []failover.Candidate{replica(t, 2, 1, "0/3A"), replica(t, 5, 1, "0/3A")}
 

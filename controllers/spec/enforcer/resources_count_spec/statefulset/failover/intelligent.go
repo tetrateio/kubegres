@@ -33,8 +33,7 @@ import (
 )
 
 // clusterFailOverReadinessInterval throttles the steady-state readiness probe. Reconciliations
-// are event-driven and can arrive in bursts; without this, every unrelated Pod update would
-// open a round of queries against every Replica.
+// arrive in bursts, so without this every unrelated Pod update would query every Replica.
 const clusterFailOverReadinessInterval = 30 * time.Second
 
 var lastReadinessObservation = struct {
@@ -42,12 +41,10 @@ var lastReadinessObservation = struct {
 	at map[string]time.Time
 }{at: make(map[string]time.Time)}
 
-// requeueRequest carries a "come back in N" ask out of the enforcement pass and up to the
-// controller.
+// requeueRequest carries a "come back in N" request from the enforcement pass to the controller.
 //
-// It is behind a pointer because PrimaryToReplicaFailOver is passed around by value: an
-// enforcer holds its own copy, so a plain field set during enforcement would be discarded
-// before the controller could read it.
+// It is a pointer because PrimaryToReplicaFailOver is passed by value: an enforcer holds its own
+// copy, so a plain field would be thrown away before the controller could read it.
 type requeueRequest struct {
 	mu    sync.Mutex
 	after time.Duration
@@ -61,7 +58,7 @@ func (r *requeueRequest) request(after time.Duration) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// Keep the earliest ask: whichever deadline comes first is the one worth waking for.
+	// Keep the earliest one: that is the deadline worth waking for.
 	if r.after == 0 || after < r.after {
 		r.after = after
 	}
@@ -76,11 +73,11 @@ func (r *requeueRequest) take() time.Duration {
 	return after
 }
 
-// RequeueAfter reports how long the controller should wait before reconciling again, and clears
-// the request. It is zero when nothing is waiting on a timer.
+// RequeueAfter says how long the controller should wait before reconciling again, and clears the
+// request. It is zero when nothing is waiting on a timer.
 //
-// The Primary stability window needs this: a Primary that stays not-ready generates no further
-// Kubernetes events, so without an explicit requeue the debounced failover would never fire.
+// The Primary stability window needs this: a Primary that stays not-ready produces no more
+// events, so without a requeue the delayed failover would never happen.
 func (r *PrimaryToReplicaFailOver) RequeueAfter() time.Duration {
 	if r.requeue == nil {
 		return 0
@@ -98,20 +95,19 @@ func (r *PrimaryToReplicaFailOver) requeueAfter(after time.Duration) {
 // Primary stability window
 // ---------------------------------------------------------------------------------------
 
-// hasPrimaryBeenUnhealthyLongEnough debounces the failover trigger.
+// hasPrimaryBeenUnhealthyLongEnough delays the failover trigger.
 //
-// Kubernetes readiness is a single bit that flips on a probe failure, so an aggressive probe, a
-// brief restart or momentary resource pressure all look identical to a dead Primary. An
-// unnecessary failover is not just churn: it deletes a Primary that would have recovered and
-// opens a window in which committed transactions can be lost.
+// Readiness is one bit that flips on a probe failure, so a tight probe, a brief restart or
+// short-lived resource pressure all look the same as a dead Primary. An unneeded failover is not
+// just churn: it deletes a Primary that would have recovered, and risks losing data.
 func (r *PrimaryToReplicaFailOver) hasPrimaryBeenUnhealthyLongEnough() bool {
 	window := r.config.PrimaryStabilityWindow
 	if window <= 0 {
 		return true
 	}
 
-	// The window buys time for a Primary that might still recover. A Primary whose StatefulSet
-	// is gone will not, so waiting would only extend the outage.
+	// The window gives a Primary time to recover. One whose StatefulSet is gone will not, so
+	// waiting would only make the outage longer.
 	if !r.isPrimaryDbDeployed() {
 		return true
 	}
@@ -138,8 +134,8 @@ func (r *PrimaryToReplicaFailOver) hasPrimaryBeenUnhealthyLongEnough() bool {
 	return false
 }
 
-// recordPrimaryIsHealthy resets the stability window once the Primary recovers, so that a later
-// unhealthy stretch is measured from its own start rather than from an old blip.
+// recordPrimaryIsHealthy resets the window once the Primary recovers, so a later problem is
+// timed from its own start and not from an old blip.
 func (r *PrimaryToReplicaFailOver) recordPrimaryIsHealthy() {
 	if r.kubegresContext.Kubegres.Status.FailOver.PrimaryUnhealthySinceEpochInSeconds == 0 {
 		return
@@ -163,9 +159,9 @@ func (r *PrimaryToReplicaFailOver) logWaitingForPrimaryToStabilise(window, unhea
 // Replication-state-aware selection
 // ---------------------------------------------------------------------------------------
 
-// eligibleReplicas returns the Replicas that pass the pre-existing structural checks: ready, and
-// with a replication-slot configuration matching the cluster's. Replication-state checks are
-// layered on top of these, not in place of them.
+// eligibleReplicas returns the Replicas that pass the checks Kubegres already had: ready, and
+// with a replication-slot setup matching the cluster's. The replication-state checks are added
+// on top of these, not instead of them.
 func (r *PrimaryToReplicaFailOver) eligibleReplicas() []statefulset.StatefulSetWrapper {
 	var eligible []statefulset.StatefulSetWrapper
 
@@ -183,8 +179,8 @@ func (r *PrimaryToReplicaFailOver) isStructurallyEligible(replicaStatefulSet sta
 		replicaStatefulSet.HaveReplicationSlotSet == r.kubegresContext.Kubegres.Spec.ReplicationSlots.Enabled
 }
 
-// selectReplicaByReplicationState promotes the Replica that would lose the least committed
-// history, rather than the first one Kubernetes happens to call ready.
+// selectReplicaByReplicationState promotes the Replica that would lose the least data, rather
+// than the first one Kubernetes calls ready.
 func (r *PrimaryToReplicaFailOver) selectReplicaByReplicationState() (statefulset.StatefulSetWrapper, string, error) {
 	eligible := r.eligibleReplicas()
 
@@ -220,12 +216,12 @@ func (r *PrimaryToReplicaFailOver) selectReplicaByReplicationState() (statefulse
 	return winner, metrics.DecisionReasonHighestLsn, nil
 }
 
-// handleUnreachableReplicas resolves the case where the operator cannot read the replication
-// state of any Replica — typically a network partition between the operator and the databases.
+// handleUnreachableReplicas handles the case where no Replica's state can be read, usually a
+// network partition between the operator and the databases.
 //
-// This is the availability-versus-durability trade-off the operator cannot make on its own:
-// falling back promotes on readiness alone and risks data loss, while refusing keeps the cluster
-// down until a human intervenes. 'fallbackToLegacy' is how the user states their preference.
+// This is an availability-versus-durability choice the operator cannot make on its own: falling
+// back promotes on readiness alone and risks losing data, while refusing keeps the cluster down
+// until a human steps in. 'fallbackToLegacy' is how the user states their preference.
 func (r *PrimaryToReplicaFailOver) handleUnreachableReplicas(outcome SelectionOutcome) (statefulset.StatefulSetWrapper, string, error) {
 	if !r.config.FallbackToLegacy {
 		return statefulset.StatefulSetWrapper{}, "", r.blockFailOver(metrics.BlockReasonUnreachable,
@@ -244,7 +240,7 @@ func (r *PrimaryToReplicaFailOver) handleUnreachableReplicas(outcome SelectionOu
 	return newPrimary, metrics.DecisionReasonFallback, err
 }
 
-// blockFailOver refuses to promote, records why on the Kubegres resource and returns the error
+// blockFailOver refuses to promote, records why on the Kubegres resource, and returns the error
 // that stops the enforcement pass.
 func (r *PrimaryToReplicaFailOver) blockFailOver(blockedReason, explanation string) error {
 	metrics.FailOverBlocked.
@@ -267,9 +263,9 @@ func (r *PrimaryToReplicaFailOver) blockFailOver(blockedReason, explanation stri
 
 // recordPromotion notes the promotion on the Kubegres resource and in the metrics.
 //
-// It runs only when the StatefulSet is actually being relabelled as the Primary, not on every
-// election: the selection runs again after the waiting phase and a failover that is blocked or
-// retried would otherwise be counted several times over.
+// It runs only when the StatefulSet is actually relabelled as the Primary, not on every
+// election. Selection runs again after the waiting phase, so counting there would count a single
+// failover several times.
 func (r *PrimaryToReplicaFailOver) recordPromotion(newPrimary statefulset.StatefulSetWrapper, decisionReason string) {
 	metrics.FailOverDecisions.
 		WithLabelValues(r.kubegresContext.Kubegres.Namespace, r.kubegresContext.Kubegres.Name, decisionReason).
@@ -290,9 +286,8 @@ func (r *PrimaryToReplicaFailOver) logElection(outcome SelectionOutcome) {
 		"Replicas not selected", formatRejections(outcome.Rejections))
 }
 
-// lastKnownPrimaryWalPosition reads back the WAL position last observed on a healthy Primary.
-// It is zero when no such observation survives, which selection handles by measuring lag
-// against the best candidate instead.
+// lastKnownPrimaryWalPosition reads back the WAL position last seen on a healthy Primary. It is
+// zero when we have none, and selection then measures lag against the best candidate instead.
 func (r *PrimaryToReplicaFailOver) lastKnownPrimaryWalPosition() postgres.LSN {
 	recorded := r.kubegresContext.Kubegres.Status.FailOver.LastKnownPrimaryWalLsn
 	if recorded == "" {
@@ -334,14 +329,13 @@ func (r *PrimaryToReplicaFailOver) publishReplicaLag(candidates []Candidate, ref
 // Manual promotion safety
 // ---------------------------------------------------------------------------------------
 
-// verifyManualPromotionCandidate applies the same replication health checks to an operator's
-// explicit 'failover.promotePod' request as to an automatic election.
+// verifyManualPromotionCandidate runs the same health checks on a 'failover.promotePod' request
+// as on an automatic election.
 //
-// A manual request is a stronger signal of intent than an automatic trigger, but it is not
-// evidence that the named Replica is safe to promote: an operator picking a Pod name from
-// kubectl output has no more visibility into WAL positions than the readiness-based selector
-// did. The request is honoured once verified, or refused with the reason, unless
-// 'allowUnsafeManualPromotion' says to promote regardless.
+// A manual request shows clear intent, but it is not evidence that the named Replica is safe:
+// someone picking a Pod name out of kubectl output can see no more about WAL positions than the
+// readiness-based selector could. The request goes ahead once checked, or is refused with the
+// reason, unless 'allowUnsafeManualPromotion' says to promote anyway.
 func (r *PrimaryToReplicaFailOver) verifyManualPromotionCandidate(candidate statefulset.StatefulSetWrapper) error {
 	if !r.config.IntelligentFailoverEnabled || r.config.AllowUnsafeManualPromotion {
 		return nil
@@ -378,11 +372,11 @@ func (r *PrimaryToReplicaFailOver) verifyManualPromotionCandidate(candidate stat
 // Steady-state readiness
 // ---------------------------------------------------------------------------------------
 
-// ObserveClusterFailOverReadiness answers, while everything is healthy, the question an operator
-// actually cares about: if the Primary died right now, would a failover succeed?
+// ObserveClusterFailOverReadiness answers, while everything is healthy, the question that
+// matters: if the Primary died right now, would a failover work?
 //
-// It also records the Primary's current WAL position, which is the reference point replication
-// lag is measured against once the Primary is gone and can no longer be asked.
+// It also records the Primary's current WAL position, which is what replica lag is measured
+// against once the Primary is gone and can no longer be asked.
 func (r *PrimaryToReplicaFailOver) ObserveClusterFailOverReadiness() {
 	if !r.config.IntelligentFailoverEnabled || !r.isPrimaryDbReady() {
 		return
@@ -429,10 +423,10 @@ func (r *PrimaryToReplicaFailOver) ObserveClusterFailOverReadiness() {
 		"No Replica could be safely promoted if the Primary failed right now: "+outcome.Explanation)
 }
 
-// pruneDepartedReplicas closes connections and drops metric series for Replicas that no longer
-// exist. Kubegres numbers every new Replica with a fresh, increasing instance index, so a
-// cluster that has failed over often would otherwise accumulate one dead connection and one
-// frozen lag series per Replica it has ever had.
+// pruneDepartedReplicas closes connections and drops metric series for Replicas that are gone.
+//
+// Kubegres gives every new Replica a higher index, so a cluster that has failed over often would
+// otherwise collect one dead connection and one frozen lag series per Replica it ever had.
 func (r *PrimaryToReplicaFailOver) pruneDepartedReplicas() {
 	deployed := r.resourcesStates.StatefulSets.Replicas.All.GetAllSortedByInstanceIndex()
 
