@@ -299,21 +299,21 @@ func (r *PrimaryToReplicaFailOver) selectReplicaToPromote() (statefulset.Statefu
 		return r.manuallySelectReplicaToPromote()
 	}
 
-	if r.config.IntelligentFailoverEnabled {
-		return r.selectReplicaByReplicationState()
+	if r.config.SelectsOnWalPosition() {
+		return r.selectReplicaByWalPosition()
 	}
 
-	newPrimary, err := r.legacySelectReplicaToPromote()
-	return newPrimary, metrics.DecisionReasonLegacy, err
+	newPrimary, err := r.selectReplicaByReadiness()
+	return newPrimary, metrics.DecisionReasonReadiness, err
 }
 
-// legacySelectReplicaToPromote is the original selection: the lowest-indexed ready Replica whose
+// selectReplicaByReadiness is the Readiness strategy: the lowest-indexed ready Replica whose
 // replication-slot setup matches the cluster's.
 //
 // Readiness only means the Pod accepts connections, so this can promote a Replica whose WAL
-// stream is broken or that is far behind. It is still the default, and the fallback when
-// replication state cannot be read.
-func (r *PrimaryToReplicaFailOver) legacySelectReplicaToPromote() (statefulset.StatefulSetWrapper, error) {
+// stream is broken or that is far behind. It is the default, and the fallback when replication
+// state cannot be read.
+func (r *PrimaryToReplicaFailOver) selectReplicaByReadiness() (statefulset.StatefulSetWrapper, error) {
 
 	for _, statefulSetWrapper := range r.resourcesStates.StatefulSets.Replicas.All.GetAllSortedByInstanceIndex() {
 		if r.isStructurallyEligible(statefulSetWrapper) {

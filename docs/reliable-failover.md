@@ -19,11 +19,11 @@ exactly as it did.
 
 | Field | What it does |
 | --- | --- |
-| `spec.failover.intelligentFailover` | Promotes on PostgreSQL replication state instead of readiness |
+| `spec.failover.replicaSelection.strategy` | Picks the Replica on PostgreSQL replication state instead of readiness |
 | `spec.failover.primaryStabilityWindow` | Debounces the failover trigger |
 | `spec.failover.minHealthyReplicas` | Holds a failover open until redundancy is restored |
 
-### WAL-aware selection
+### Replica selection strategy
 
 ```yaml
 apiVersion: kubegres.reactive-tech.io/v1
@@ -35,18 +35,20 @@ spec:
   image: postgres:16.1
 
   failover:
-    intelligentFailover:
-      enabled: true
+    replicaSelection:
+      # Readiness (the default) or WalPosition
+      strategy: WalPosition
       maxReplicationLag: 16Mi
       healthCheckTimeout: 5s
-      fallbackToLegacy: true
+      fallbackToReadiness: true
 
   replicationSlots:
     enabled: true
 ```
 
-When a failover starts, the operator queries every eligible Replica concurrently for its
-recovery state, timeline and WAL positions, then applies these rules in order:
+There are two strategies. `Readiness` is the default and is what Kubegres has always done: the
+lowest-numbered ready Replica wins. `WalPosition` queries every eligible Replica concurrently for
+its recovery state, timeline and WAL positions, then applies these rules in order:
 
 1. **Structural eligibility.** The Replica must be ready and its replication-slot configuration
    must match the cluster's — the check Kubegres has always applied.
@@ -80,11 +82,11 @@ worse than promoting the best available candidate.
 
 #### When the operator cannot reach the Replicas
 
-`fallbackToLegacy` states the availability-versus-durability preference the operator cannot make
-on its own. It only applies when **no** candidate could be queried at all — typically a network
-partition between the operator and the databases.
+`fallbackToReadiness` states the availability-versus-durability preference the operator cannot
+make on its own. It only applies when **no** candidate could be queried at all — typically a
+network partition between the operator and the databases.
 
-* `true` (default): fall back to readiness-based selection. The cluster recovers, at the risk of
+* `true` (default): fall back to the `Readiness` strategy. The cluster recovers, at the risk of
   promoting a Replica that is behind. A `FailOverWalVerificationUnavailable` event is emitted.
 * `false`: refuse to promote. The cluster stays down until a human intervenes, and
   `status.failOver.blockedReason` is set to `unreachable`.
@@ -107,12 +109,11 @@ unreachable ones are simply not promotable.
 an automatic election:
 
 * The requested Replica's replication-slot configuration must match the cluster's. **This check
-  applies whether or not `intelligentFailover` is enabled** and is the one behaviour change that
-  is not behind a flag. It closes a real gap: with replication slots enabled, Kubegres creates
+  applies under either strategy** and is the one behaviour change that is not opt-in. It closes a real gap: with replication slots enabled, Kubegres creates
   the new generation of Replicas before deleting the old one, and promoting a pre-rotation
   Replica loses everything written through the new slots. The automatic path has always rejected
   these; the manual path checked nothing at all.
-* With `intelligentFailover` enabled, the requested Replica is also checked for recovery state,
+* Under the `WalPosition` strategy, the requested Replica is also checked for recovery state,
   WAL position and lag. Set `allowUnsafeManualPromotion: true` to promote it regardless.
 
 A manual promotion is never delayed by `primaryStabilityWindow` — the window exists to filter out
@@ -171,7 +172,7 @@ Exposed on the manager's metrics endpoint (`--metrics-bind-address`, `:8080` by 
 
 | Metric | Type | Meaning |
 | --- | --- | --- |
-| `kubegres_cluster_failover_ready` | Gauge | **1** if a Replica could be safely promoted right now; **0** if a failover would block. Only populated when `intelligentFailover` is enabled. |
+| `kubegres_cluster_failover_ready` | Gauge | **1** if a Replica could be safely promoted right now; **0** if a failover would block. Only populated under the `WalPosition` strategy. |
 | `kubegres_replica_wal_lag_bytes` | Gauge | WAL bytes by which each Replica trails the last known Primary position. |
 | `kubegres_failover_decision_total` | Counter | Promotions, by `reason`: `highest_lsn`, `fallback`, `legacy`, `manual`. |
 | `kubegres_failover_blocked_total` | Counter | Refusals to promote, by `reason`: `lag_exceeded`, `stale_timeline`, `no_healthy_candidate`, `unreachable`, `unsafe_manual_promotion`. |
@@ -221,13 +222,13 @@ you said was acceptable. It will keep refusing until something changes. Your opt
 1. **Wait.** If the Replicas are still streaming from a Primary that is unhealthy but alive, they
    may catch up on their own and the next reconciliation will promote normally.
 2. **Promote explicitly.** Set `spec.failover.promotePod` to the Pod you have decided to accept,
-   plus `spec.failover.intelligentFailover.allowUnsafeManualPromotion: true` if it fails the
+   plus `spec.failover.replicaSelection.allowUnsafeManualPromotion: true` if it fails the
    checks. Read `kubegres_replica_wal_lag_bytes` and the `FailOverBlocked` event first: they tell
    you how much history you are choosing to discard.
 3. **Raise the ceiling.** Increase `maxReplicationLag`, or set it to `0` to accept any candidate.
 
 `blockedReason: unreachable` is different — it means the operator cannot see the databases at
-all. Fix the connectivity, or set `fallbackToLegacy: true` to accept an unverified promotion.
+all. Fix the connectivity, or set `fallbackToReadiness: true` to accept an unverified promotion.
 
 ## How the operator reaches Replicas
 
@@ -238,7 +239,7 @@ inherited from the primary connection the `DBConnectionReconciler` already maint
 
 Because the Replica is addressed by IP, `spec.tls.mode: verify-full` will reject these
 connections unless the server certificate carries a matching IP SAN. The probes then fail, every
-Replica looks unreachable, and selection follows `fallbackToLegacy`. Watch
+Replica looks unreachable, and selection follows `fallbackToReadiness`. Watch
 `kubegres_replica_query_errors_total` after enabling the feature on a TLS cluster.
 
 Connections are created on demand, cached per instance index in the shared `ConnectionStore`, and
@@ -251,7 +252,8 @@ credentials it already holds for replication-slot management, over the same TLS 
 ## Limitations
 
 * **Network partitions.** The operator is a single point of failure for health determination. If
-  it is partitioned from the Replicas it cannot verify them, and `fallbackToLegacy` decides what
+  it is partitioned from the Replicas it cannot verify them, and `fallbackToReadiness` decides
+  what
   happens. Distributed consensus is out of scope; a specialised HA tool such as Patroni is the
   long-term answer.
 * **Timeline divergence is detected, not repaired.** A Replica on an abandoned timeline is

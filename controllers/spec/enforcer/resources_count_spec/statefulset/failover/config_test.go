@@ -15,38 +15,50 @@ func TestAnEmptySpecKeepsEveryGateOff(t *testing.T) {
 	// A Kubegres resource written before these fields existed must behave exactly as it did.
 	config := failover.ResolveConfig(v1.KubegresFailover{})
 
-	require.False(t, config.IntelligentFailoverEnabled)
+	require.Equal(t, v1.ReplicaSelectionReadiness, config.Strategy)
+	require.False(t, config.SelectsOnWalPosition())
 	require.Zero(t, config.PrimaryStabilityWindow)
 	require.Zero(t, config.MinHealthyReplicas)
 	require.Zero(t, config.MaxReplicationLagBytes,
-		"the lag limit only applies once WAL-aware selection is on")
-	require.True(t, config.FallbackToLegacy)
+		"the lag limit only applies under the WalPosition strategy")
+	require.True(t, config.FallbackToReadiness)
 	require.Equal(t, 5*time.Second, config.HealthCheckTimeout)
 }
 
-func TestIntelligentFailoverDefaults(t *testing.T) {
+func TestWalPositionStrategyDefaults(t *testing.T) {
 	config := failover.ResolveConfig(v1.KubegresFailover{
-		IntelligentFailover: &v1.IntelligentFailoverConfig{Enabled: true},
+		ReplicaSelection: &v1.ReplicaSelectionConfig{Strategy: v1.ReplicaSelectionWalPosition},
 	})
 
-	require.True(t, config.IntelligentFailoverEnabled)
+	require.True(t, config.SelectsOnWalPosition())
 	require.Equal(t, int64(16*1024*1024), config.MaxReplicationLagBytes, "one WAL segment")
 	require.Equal(t, 5*time.Second, config.HealthCheckTimeout)
-	require.True(t, config.FallbackToLegacy)
+	require.True(t, config.FallbackToReadiness)
 	require.False(t, config.RequireStreaming)
 	require.False(t, config.AllowUnsafeManualPromotion)
 }
 
-func TestExplicitIntelligentFailoverValuesAreHonoured(t *testing.T) {
+// TestAnEmptyStrategyFallsBackToReadiness covers a replicaSelection block written without a
+// strategy - tuning the limits but never opting in to the strategy that uses them.
+func TestAnEmptyStrategyFallsBackToReadiness(t *testing.T) {
+	config := failover.ResolveConfig(v1.KubegresFailover{
+		ReplicaSelection: &v1.ReplicaSelectionConfig{},
+	})
+
+	require.Equal(t, v1.ReplicaSelectionReadiness, config.Strategy)
+	require.False(t, config.SelectsOnWalPosition())
+}
+
+func TestExplicitReplicaSelectionValuesAreHonoured(t *testing.T) {
 	maxLag := resource.MustParse("64Mi")
 	fallback := false
 
 	config := failover.ResolveConfig(v1.KubegresFailover{
-		IntelligentFailover: &v1.IntelligentFailoverConfig{
-			Enabled:                    true,
+		ReplicaSelection: &v1.ReplicaSelectionConfig{
+			Strategy:                   v1.ReplicaSelectionWalPosition,
 			MaxReplicationLag:          &maxLag,
 			HealthCheckTimeout:         &metav1.Duration{Duration: 12 * time.Second},
-			FallbackToLegacy:           &fallback,
+			FallbackToReadiness:        &fallback,
 			RequireStreamingReplica:    true,
 			AllowUnsafeManualPromotion: true,
 		},
@@ -54,7 +66,7 @@ func TestExplicitIntelligentFailoverValuesAreHonoured(t *testing.T) {
 
 	require.Equal(t, int64(64*1024*1024), config.MaxReplicationLagBytes)
 	require.Equal(t, 12*time.Second, config.HealthCheckTimeout)
-	require.False(t, config.FallbackToLegacy)
+	require.False(t, config.FallbackToReadiness)
 	require.True(t, config.RequireStreaming)
 	require.True(t, config.AllowUnsafeManualPromotion)
 }
@@ -64,8 +76,8 @@ func TestAnExplicitZeroLagMeansNoCeiling(t *testing.T) {
 	noCeiling := resource.MustParse("0")
 
 	config := failover.ResolveConfig(v1.KubegresFailover{
-		IntelligentFailover: &v1.IntelligentFailoverConfig{
-			Enabled:           true,
+		ReplicaSelection: &v1.ReplicaSelectionConfig{
+			Strategy:          v1.ReplicaSelectionWalPosition,
 			MaxReplicationLag: &noCeiling,
 		},
 	})
@@ -77,8 +89,8 @@ func TestZeroDurationsAndCountsFallBackToTheDefaults(t *testing.T) {
 	config := failover.ResolveConfig(v1.KubegresFailover{
 		PrimaryStabilityWindow: &metav1.Duration{},
 		MinHealthyReplicas:     ptr(int32(0)),
-		IntelligentFailover: &v1.IntelligentFailoverConfig{
-			Enabled:            true,
+		ReplicaSelection: &v1.ReplicaSelectionConfig{
+			Strategy:           v1.ReplicaSelectionWalPosition,
 			HealthCheckTimeout: &metav1.Duration{},
 		},
 	})
@@ -88,22 +100,23 @@ func TestZeroDurationsAndCountsFallBackToTheDefaults(t *testing.T) {
 	require.Equal(t, 5*time.Second, config.HealthCheckTimeout)
 }
 
-func TestStabilityWindowAndReplicaGateAreIndependentOfTheFeatureFlag(t *testing.T) {
-	// Both gates are useful without WAL-aware selection, so they sit beside it, not under it.
+func TestStabilityWindowAndReplicaGateAreIndependentOfTheStrategy(t *testing.T) {
+	// Both gates are useful under either strategy, so they sit beside replicaSelection rather
+	// than inside it.
 	config := failover.ResolveConfig(v1.KubegresFailover{
 		PrimaryStabilityWindow: &metav1.Duration{Duration: 45 * time.Second},
 		MinHealthyReplicas:     ptr(int32(2)),
 	})
 
-	require.False(t, config.IntelligentFailoverEnabled)
+	require.False(t, config.SelectsOnWalPosition())
 	require.Equal(t, 45*time.Second, config.PrimaryStabilityWindow)
 	require.Equal(t, int32(2), config.MinHealthyReplicas)
 }
 
 func TestSelectionConstraintsProjectTheConfig(t *testing.T) {
 	config := failover.ResolveConfig(v1.KubegresFailover{
-		IntelligentFailover: &v1.IntelligentFailoverConfig{
-			Enabled:                 true,
+		ReplicaSelection: &v1.ReplicaSelectionConfig{
+			Strategy:                v1.ReplicaSelectionWalPosition,
 			RequireStreamingReplica: true,
 		},
 	})

@@ -8,6 +8,8 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/onsi/ginkgo/v2 v2.21.0
 	github.com/onsi/gomega v1.34.2
+	github.com/prometheus/client_golang v1.18.0
+	github.com/prometheus/client_model v0.5.0
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.38.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.38.0
@@ -86,8 +88,6 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
-	github.com/prometheus/client_golang v1.18.0 // indirect
-	github.com/prometheus/client_model v0.5.0 // indirect
 	github.com/prometheus/common v0.45.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/shirou/gopsutil/v4 v4.25.5 // indirect

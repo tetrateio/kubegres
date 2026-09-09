@@ -31,8 +31,8 @@ import (
 // Config is spec.failover with every optional field filled in, so defaulting lives in one place
 // instead of at each read site.
 type Config struct {
-	// IntelligentFailoverEnabled turns on selection by replication state.
-	IntelligentFailoverEnabled bool
+	// Strategy is how the Replica to promote is chosen.
+	Strategy v1.ReplicaSelectionStrategy
 
 	// MaxReplicationLagBytes is how far behind the promoted Replica may be. Zero turns it off.
 	MaxReplicationLagBytes int64
@@ -40,8 +40,8 @@ type Config struct {
 	// HealthCheckTimeout limits each replication-state query.
 	HealthCheckTimeout time.Duration
 
-	// FallbackToLegacy allows readiness-based selection when no Replica can be reached.
-	FallbackToLegacy bool
+	// FallbackToReadiness allows the Readiness strategy when no Replica can be reached.
+	FallbackToReadiness bool
 
 	// RequireStreaming rejects candidates whose WAL stream has broken.
 	RequireStreaming bool
@@ -64,8 +64,9 @@ type Config struct {
 // behaves exactly as it did.
 func ResolveConfig(spec v1.KubegresFailover) Config {
 	config := Config{
-		FallbackToLegacy:   ctx.DefaultFailOverFallbackToLegacy,
-		HealthCheckTimeout: ctx.DefaultFailOverHealthCheckTimeout.Duration,
+		Strategy:            v1.ReplicaSelectionReadiness,
+		FallbackToReadiness: ctx.DefaultFailOverFallbackToReadiness,
+		HealthCheckTimeout:  ctx.DefaultFailOverHealthCheckTimeout.Duration,
 	}
 
 	if spec.PrimaryStabilityWindow != nil && spec.PrimaryStabilityWindow.Duration > 0 {
@@ -76,33 +77,40 @@ func ResolveConfig(spec v1.KubegresFailover) Config {
 		config.MinHealthyReplicas = *spec.MinHealthyReplicas
 	}
 
-	intelligent := spec.IntelligentFailover
-	if intelligent == nil {
+	selection := spec.ReplicaSelection
+	if selection == nil {
 		return config
 	}
 
-	config.IntelligentFailoverEnabled = intelligent.Enabled
-	config.RequireStreaming = intelligent.RequireStreamingReplica
-	config.AllowUnsafeManualPromotion = intelligent.AllowUnsafeManualPromotion
+	if selection.Strategy != "" {
+		config.Strategy = selection.Strategy
+	}
+	config.RequireStreaming = selection.RequireStreamingReplica
+	config.AllowUnsafeManualPromotion = selection.AllowUnsafeManualPromotion
 
-	if intelligent.HealthCheckTimeout != nil && intelligent.HealthCheckTimeout.Duration > 0 {
-		config.HealthCheckTimeout = intelligent.HealthCheckTimeout.Duration
+	if selection.HealthCheckTimeout != nil && selection.HealthCheckTimeout.Duration > 0 {
+		config.HealthCheckTimeout = selection.HealthCheckTimeout.Duration
 	}
 
-	if intelligent.FallbackToLegacy != nil {
-		config.FallbackToLegacy = *intelligent.FallbackToLegacy
+	if selection.FallbackToReadiness != nil {
+		config.FallbackToReadiness = *selection.FallbackToReadiness
 	}
 
 	// Nil means unset and takes the default. An explicit zero means no lag limit at all.
 	maxLag := ctx.DefaultFailOverMaxReplicationLag
-	if intelligent.MaxReplicationLag != nil {
-		maxLag = *intelligent.MaxReplicationLag
+	if selection.MaxReplicationLag != nil {
+		maxLag = *selection.MaxReplicationLag
 	}
 	if lagBytes, ok := maxLag.AsInt64(); ok && lagBytes > 0 {
 		config.MaxReplicationLagBytes = lagBytes
 	}
 
 	return config
+}
+
+// SelectsOnWalPosition reports whether the WalPosition strategy is in use.
+func (c Config) SelectsOnWalPosition() bool {
+	return c.Strategy == v1.ReplicaSelectionWalPosition
 }
 
 // SelectionConstraints turns the config into the limits the election applies, measured against

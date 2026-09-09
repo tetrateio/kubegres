@@ -169,69 +169,6 @@ spec:
                 type: array
               failover:
                 properties:
-                  intelligentFailover:
-                    description: |-
-                      IntelligentFailover picks the Replica to promote by its PostgreSQL replication state
-                      instead of Kubernetes readiness alone. Off by default.
-                    properties:
-                      allowUnsafeManualPromotion:
-                        description: |-
-                          AllowUnsafeManualPromotion lets a 'failover.promotePod' request go ahead even when the
-                          named Pod fails the same health checks as automatic selection. Default: false, i.e.
-                          manually promoting an unhealthy or lagging Replica is refused and reported.
-                        type: boolean
-                      enabled:
-                        description: 'Enabled turns on selection by replication state.
-                          Default: false, i.e. select on readiness.'
-                        type: boolean
-                      fallbackToLegacy:
-                        description: |-
-                          FallbackToLegacy says what to do when Kubegres cannot read the replication state of any
-                          candidate, usually a network partition between the operator and the Replicas.
-
-                          True prefers availability: fall back to selection on readiness, so the cluster recovers,
-                          at the risk of promoting a Replica that is behind. False prefers durability: refuse to
-                          promote and report that manual work is needed. Default: true.
-                        type: boolean
-                      healthCheckTimeout:
-                        description: |-
-                          HealthCheckTimeout is how long Kubegres waits for a Replica to report its replication
-                          state. Candidates are queried at the same time, so this is roughly how much time the
-                          checks add to a failover. Default: 5s.
-                        nullable: true
-                        pattern: ^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$
-                        type: string
-                      maxReplicationLag:
-                        anyOf:
-                        - type: integer
-                        - type: string
-                        description: |-
-                          MaxReplicationLag is how far behind, in bytes, the promoted Replica may be. A Replica
-                          further behind than this is not promoted; Kubegres reports that manual work is needed
-                          rather than quietly throwing away that much committed data.
-
-                          Lag is measured against the last WAL position Kubegres saw on the Primary while it was
-                          healthy. If there is none - for example because the operator restarted since - lag is
-                          measured against the furthest-ahead candidate instead. That limits how far apart the
-                          Replicas are, but not how far behind the failed Primary they all are.
-
-                          Default: 16Mi. Set to 0 to promote the best candidate however far behind it is.
-                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                        x-kubernetes-int-or-string: true
-                      requireStreamingReplica:
-                        description: |-
-                          RequireStreamingReplica requires the promoted Replica to have a live WAL stream from the
-                          Primary when it is checked. This rules out Replicas whose stream has broken - for example
-                          after "requested WAL segment has already been removed" - which stay Kubernetes-ready while
-                          stuck at whatever they last replayed.
-
-                          It is off by default: once the Primary is gone, every surviving Replica has lost its
-                          stream, so requiring one would block every failover. Turn it on when Replicas are expected
-                          to keep streaming from a Primary that is unhealthy but still alive.
-                        type: boolean
-                    required:
-                    - enabled
-                    type: object
                   isDisabled:
                     type: boolean
                   minHealthyReplicas:
@@ -267,6 +204,72 @@ spec:
                     type: string
                   promotePod:
                     type: string
+                  replicaSelection:
+                    description: |-
+                      ReplicaSelection chooses how the Replica to promote is picked. It defaults to the
+                      readiness-based selection Kubegres has always used.
+                    properties:
+                      allowUnsafeManualPromotion:
+                        description: |-
+                          AllowUnsafeManualPromotion lets a 'failover.promotePod' request go ahead even when the
+                          named Pod fails the same health checks as automatic selection. Default: false, i.e.
+                          manually promoting an unhealthy or lagging Replica is refused and reported.
+                        type: boolean
+                      fallbackToReadiness:
+                        description: |-
+                          FallbackToReadiness says what to do when Kubegres cannot read the replication state of any
+                          candidate, usually a network partition between the operator and the Replicas.
+
+                          True prefers availability: fall back to the Readiness strategy, so the cluster recovers,
+                          at the risk of promoting a Replica that is behind. False prefers durability: refuse to
+                          promote and report that manual work is needed. Default: true.
+                        type: boolean
+                      healthCheckTimeout:
+                        description: |-
+                          HealthCheckTimeout is how long Kubegres waits for a Replica to report its replication
+                          state. Candidates are queried at the same time, so this is roughly how much time the
+                          checks add to a failover. Default: 5s.
+                        nullable: true
+                        pattern: ^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$
+                        type: string
+                      maxReplicationLag:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: |-
+                          MaxReplicationLag is how far behind, in bytes, the promoted Replica may be. A Replica
+                          further behind than this is not promoted; Kubegres reports that manual work is needed
+                          rather than quietly throwing away that much committed data.
+
+                          Lag is measured against the last WAL position Kubegres saw on the Primary while it was
+                          healthy. If there is none - for example because the operator restarted since - lag is
+                          measured against the furthest-ahead candidate instead. That limits how far apart the
+                          Replicas are, but not how far behind the failed Primary they all are.
+
+                          Only the WalPosition strategy uses this. Default: 16Mi. Set to 0 to promote the best
+                          candidate however far behind it is.
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      requireStreamingReplica:
+                        description: |-
+                          RequireStreamingReplica requires the promoted Replica to have a live WAL stream from the
+                          Primary when it is checked. This rules out Replicas whose stream has broken - for example
+                          after "requested WAL segment has already been removed" - which stay Kubernetes-ready while
+                          stuck at whatever they last replayed.
+
+                          It is off by default: once the Primary is gone, every surviving Replica has lost its
+                          stream, so requiring one would block every failover. Turn it on when Replicas are expected
+                          to keep streaming from a Primary that is unhealthy but still alive.
+                        type: boolean
+                      strategy:
+                        default: Readiness
+                        description: 'Strategy is how the Replica to promote is chosen.
+                          Default: Readiness.'
+                        enum:
+                        - Readiness
+                        - WalPosition
+                        type: string
+                    type: object
                 type: object
               image:
                 type: string

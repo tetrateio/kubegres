@@ -35,8 +35,8 @@ const (
 	DecisionReasonHighestLsn = "highest_lsn"
 	// DecisionReasonFallback: replication state could not be read, so readiness was used.
 	DecisionReasonFallback = "fallback"
-	// DecisionReasonLegacy: WAL-aware selection is not enabled on this cluster.
-	DecisionReasonLegacy = "legacy"
+	// DecisionReasonReadiness: the cluster uses the Readiness selection strategy.
+	DecisionReasonReadiness = "readiness"
 	// DecisionReasonManual: a user named the Pod through spec.failover.promotePod.
 	DecisionReasonManual = "manual"
 )

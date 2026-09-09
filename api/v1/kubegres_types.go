@@ -45,9 +45,9 @@ type KubegresFailover struct {
 	PromotePod string `json:"promotePod,omitempty"`
 
 	// +optional
-	// IntelligentFailover picks the Replica to promote by its PostgreSQL replication state
-	// instead of Kubernetes readiness alone. Off by default.
-	IntelligentFailover *IntelligentFailoverConfig `json:"intelligentFailover,omitempty"`
+	// ReplicaSelection chooses how the Replica to promote is picked. It defaults to the
+	// readiness-based selection Kubegres has always used.
+	ReplicaSelection *ReplicaSelectionConfig `json:"replicaSelection,omitempty"`
 
 	// +kubebuilder:validation:Type:=string
 	// +kubebuilder:validation:Pattern:="^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
@@ -81,15 +81,37 @@ type KubegresFailover struct {
 	MinHealthyReplicas *int32 `json:"minHealthyReplicas,omitempty"`
 }
 
-// IntelligentFailoverConfig configures WAL-aware Replica selection.
-//
-// Kubernetes readiness means a Pod accepts connections. It says nothing about whether that Pod's
-// replication stream is intact, or how far behind the failed Primary it is. When enabled,
-// Kubegres asks each candidate Replica where it actually is and promotes the one holding the
-// most of the failed Primary's history.
-type IntelligentFailoverConfig struct {
-	// Enabled turns on selection by replication state. Default: false, i.e. select on readiness.
-	Enabled bool `json:"enabled"`
+// ReplicaSelectionStrategy names a way of choosing which Replica to promote.
+// +kubebuilder:validation:Enum=Readiness;WalPosition
+type ReplicaSelectionStrategy string
+
+const (
+	// ReplicaSelectionReadiness promotes the lowest-numbered Replica that Kubernetes reports as
+	// ready and whose replication-slot setup matches the cluster's.
+	//
+	// Readiness means the Pod accepts connections. It says nothing about whether that Pod's
+	// replication stream is intact, or how far behind the failed Primary it is, so this can
+	// promote a Replica that is missing committed data. It is the default because it is what
+	// Kubegres has always done.
+	ReplicaSelectionReadiness ReplicaSelectionStrategy = "Readiness"
+
+	// ReplicaSelectionWalPosition asks every candidate Replica where it actually is and promotes
+	// the one holding the most of the failed Primary's history.
+	//
+	// Candidates that are no longer standbys, or that hold no WAL, are excluded. The rest are
+	// grouped by PostgreSQL timeline and everything below the highest is dropped, because a
+	// Replica that is ahead on an abandoned timeline holds data the cluster already discarded.
+	// The furthest-advanced survivor wins, unless it is further behind than MaxReplicationLag.
+	ReplicaSelectionWalPosition ReplicaSelectionStrategy = "WalPosition"
+)
+
+// ReplicaSelectionConfig chooses how the Replica to promote is picked, and bounds what the
+// WalPosition strategy will accept.
+type ReplicaSelectionConfig struct {
+	// +kubebuilder:default:=Readiness
+	// +optional
+	// Strategy is how the Replica to promote is chosen. Default: Readiness.
+	Strategy ReplicaSelectionStrategy `json:"strategy,omitempty"`
 
 	// +optional
 	// MaxReplicationLag is how far behind, in bytes, the promoted Replica may be. A Replica
@@ -101,7 +123,8 @@ type IntelligentFailoverConfig struct {
 	// measured against the furthest-ahead candidate instead. That limits how far apart the
 	// Replicas are, but not how far behind the failed Primary they all are.
 	//
-	// Default: 16Mi. Set to 0 to promote the best candidate however far behind it is.
+	// Only the WalPosition strategy uses this. Default: 16Mi. Set to 0 to promote the best
+	// candidate however far behind it is.
 	MaxReplicationLag *resource.Quantity `json:"maxReplicationLag,omitempty"`
 
 	// +kubebuilder:validation:Type:=string
@@ -114,13 +137,13 @@ type IntelligentFailoverConfig struct {
 	HealthCheckTimeout *metav1.Duration `json:"healthCheckTimeout,omitempty"`
 
 	// +optional
-	// FallbackToLegacy says what to do when Kubegres cannot read the replication state of any
+	// FallbackToReadiness says what to do when Kubegres cannot read the replication state of any
 	// candidate, usually a network partition between the operator and the Replicas.
 	//
-	// True prefers availability: fall back to selection on readiness, so the cluster recovers,
+	// True prefers availability: fall back to the Readiness strategy, so the cluster recovers,
 	// at the risk of promoting a Replica that is behind. False prefers durability: refuse to
 	// promote and report that manual work is needed. Default: true.
-	FallbackToLegacy *bool `json:"fallbackToLegacy,omitempty"`
+	FallbackToReadiness *bool `json:"fallbackToReadiness,omitempty"`
 
 	// +optional
 	// RequireStreamingReplica requires the promoted Replica to have a live WAL stream from the

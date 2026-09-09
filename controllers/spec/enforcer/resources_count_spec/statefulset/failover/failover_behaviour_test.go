@@ -259,11 +259,11 @@ func TestFailoverIsHeldOpenUntilRedundancyIsRestored(t *testing.T) {
 // Selection routing
 // ---------------------------------------------------------------------------------------
 
-func TestLegacySelectionIsUsedWhenIntelligentFailoverIsDisabled(t *testing.T) {
+func TestReadinessStrategyIsUsedByDefault(t *testing.T) {
 	cluster := newCluster(t).withPrimary(1, false).withReplica(2, true).withReplica(3, true)
 
-	// Index 3 is furthest ahead, but with the feature off the lowest-indexed ready Replica still
-	// wins, exactly as before.
+	// Index 3 is furthest ahead, but under the Readiness strategy the lowest-indexed ready
+	// Replica still wins, exactly as before.
 	prober := &fakeProber{health: map[int32]replicahealth.Status{
 		2: streamingAt(t, 1, "0/10"),
 		3: streamingAt(t, 1, "0/FF"),
@@ -274,18 +274,18 @@ func TestLegacySelectionIsUsedWhenIntelligentFailoverIsDisabled(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, int32(2), newPrimary.InstanceIndex)
-	require.Equal(t, metrics.DecisionReasonLegacy, reason)
-	require.Zero(t, prober.probedCalls, "the databases must not be queried when the feature is off")
+	require.Equal(t, metrics.DecisionReasonReadiness, reason)
+	require.Zero(t, prober.probedCalls, "the Readiness strategy must not query the databases")
 }
 
-func TestIntelligentSelectionPromotesTheFurthestAdvancedReplica(t *testing.T) {
+func TestWalPositionStrategyPromotesTheFurthestAdvancedReplica(t *testing.T) {
 	cluster := newCluster(t).withPrimary(1, false).withReplica(2, true).withReplica(3, true)
 
 	prober := &fakeProber{health: map[int32]replicahealth.Status{
 		2: streamingAt(t, 1, "0/10"),
 		3: streamingAt(t, 1, "0/FF"),
 	}}
-	failOver, _ := cluster.build(t, Config{IntelligentFailoverEnabled: true}, prober)
+	failOver, _ := cluster.build(t, Config{Strategy: v1.ReplicaSelectionWalPosition}, prober)
 
 	newPrimary, reason, err := failOver.selectReplicaToPromote()
 
@@ -311,7 +311,7 @@ func TestUnreadyAndSlotMismatchedReplicasAreNeverCandidates(t *testing.T) {
 		2: streamingAt(t, 1, "0/FF"),
 		3: streamingAt(t, 1, "0/10"),
 	}}
-	failOver, _ := cluster.build(t, Config{IntelligentFailoverEnabled: true}, prober)
+	failOver, _ := cluster.build(t, Config{Strategy: v1.ReplicaSelectionWalPosition}, prober)
 
 	newPrimary, _, err := failOver.selectReplicaToPromote()
 
@@ -319,7 +319,7 @@ func TestUnreadyAndSlotMismatchedReplicasAreNeverCandidates(t *testing.T) {
 	require.Equal(t, int32(3), newPrimary.InstanceIndex)
 }
 
-func TestFallbackToLegacyWhenNoReplicaCanBeQueried(t *testing.T) {
+func TestFallbackToReadinessWhenNoReplicaCanBeQueried(t *testing.T) {
 	cluster := newCluster(t).withPrimary(1, false).withReplica(2, true).withReplica(3, true)
 
 	prober := &fakeProber{probeErrs: map[int32]error{
@@ -327,8 +327,8 @@ func TestFallbackToLegacyWhenNoReplicaCanBeQueried(t *testing.T) {
 		3: errors.New("i/o timeout"),
 	}}
 	failOver, _ := cluster.build(t, Config{
-		IntelligentFailoverEnabled: true,
-		FallbackToLegacy:           true,
+		Strategy:            v1.ReplicaSelectionWalPosition,
+		FallbackToReadiness: true,
 	}, prober)
 
 	newPrimary, reason, err := failOver.selectReplicaToPromote()
@@ -343,8 +343,8 @@ func TestRefusesToPromoteUnverifiableReplicasWhenFallbackIsDisabled(t *testing.T
 
 	prober := &fakeProber{probeErrs: map[int32]error{2: errors.New("i/o timeout")}}
 	failOver, kubegres := cluster.build(t, Config{
-		IntelligentFailoverEnabled: true,
-		FallbackToLegacy:           false,
+		Strategy:            v1.ReplicaSelectionWalPosition,
+		FallbackToReadiness: false,
 	}, prober)
 
 	_, _, err := failOver.selectReplicaToPromote()
@@ -360,8 +360,8 @@ func TestRefusesToPromoteAReplicaBeyondTheLagThreshold(t *testing.T) {
 
 	prober := &fakeProber{health: map[int32]replicahealth.Status{2: streamingAt(t, 1, "0/10")}}
 	failOver, kubegres := cluster.build(t, Config{
-		IntelligentFailoverEnabled: true,
-		MaxReplicationLagBytes:     1024,
+		Strategy:               v1.ReplicaSelectionWalPosition,
+		MaxReplicationLagBytes: 1024,
 	}, prober)
 
 	_, _, err := failOver.selectReplicaToPromote()
@@ -397,8 +397,8 @@ func TestManualPromotionIsRefusedWhenTheRequestedReplicaIsTooFarBehind(t *testin
 
 	prober := &fakeProber{health: map[int32]replicahealth.Status{2: streamingAt(t, 1, "0/10")}}
 	failOver, kubegres := cluster.build(t, Config{
-		IntelligentFailoverEnabled: true,
-		MaxReplicationLagBytes:     1024,
+		Strategy:               v1.ReplicaSelectionWalPosition,
+		MaxReplicationLagBytes: 1024,
 	}, prober)
 
 	_, _, err := failOver.selectReplicaToPromote()
@@ -415,7 +415,7 @@ func TestManualPromotionCanBeForcedPastTheHealthChecks(t *testing.T) {
 
 	prober := &fakeProber{health: map[int32]replicahealth.Status{2: streamingAt(t, 1, "0/10")}}
 	failOver, _ := cluster.build(t, Config{
-		IntelligentFailoverEnabled: true,
+		Strategy:                   v1.ReplicaSelectionWalPosition,
 		MaxReplicationLagBytes:     1024,
 		AllowUnsafeManualPromotion: true,
 	}, prober)
@@ -437,7 +437,7 @@ func TestManualPromotionOfAHealthyReplicaIsHonoured(t *testing.T) {
 		2: streamingAt(t, 1, "0/FF"),
 		3: streamingAt(t, 1, "0/10"),
 	}}
-	failOver, _ := cluster.build(t, Config{IntelligentFailoverEnabled: true}, prober)
+	failOver, _ := cluster.build(t, Config{Strategy: v1.ReplicaSelectionWalPosition}, prober)
 
 	newPrimary, reason, err := failOver.selectReplicaToPromote()
 
@@ -463,7 +463,7 @@ func TestSteadyStateObservationRecordsThePrimaryWalPosition(t *testing.T) {
 		primaryLSN: primaryLSN,
 		health:     map[int32]replicahealth.Status{2: streamingAt(t, 1, "0/ABCDEF")},
 	}
-	failOver, kubegres := cluster.build(t, Config{IntelligentFailoverEnabled: true}, prober)
+	failOver, kubegres := cluster.build(t, Config{Strategy: v1.ReplicaSelectionWalPosition}, prober)
 
 	failOver.ObserveClusterFailOverReadiness()
 
@@ -471,7 +471,7 @@ func TestSteadyStateObservationRecordsThePrimaryWalPosition(t *testing.T) {
 	require.NotZero(t, kubegres.Status.FailOver.LastKnownPrimaryWalLsnEpochInSeconds)
 }
 
-func TestSteadyStateObservationIsSkippedWhenTheFeatureIsOff(t *testing.T) {
+func TestSteadyStateObservationIsSkippedUnderTheReadinessStrategy(t *testing.T) {
 	cluster := newCluster(t).withPrimary(1, true).withReplica(2, true)
 	cluster.kubegres.Name = "steady-state-disabled"
 
@@ -491,7 +491,7 @@ func TestSteadyStateObservationIsThrottled(t *testing.T) {
 	cluster.kubegres.Name = "steady-state-throttled"
 
 	prober := &fakeProber{health: map[int32]replicahealth.Status{2: streamingAt(t, 1, "0/10")}}
-	failOver, _ := cluster.build(t, Config{IntelligentFailoverEnabled: true}, prober)
+	failOver, _ := cluster.build(t, Config{Strategy: v1.ReplicaSelectionWalPosition}, prober)
 
 	failOver.ObserveClusterFailOverReadiness()
 	firstRoundCalls := prober.probedCalls

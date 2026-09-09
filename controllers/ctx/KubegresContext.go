@@ -79,9 +79,10 @@ var (
 	DefaultFailOverMaxReplicationLag = resource.MustParse("16Mi")
 )
 
-// DefaultFailOverFallbackToLegacy prefers availability over durability: if the operator cannot
-// reach any Replica, the cluster recovers on readiness alone rather than waiting for a human.
-const DefaultFailOverFallbackToLegacy = true
+// DefaultFailOverFallbackToReadiness prefers availability over durability: if the operator
+// cannot reach any Replica, the cluster recovers on readiness alone rather than waiting for a
+// human.
+const DefaultFailOverFallbackToReadiness = true
 
 func (r *KubegresContext) GetServiceResourceName(isPrimary bool) string {
 	if isPrimary {
