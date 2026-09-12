@@ -24,10 +24,16 @@ jobs:
     runs-on: ubuntu-latest
     env:
        IMG: tetrate/kubegres:${{ github.event.inputs.version }}
+    # The commit that was checked and tagged; the image must be built from the same one.
+    outputs:
+      sha: ${{ steps.checkout.outputs.sha }}
     steps:
       - uses: actions/checkout@v6.0.2
         with:
            ref: ${{ github.event.inputs.branch }}
+      - name: Record checked-out commit
+        id: checkout
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Update kubegres.yaml
         run: make deploy
       - name: Check if there are changes
@@ -40,11 +46,11 @@ jobs:
         uses: actions/github-script@v8.0.0
         with:
           script: |
-            github.rest.git.createRef({
+            await github.rest.git.createRef({
               owner: context.repo.owner,
               repo: context.repo.repo,
               ref: 'refs/tags/${{ github.event.inputs.version }}',
-              sha: context.sha
+              sha: '${{ steps.checkout.outputs.sha }}'
             })
 
   # this job builds the docker image and pushes it to docker hub
@@ -63,6 +69,8 @@ jobs:
         with:
           platforms: ${{ env.PLATFORMS }}
       - uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ needs.check-kubegres-yaml.outputs.sha }}
       - uses: actions/setup-go@v6.3.0
         with:
           go-version-file: go.mod
