@@ -82,3 +82,17 @@ func (r *KubegresStatusWrapper) addStatusFieldToUpdate(statusFieldName string, n
 
 	r.statusFieldsToUpdate[statusFieldName] = newValue
 }
+
+// GetFailOver returns the failover state recorded in the Kubegres status.
+func (r *KubegresStatusWrapper) GetFailOver() v1.KubegresFailOverStatus {
+	return r.Kubegres.Status.FailOver
+}
+
+// UpdateFailOver changes the failover state and marks it to be saved.
+//
+// It lives in the resource's status rather than in operator memory because the stability window
+// and the lag reference point both have to survive an operator restart.
+func (r *KubegresStatusWrapper) UpdateFailOver(mutate func(*v1.KubegresFailOverStatus)) {
+	mutate(&r.Kubegres.Status.FailOver)
+	r.addStatusFieldToUpdate("FailOver", r.Kubegres.Status.FailOver)
+}
