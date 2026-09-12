@@ -32,9 +32,8 @@ jobs:
         run: make deploy
       - name: Check if there are changes
         run: |
-          git diff --exit-code
-          if [ $? -ne 0 ]; then
-              echo "kubegres.yaml is not up to date. Run `IMG=${IMG} make deploy` to update it."
+          if ! git diff --exit-code; then
+              echo "::error::kubegres.yaml is not up to date. Run 'IMG=${IMG} make deploy' and commit the result."
               exit 1
           fi
       - name: Create the tag
