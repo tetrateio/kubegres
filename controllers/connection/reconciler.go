@@ -37,6 +37,10 @@ const (
 	appliesToPassword
 	appliesToUser
 	appliesToDatabase
+
+	// connectionDetailsRetryInterval is how long to wait before retrying when the Primary's connection details
+	// cannot be read yet.
+	connectionDetailsRetryInterval = 5 * time.Second
 )
 
 type (
@@ -138,6 +142,14 @@ func (r kubegresReconciler) Reconcile(ctx context.Context, request reconcile.Req
 	// TODO(piotrkpc): This is wrong and needs to use KubegresContext or States to load primary database location.
 	//   the only time we should look in env vars for host/port is when running a standby.
 	secretRef, err := updateDSNData(ctx, r.client, r.logger, r.eventRecorder, dsnData, kubegres)
+	if err != nil {
+		// Usually the Primary is not deployed yet, as happens right after the Kubegres resource is created.
+		// This reconciler only runs again when the spec changes, so without a retry the connection would keep
+		// its defaults (localhost, no credentials, no TLS) and every query through it, including the failover
+		// checks on the Replicas, would fail.
+		r.logger.Info("Primary connection details are not available yet, retrying.", "connectionID", connID, "reason", err.Error())
+		return reconcile.Result{RequeueAfter: connectionDetailsRetryInterval}, nil
+	}
 	for k, v := range secretRef {
 		// first register the secret reference so the secret reconciler can find it
 		r.secrets.Set(k, v)
