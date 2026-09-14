@@ -7413,7 +7413,7 @@ spec:
         - --leader-elect
         command:
         - /manager
-        image: tetrate/kubegres:v1.16.0-tetrate-v45
+        image: tetrate/kubegres:v1.16.0-tetrate-v46-test
         livenessProbe:
           httpGet:
             path: /healthz
