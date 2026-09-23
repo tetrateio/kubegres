@@ -418,7 +418,7 @@ func (r *SpecVolumeAndVolumeMountTest) givenVolumesAreUpdatedOrAddedToTheExistin
 	customVolumeMountsToAddOrReplace []corev1.VolumeMount) {
 
 	var err error
-	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
+	r.kubegresResource, err = r.getKubegresOnceNoOperationIsActive()
 	if err != nil {
 		log.Println("Error while getting Kubegres resource : ", err)
 		Expect(err).Should(Succeed())
@@ -449,7 +449,7 @@ func (r *SpecVolumeAndVolumeMountTest) givenVolumesAreRemovedFromTheExistingKube
 	customVolumeMountsToRemove []corev1.VolumeMount) {
 
 	var err error
-	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
+	r.kubegresResource, err = r.getKubegresOnceNoOperationIsActive()
 	if err != nil {
 		log.Println("Error while getting Kubegres resource : ", err)
 		Expect(err).Should(Succeed())
@@ -491,6 +491,32 @@ func (r *SpecVolumeAndVolumeMountTest) getVolumeMountIndex(customVolumeMount cor
 		index++
 	}
 	return -1
+}
+
+// getKubegresOnceNoOperationIsActive returns the Kubegres resource once the operator has finished
+// enforcing the previous change.
+//
+// The checks after an update only look at the StatefulSets, so they can pass while the operator is
+// still waiting for the Primary Pod to restart. A spec change made then leaves the operator's
+// blocking operation waiting for a spec it will never see again, until the operation times out
+// after 300s - longer than the test waits.
+func (r *SpecVolumeAndVolumeMountTest) getKubegresOnceNoOperationIsActive() (*postgresv1.Kubegres, error) {
+	var kubegres *postgresv1.Kubegres
+	Eventually(func() bool {
+		var err error
+		kubegres, err = r.resourceRetriever.GetKubegres()
+		if err != nil {
+			log.Println("Error while getting Kubegres resource : ", err)
+			return false
+		}
+		if operationId := kubegres.Status.BlockingOperation.OperationId; operationId != "" {
+			log.Println("Waiting for the active blocking operation to complete: ", operationId)
+			return false
+		}
+		return true
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+
+	return kubegres, nil
 }
 
 func (r *SpecVolumeAndVolumeMountTest) whenKubegresIsCreated() {
@@ -824,7 +850,7 @@ func (r *SpecVolumeAndVolumeMountTest) thenNbreOfReplicasShouldBe(nbrePrimary, n
 
 func (r *SpecVolumeAndVolumeMountTest) givenExistingKubegresSpecPrimaryVolumesIsUpdatedTo(volumes []corev1.Volume, mounts []corev1.VolumeMount) {
 	var err error
-	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
+	r.kubegresResource, err = r.getKubegresOnceNoOperationIsActive()
 	if err != nil {
 		log.Println("Error while getting Kubegres resource : ", err)
 		Expect(err).Should(Succeed())
@@ -837,7 +863,7 @@ func (r *SpecVolumeAndVolumeMountTest) givenExistingKubegresSpecPrimaryVolumesIs
 
 func (r *SpecVolumeAndVolumeMountTest) givenExistingKubegresSpecVolumesIsUpdatedTo(volumes []corev1.Volume, mounts []corev1.VolumeMount) {
 	var err error
-	r.kubegresResource, err = r.resourceRetriever.GetKubegres()
+	r.kubegresResource, err = r.getKubegresOnceNoOperationIsActive()
 	if err != nil {
 		log.Println("Error while getting Kubegres resource : ", err)
 		Expect(err).Should(Succeed())
