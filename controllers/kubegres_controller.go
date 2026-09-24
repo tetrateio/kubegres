@@ -104,7 +104,16 @@ func (r *KubegresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return r.returnn(ctrl.Result{}, nil, resourcesContext)
 	}
 
-	return r.returnn(ctrl.Result{}, r.enforceSpec(resourcesContext), resourcesContext)
+	err = r.enforceSpec(resourcesContext)
+
+	// A failover waiting out the Primary stability window has nothing to wake it: a Pod that
+	// stays not-ready stops producing events. Requeue on its timer so we look again.
+	result := ctrl.Result{}
+	if requeueAfter := resourcesContext.PrimaryToReplicaFailOver.RequeueAfter(); requeueAfter > 0 {
+		result.RequeueAfter = requeueAfter
+	}
+
+	return r.returnn(result, err, resourcesContext)
 }
 
 func (r *KubegresReconciler) returnn(result ctrl.Result,

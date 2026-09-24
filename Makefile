@@ -185,18 +185,21 @@ $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 
 ## Tool Binaries
-KUSTOMIZE ?= $(LOCALBIN)/kustomize
-CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
-ENVTEST ?= $(LOCALBIN)/setup-envtest
-KIND ?= $(LOCALBIN)/kind
-YQ ?= $(LOCALBIN)/yq
-
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.8.1
 CONTROLLER_TOOLS_VERSION ?= v0.19.0
 KIND_VERSION ?= v0.19.0
 KUBEBUILDER_TOOLS_VERSION := 1.28.0
 YQ_VERSION ?= v4.45.4
+
+## Tool Binaries
+# The version is part of the file name so that bumping a *_VERSION installs the new tool
+# instead of silently reusing a stale binary left in $(LOCALBIN).
+KUSTOMIZE ?= $(LOCALBIN)/kustomize-$(KUSTOMIZE_VERSION)
+CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen-$(CONTROLLER_TOOLS_VERSION)
+ENVTEST ?= $(LOCALBIN)/setup-envtest
+KIND ?= $(LOCALBIN)/kind-$(KIND_VERSION)
+YQ ?= $(LOCALBIN)/yq-$(YQ_VERSION)
 
 ## Kubebuilder Tools (etcd, kube-apiserver)
 # using tar instead of go install to be able to pin the version.
@@ -212,18 +215,18 @@ export KUBEBUILDER_ASSETS=$(KUBEBUILDER_TOOLS_DIR)
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
-$(KUSTOMIZE): $(LOCALBIN)
-	test -s $(LOCALBIN)/kustomize || GOBIN=$(LOCALBIN) go install sigs.k8s.io/kustomize/kustomize/v5@$(KUSTOMIZE_VERSION)
+$(KUSTOMIZE): | $(LOCALBIN)
+	$(call go-install-tool,$(KUSTOMIZE),kustomize,sigs.k8s.io/kustomize/kustomize/v5@$(KUSTOMIZE_VERSION))
 
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
-$(CONTROLLER_GEN): $(LOCALBIN)
-	test -s $(LOCALBIN)/controller-gen || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_TOOLS_VERSION)
+$(CONTROLLER_GEN): | $(LOCALBIN)
+	$(call go-install-tool,$(CONTROLLER_GEN),controller-gen,sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_TOOLS_VERSION))
 
 .PHONY: kind
 kind: $(KIND) ## Download kind locally if necessary.
-$(KIND): $(LOCALBIN)
-	test -s $(LOCALBIN)/kind || GOBIN=$(LOCALBIN) go install sigs.k8s.io/kind@$(KIND_VERSION)
+$(KIND): | $(LOCALBIN)
+	$(call go-install-tool,$(KIND),kind,sigs.k8s.io/kind@$(KIND_VERSION))
 
 .PHONY: envtest
 envtest: $(KUBEBUILDER_TOOLS) ## Download envtest-setup locally if necessary.
@@ -236,5 +239,18 @@ $(KUBEBUILDER_TOOLS):
 	@tar -xvf $(KUBEBUILDER_TOOLS_TGZ) -C $(KUBEBUILDER_TOOLS_DIR) --strip-components 2
 
 .PHONY: yq
-yq:
-	test -s $(LOCALBIN)/yq || GOBIN=$(LOCALBIN) go install github.com/mikefarah/yq/v4@$(YQ_VERSION)
+yq: $(YQ) ## Download yq locally if necessary.
+$(YQ): | $(LOCALBIN)
+	$(call go-install-tool,$(YQ),yq,github.com/mikefarah/yq/v4@$(YQ_VERSION))
+
+# go-install-tool installs a Go package into a versioned file and points the unversioned name at it.
+# $1 - versioned target path, $2 - binary name produced by 'go install', $3 - package@version
+define go-install-tool
+@set -e; \
+tmp=$$(mktemp -d); \
+echo "Installing $(3)"; \
+GOBIN=$$tmp go install $(3); \
+mv $$tmp/$(2) $(1); \
+rm -rf $$tmp; \
+ln -sf $$(basename $(1)) $(LOCALBIN)/$(2)
+endef

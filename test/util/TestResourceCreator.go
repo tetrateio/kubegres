@@ -32,6 +32,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
 	resourceConfigs2 "reactive-tech.io/kubegres/test/resourceConfigs"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -71,9 +72,24 @@ func (r *TestResourceCreator) CreateKubegres(resourceToCreate *postgresv1.Kubegr
 	}
 }
 
+// UpdateResource updates resourceToUpdate, retrying when the operator has written the resource since the test read
+// it. Kubegres keeps status in a subresource, so those writes only move the resourceVersion and the test's spec change
+// can be applied on top of the latest version.
 func (r *TestResourceCreator) UpdateResource(resourceToUpdate client.Object, resourceName string) {
 	ctx := context.Background()
-	err := r.client.Update(ctx, resourceToUpdate)
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		updateErr := r.client.Update(ctx, resourceToUpdate)
+		if !apierrors.IsConflict(updateErr) {
+			return updateErr
+		}
+		latest := resourceToUpdate.DeepCopyObject().(client.Object)
+		if getErr := r.client.Get(ctx, client.ObjectKeyFromObject(resourceToUpdate), latest); getErr != nil {
+			return getErr
+		}
+		log.Println("Resource '" + resourceName + "' was modified since it was read, retrying the update")
+		resourceToUpdate.SetResourceVersion(latest.GetResourceVersion())
+		return updateErr
+	})
 	if err != nil {
 		log.Println("Error while updating resource '"+resourceName+"': ", err)
 		gomega.Expect(err).Should(gomega.Succeed())

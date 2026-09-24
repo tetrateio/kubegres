@@ -37,6 +37,10 @@ const (
 	appliesToPassword
 	appliesToUser
 	appliesToDatabase
+
+	// connectionDetailsRetryInterval is how long to wait before retrying when the Primary's connection details
+	// cannot be read yet.
+	connectionDetailsRetryInterval = 5 * time.Second
 )
 
 type (
@@ -138,6 +142,14 @@ func (r kubegresReconciler) Reconcile(ctx context.Context, request reconcile.Req
 	// TODO(piotrkpc): This is wrong and needs to use KubegresContext or States to load primary database location.
 	//   the only time we should look in env vars for host/port is when running a standby.
 	secretRef, err := updateDSNData(ctx, r.client, r.logger, r.eventRecorder, dsnData, kubegres)
+	if err != nil {
+		// Usually the Primary is not deployed yet, as happens right after the Kubegres resource is created.
+		// This reconciler only runs again when the spec changes, so without a retry the connection would keep
+		// its defaults (localhost, no credentials, no TLS) and every query through it, including the failover
+		// checks on the Replicas, would fail.
+		r.logger.Info("Primary connection details are not available yet, retrying.", "connectionID", connID, "reason", err.Error())
+		return reconcile.Result{RequeueAfter: connectionDetailsRetryInterval}, nil
+	}
 	for k, v := range secretRef {
 		// first register the secret reference so the secret reconciler can find it
 		r.secrets.Set(k, v)
@@ -203,11 +215,11 @@ func updateDSNDataFromSecret(dsnData *sql.DSNData, secret *corev1.Secret, secret
 	case appliesToTLS:
 	// TODO (sergicastro): save files
 	case appliesToDatabase:
-		dsnData.Database = readKey(secretRef.key)
+		dsnData.Apply(func(d *sql.DSNData) { d.Database = readKey(secretRef.key) })
 	case appliesToUser:
-		dsnData.Username = readKey(secretRef.key)
+		dsnData.Apply(func(d *sql.DSNData) { d.Username = readKey(secretRef.key) })
 	case appliesToPassword:
-		dsnData.Password = readKey(secretRef.key)
+		dsnData.Apply(func(d *sql.DSNData) { d.Password = readKey(secretRef.key) })
 	default:
 		return false
 	}
@@ -275,14 +287,16 @@ func updateDSNData(ctx context.Context, k8sClient client.Client, logger logr.Log
 		wrappedLogger.Error(err, "Failed to get primary connection details", "connectionID", connID, "svcName", svcName, "port", port)
 		return nil, fmt.Errorf("get primary connection details: %w", err)
 	}
-	dsnData.Host = svcName
-	dsnData.Port = port
+	dsnData.Apply(func(d *sql.DSNData) {
+		d.Host = svcName
+		d.Port = port
+	})
 
 	secretRef := make(map[types.NamespacedName]secretReference)
 
 	if dbNameEV, ok := findEnvVar(kubegres.Spec.Env, databaseEnvVars...); ok {
 		if dbNameEV.Value != "" {
-			dsnData.Database = dbNameEV.Value
+			dsnData.Apply(func(d *sql.DSNData) { d.Database = dbNameEV.Value })
 		} else if k, v, ok := secretRefFromEnvVar(dbNameEV, connID, kubegres, appliesToDatabase); ok {
 			secretRef[k] = v
 		}
@@ -290,7 +304,7 @@ func updateDSNData(ctx context.Context, k8sClient client.Client, logger logr.Log
 
 	if usernameEV, ok := findEnvVar(kubegres.Spec.Env, usernameEnvVars...); ok {
 		if usernameEV.Value != "" {
-			dsnData.Username = usernameEV.Value
+			dsnData.Apply(func(d *sql.DSNData) { d.Username = usernameEV.Value })
 		} else if k, v, ok := secretRefFromEnvVar(usernameEV, connID, kubegres, appliesToUser); ok {
 			secretRef[k] = v
 		}
@@ -298,7 +312,7 @@ func updateDSNData(ctx context.Context, k8sClient client.Client, logger logr.Log
 
 	if passwordEV, ok := findEnvVar(kubegres.Spec.Env, passwordEnvVars...); ok {
 		if passwordEV.Value != "" {
-			dsnData.Password = passwordEV.Value
+			dsnData.Apply(func(d *sql.DSNData) { d.Password = passwordEV.Value })
 		} else if k, v, ok := secretRefFromEnvVar(passwordEV, connID, kubegres, appliesToPassword); ok {
 			secretRef[k] = v
 		}
@@ -315,13 +329,15 @@ func updateDSNData(ctx context.Context, k8sClient client.Client, logger logr.Log
 			key:       "",
 		}
 
-		if tls.SSLMode != "" {
-			dsnData.SSLMode = tls.SSLMode
-		}
+		dsnData.Apply(func(d *sql.DSNData) {
+			if tls.SSLMode != "" {
+				d.SSLMode = tls.SSLMode
+			}
 
-		dsnData.RootCertPath = tls.RootCertPath
-		dsnData.ClientCertPath = tls.ClientCertPath
-		dsnData.ClientKeyPath = tls.ClientKeyPath
+			d.RootCertPath = tls.RootCertPath
+			d.ClientCertPath = tls.ClientCertPath
+			d.ClientKeyPath = tls.ClientKeyPath
+		})
 	}
 
 	return secretRef, nil
