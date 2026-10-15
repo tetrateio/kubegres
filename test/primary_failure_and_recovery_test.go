@@ -27,8 +27,11 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	apps "k8s.io/api/apps/v1"
+	core "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	postgresv1 "reactive-tech.io/kubegres/api/v1"
+	"reactive-tech.io/kubegres/controllers/operation"
 	"reactive-tech.io/kubegres/test/resourceConfigs"
 	"reactive-tech.io/kubegres/test/util"
 )
@@ -229,6 +232,52 @@ var _ = Describe("Primary instances is not available, checking recovery works", 
 			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
 			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
 
+		})
+
+	})
+
+	Context("GIVEN Kubegres with 1 primary and 1 replica with Replication Slots enabled AND primary is deleted while a spec change is applied to the replica", func() {
+
+		It("THEN the failover should take place AND the spec change should be applied to all StatefulSets AND existing data available", func() {
+
+			log.Print("START OF: Test 'GIVEN Kubegres with 1 primary and 1 replica AND primary is deleted while a spec change is applied to the replica'")
+
+			test.givenNewKubegresReplicationSlotsAreSetTo(&postgresv1.ReplicationSlots{Enabled: true}, 2)
+
+			test.whenKubegresIsCreated()
+
+			test.thenPodsStatesShouldBe(1, 1)
+
+			expectedNbreUsers := 0
+
+			test.GivenUserAddedInPrimaryDb()
+			expectedNbreUsers++
+
+			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
+
+			// The operator updates the Replica first and keeps a blocking operation until it is done.
+			// Before the fix, a failover could not start while that operation was active, and the
+			// operation was only removed once the Primary was ready again: the cluster had no Primary.
+			test.whenEnvVarIsAddedToKubegres(rolloutEnvVarName, rolloutEnvVarValue)
+
+			test.thenSpecUpdateOfReplicaIsInProgress()
+
+			test.whenPrimaryIsDeleted()
+
+			test.thenPodsStatesShouldBe(1, 1)
+
+			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
+			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
+
+			test.thenAllStatefulSetsHaveEnvVar(rolloutEnvVarName, rolloutEnvVarValue)
+
+			test.GivenUserAddedInPrimaryDb()
+			expectedNbreUsers++
+
+			test.ThenPrimaryDbContainsExpectedNbreUsers(expectedNbreUsers)
+			test.ThenReplicaDbContainsExpectedNbreUsers(expectedNbreUsers)
+
+			log.Print("END OF: Test 'GIVEN Kubegres with 1 primary and 1 replica AND primary is deleted while a spec change is applied to the replica'")
 		})
 
 	})
@@ -451,6 +500,84 @@ func (r *PrimaryFailureAndRecoveryTest) ThenReplicaDbContainsExpectedNbreUsers(e
 		return true
 
 	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+}
+
+const (
+	rolloutEnvVarName  = "ROLLOUT_TEST"
+	rolloutEnvVarValue = "1"
+)
+
+func (r *PrimaryFailureAndRecoveryTest) whenEnvVarIsAddedToKubegres(envVarName, envVarValue string) {
+	kubegres, err := r.resourceRetriever.GetKubegres()
+	Expect(err).Should(Succeed())
+
+	kubegres.Spec.Env = append(kubegres.Spec.Env, core.EnvVar{Name: envVarName, Value: envVarValue})
+	r.resourceCreator.UpdateResource(kubegres, "Kubegres")
+}
+
+// thenSpecUpdateOfReplicaIsInProgress waits until the operator holds a blocking operation for the
+// spec update of a Replica StatefulSet.
+func (r *PrimaryFailureAndRecoveryTest) thenSpecUpdateOfReplicaIsInProgress() {
+	Eventually(func() bool {
+		kubegres, err := r.resourceRetriever.GetKubegres()
+		if err != nil {
+			log.Println("Error while getting Kubegres resource : ", err)
+			return false
+		}
+
+		activeOperation := kubegres.Status.BlockingOperation
+		if activeOperation.OperationId != operation.OperationIdStatefulSetSpecEnforcing {
+			return false
+		}
+
+		kubegresResources, err := r.resourceRetriever.GetKubegresResources()
+		if err != nil {
+			return false
+		}
+
+		for _, kubegresResource := range kubegresResources.Resources {
+			if !kubegresResource.IsPrimary && kubegresResource.StatefulSet.Name == activeOperation.StatefulSetOperation.Name {
+				log.Println("Spec update of Replica in progress: ", activeOperation.StatefulSetOperation.Name, activeOperation.StepId)
+				return true
+			}
+		}
+
+		return false
+	}, resourceConfigs.TestTimeout, time.Second).Should(BeTrue())
+}
+
+func (r *PrimaryFailureAndRecoveryTest) thenAllStatefulSetsHaveEnvVar(envVarName, envVarValue string) {
+	Eventually(func() bool {
+		kubegres, err := r.resourceRetriever.GetKubegres()
+		if err != nil || kubegres.Status.BlockingOperation.OperationId != "" {
+			return false
+		}
+
+		kubegresResources, err := r.resourceRetriever.GetKubegresResources()
+		if err != nil || !kubegresResources.AreAllReady {
+			return false
+		}
+
+		for _, kubegresResource := range kubegresResources.Resources {
+			if !hasEnvVar(kubegresResource.StatefulSet.Spec, envVarName, envVarValue) {
+				log.Println("StatefulSet does not have the env var yet: ", kubegresResource.StatefulSet.Name)
+				return false
+			}
+		}
+
+		return true
+	}, resourceConfigs.TestTimeout, resourceConfigs.TestRetryInterval).Should(BeTrue())
+}
+
+func hasEnvVar(statefulSetSpec apps.StatefulSetSpec, envVarName, envVarValue string) bool {
+	for _, container := range statefulSetSpec.Template.Spec.Containers {
+		for _, envVar := range container.Env {
+			if envVar.Name == envVarName && envVar.Value == envVarValue {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (r *PrimaryFailureAndRecoveryTest) givenNewKubegresReplicationSlotsAreSetTo(rs *postgresv1.ReplicationSlots, replicas int) {

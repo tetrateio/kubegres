@@ -22,6 +22,7 @@ package statefulset_spec
 
 import (
 	"errors"
+	"time"
 
 	apps "k8s.io/api/apps/v1"
 	postgresV1 "reactive-tech.io/kubegres/api/v1"
@@ -35,11 +36,16 @@ import (
 // Note about Kubernetes: "Forbidden: updates to Statefulset spec for fields other than 'replicas', 'template',
 //and 'updateStrategy' are forbidden"
 
+// releasedOperationRequeueInterval is how soon to reconcile again after removing a spec update
+// so that the failover can start.
+const releasedOperationRequeueInterval = 5 * time.Second
+
 type AllStatefulSetsSpecEnforcer struct {
 	kubegresContext   ctx.KubegresContext
 	resourcesStates   states.ResourcesStates
 	blockingOperation *operation.BlockingOperation
 	specsEnforcers    StatefulSetsSpecsEnforcer
+	requeueAfter      time.Duration
 }
 
 func CreateAllStatefulSetsSpecEnforcer(kubegresContext ctx.KubegresContext,
@@ -91,6 +97,7 @@ func (r *AllStatefulSetsSpecEnforcer) CreateOperationConfigForStatefulSetWaiting
 func (r *AllStatefulSetsSpecEnforcer) EnforceSpec() error {
 
 	if !r.isStandbyEnabled() && !r.isPrimaryDbReady() {
+		r.releaseOperationForFailOver()
 		return nil
 	}
 
@@ -129,6 +136,49 @@ func (r *AllStatefulSetsSpecEnforcer) EnforceSpec() error {
 	}
 
 	return nil
+}
+
+// releaseOperationForFailOver removes a spec update that is in progress on a Replica when the
+// Primary is not ready.
+//
+// The failover waits for the active operation to be removed, and only this enforcer removes
+// it. But this enforcer does nothing until the Primary is ready, so without this the cluster
+// would stay without a Primary. The rollout continues after the failover: the StatefulSets
+// that were not updated yet still differ from the spec.
+//
+// A spec update of the Primary itself keeps the operation: its Pod restarts, so it is not
+// ready for a while, and that must not start a failover.
+func (r *AllStatefulSetsSpecEnforcer) releaseOperationForFailOver() {
+	if r.blockingOperation.IsActiveOperationIdDifferentOf(operation.OperationIdStatefulSetSpecEnforcing) {
+		return
+	}
+
+	activeOperation := r.blockingOperation.GetActiveOperation()
+	if activeOperation.OperationId == "" {
+		return
+	}
+
+	primary := r.resourcesStates.StatefulSets.Primary
+	if primary.IsDeployed && activeOperation.StatefulSetOperation.InstanceIndex == primary.InstanceIndex {
+		return
+	}
+
+	r.blockingOperation.RemoveActiveOperation()
+	r.requeueAfter = releasedOperationRequeueInterval
+
+	r.kubegresContext.Log.InfoEvent("StatefulSetSpecEnforcementPaused",
+		"The Primary is not ready. Removed the spec update in progress on a Replica so that the failover can start. "+
+			"The spec update continues once there is a ready Primary.",
+		"StatefulSet name", activeOperation.StatefulSetOperation.Name,
+		"StepId", activeOperation.StepId)
+}
+
+// RequeueAfter says how long the controller should wait before reconciling again, and clears
+// the request. It is zero when nothing is waiting.
+func (r *AllStatefulSetsSpecEnforcer) RequeueAfter() time.Duration {
+	after := r.requeueAfter
+	r.requeueAfter = 0
+	return after
 }
 
 func (r *AllStatefulSetsSpecEnforcer) isPrimaryDbReady() bool {

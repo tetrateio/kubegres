@@ -113,6 +113,13 @@ func (r *KubegresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		result.RequeueAfter = requeueAfter
 	}
 
+	// A spec update removed so that the failover can start: the failover runs in the next
+	// reconciliation, and nothing else may trigger one.
+	if requeueAfter := resourcesContext.AllStatefulSetsSpecEnforcer.RequeueAfter(); requeueAfter > 0 &&
+		(result.RequeueAfter == 0 || requeueAfter < result.RequeueAfter) {
+		result.RequeueAfter = requeueAfter
+	}
+
 	return r.returnn(result, err, resourcesContext)
 }
 
